@@ -3,7 +3,9 @@ import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ServerProviderUsageLimits, ThreadId } from "@t3tools/contracts";
+import type { ContextWindowSnapshot } from "~/lib/contextWindow";
+import { ComposerUsageStrip } from "./chat/ComposerUsageStrip";
 import {
   ChevronDownIcon,
   FolderGit2Icon,
@@ -99,6 +101,9 @@ interface BranchToolbarProps {
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
   composerControlsHostRef?: (element: HTMLDivElement | null) => void;
   contextStripVisible?: boolean;
+  /** Feeds the usage strip at the start of the composer strip. */
+  contextWindow?: ContextWindowSnapshot | null;
+  usageLimits?: ServerProviderUsageLimits | undefined;
 }
 
 function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string) {
@@ -581,6 +586,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   onEnvironmentChange,
   composerControlsHostRef,
   contextStripVisible = true,
+  contextWindow = null,
+  usageLimits,
 }: BranchToolbarProps) {
   const branchSelectorRef = useRef<BranchToolbarBranchSelectorHandle>(null);
   const threadRef = scopeThreadRef(environmentId, threadId);
@@ -717,6 +724,7 @@ export const BranchToolbar = memo(function BranchToolbar({
         !contextStripVisible && "pointer-events-none invisible absolute inset-x-0 top-full",
       )}
     >
+      <ComposerUsageStrip contextWindow={contextWindow} usageLimits={usageLimits} />
       {showGitControls ? (
         <div className="contents @3xl/composer-surface:hidden">
           <RunContextSelector

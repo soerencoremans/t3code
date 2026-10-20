@@ -8399,6 +8399,8 @@ export default function ChatView(props: ChatViewProps) {
                                 availableEnvironments={logicalProjectEnvironments}
                                 composerControlsHostRef={setRestingComposerControlsHost}
                                 contextStripVisible={showComposerContextStrip}
+                                contextWindow={activeContextWindow}
+                                usageLimits={activeProviderStatus?.usageLimits}
                               />
                             </div>
                           )}
