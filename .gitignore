@@ -46,3 +46,7 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+
+# Loop-Forge: ticket worktrees and the per-machine config override
+.loop-forge/worktrees
+.loop-forge/config.json
