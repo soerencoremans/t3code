@@ -100,3 +100,5 @@ gate refuseExternalPrograms in checkSwitch after already-active, before login ch
 Reasons externalClaudePrograms/processCheckFailed. AK-20 only. Ticket-4 notes: provide ClaudeExternalProcesses.layer
 in server.ts; AK-21 proven in ticket 4 (stop step after checkSwitch, refusal leaves turns running); applySwitch's
 first step is the re-scan, so ticket-4's stop runs before it.
+
+## Ticket-3 CLOSED (#5, round 1 ruling, all suggestions). Added: ClaudeProcessScanError.reason (listFailed|processUnreadable|timeout), 5s timeout, realPath match, UserId stat. Ticket-4 note: setsid/nohup child keeps marker, may outlive stop.
