@@ -1,0 +1,44 @@
+Scope: all 33 workspace projects
+✓ Lockfile passes supply-chain policies (verified 1d ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +3
++++
+Progress: resolved 3, reused 3, downloaded 0, added 3, done
+
+. prepare$ effect-tsgo patch && vp config --no-agent
+. prepare: typescript skipped because its hash matches the replacement.
+. prepare: Done
+Done in 3.7s using pnpm v11.10.0
+
+=== t3: src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts src/provider/ClaudeAccounts.integration.test.ts src/provider/ClaudeCapabilitiesProbe.test.ts src/provider/ClaudeExternalProcesses.test.ts src/provider/ClaudeLoginCheck.test.ts src/provider/Drivers/ClaudeHome.test.ts src/provider/ProviderRegistry.test.ts src/provider/claudeLoginFiles.test.ts src/terminal/Manager.test.ts src/textGeneration/ClaudeTextGeneration.test.ts ===
+~/apps/server$ vp test run src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts src/provider/ClaudeAccounts.integration.test.ts src/provider/ClaudeCapabilitiesProbe.test.ts src/provider/ClaudeExternalProcesses.test.ts src/provider/ClaudeLoginCheck.test.ts src/provider/Drivers/ClaudeHome.test.ts src/provider/ProviderRegistry.test.ts src/provider/claudeLoginFiles.test.ts src/terminal/Manager.test.ts src/textGeneration/ClaudeTextGeneration.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-5/apps/server
+
+
+ Test Files  10 passed (10)
+      Tests  676 passed (676)
+   Start at  18:52:40
+   Duration  33.56s (tests 39%, import 34%, transform 25%, setup 2%)
+
+     Import  884 modules were evaluated 2683 times · 10.90s total, 34% of tracked time
+             ~7.31s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+
+
+=== @t3tools/shared: src/atomicWrite.test.ts ===
+~/packages/shared$ vp test run --config ../../vite.config.ts --dir . src/atomicWrite.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-5/packages/shared
+
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  18:53:14
+   Duration  467ms (import 41%, transform 26%, setup 18%, tests 15%, worker 1%)
+
+
+
+All scoped tests passed.
