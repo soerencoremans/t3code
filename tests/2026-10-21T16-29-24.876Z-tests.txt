@@ -1,0 +1,44 @@
+Scope: all 33 workspace projects
+✓ Lockfile passes supply-chain policies (verified 1d ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +3
++++
+Progress: resolved 3, reused 3, downloaded 0, added 3, done
+
+. prepare$ effect-tsgo patch && vp config --no-agent
+. prepare: typescript skipped because its hash matches the replacement.
+. prepare: Done
+Done in 3.5s using pnpm v11.10.0
+
+=== t3: src/provider/ClaudeAccounts.integration.test.ts src/provider/ClaudeLoginCheck.test.ts src/provider/Drivers/ClaudeHome.test.ts src/provider/claudeLoginFiles.test.ts ===
+~/apps/server$ vp test run src/provider/ClaudeAccounts.integration.test.ts src/provider/ClaudeLoginCheck.test.ts src/provider/Drivers/ClaudeHome.test.ts src/provider/claudeLoginFiles.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-4/apps/server
+
+
+ Test Files  4 passed (4)
+      Tests  80 passed (80)
+   Start at  18:29:29
+   Duration  8.88s (transform 51%, import 40%, tests 6%, setup 3%)
+
+     Import  509 modules were evaluated 660 times · 3.33s total, 40% of tracked time
+             ~763ms faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+
+
+=== @t3tools/shared: src/atomicWrite.test.ts ===
+~/packages/shared$ vp test run --config ../../vite.config.ts --dir . src/atomicWrite.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-4/packages/shared
+
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  18:29:39
+   Duration  483ms (import 38%, transform 26%, setup 20%, tests 14%, worker 1%)
+
+
+
+All scoped tests passed.
