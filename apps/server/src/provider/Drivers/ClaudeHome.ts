@@ -27,6 +27,27 @@ export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function
   return path.resolve(path.join(home, ".claude"));
 });
 
+export interface ClaudeSetupPaths {
+  readonly configDir: string;
+  readonly accountConfigPath: string;
+}
+
+/** Where a setup keeps its login (`.credentials.json`) and its account file (`.claude.json`). */
+export const resolveClaudeSetupPaths = Effect.fn("resolveClaudeSetupPaths")(function* (
+  config: Pick<ClaudeSettings, "homePath">,
+  environment?: NodeJS.ProcessEnv,
+): Effect.fn.Return<ClaudeSetupPaths, never, Path.Path> {
+  const path = yield* Path.Path;
+  const configDir = yield* resolveClaudeHomePath(config, environment);
+  // Without a config dir the Claude CLI keeps `.claude.json` beside `~/.claude`, not inside it.
+  const hasConfigDir =
+    config.homePath.trim().length > 0 || (environment?.CLAUDE_CONFIG_DIR?.trim() ?? "").length > 0;
+  const accountConfigPath = hasConfigDir
+    ? path.join(configDir, ".claude.json")
+    : path.join(yield* HostProcess.HomeDirectory, ".claude.json");
+  return { configDir, accountConfigPath };
+});
+
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   baseEnv?: NodeJS.ProcessEnv,

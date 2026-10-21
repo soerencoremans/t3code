@@ -4,6 +4,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import {
   claudeSignedOutMessage,
@@ -11,6 +12,7 @@ import {
   makeClaudeContinuationGroupKey,
   makeClaudeEnvironment,
   resolveClaudeHomePath,
+  resolveClaudeSetupPaths,
 } from "./ClaudeHome.ts";
 
 it.layer(NodeServices.layer)("ClaudeHome", (it) => {
@@ -62,6 +64,48 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         expect(yield* resolveClaudeHomePath({ homePath: "~/.claude-work" }, environment)).toBe(
           explicit,
         );
+      }),
+    );
+
+    it.effect("resolves a setup's paths inside a configured homePath", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const configDir = path.resolve("/synthetic/claude-work");
+
+        expect(yield* resolveClaudeSetupPaths({ homePath: configDir })).toEqual({
+          configDir,
+          accountConfigPath: path.join(configDir, ".claude.json"),
+        });
+      }),
+    );
+
+    it.effect("resolves a setup's paths inside an inherited CLAUDE_CONFIG_DIR", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const inherited = path.resolve("/synthetic/claude-inherited");
+
+        expect(
+          yield* resolveClaudeSetupPaths({ homePath: "" }, { CLAUDE_CONFIG_DIR: inherited }),
+        ).toEqual({
+          configDir: inherited,
+          accountConfigPath: path.join(inherited, ".claude.json"),
+        });
+      }),
+    );
+
+    it.effect("keeps the default setup's .claude.json beside ~/.claude, not inside it", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const home = path.resolve("/synthetic/home");
+
+        expect(
+          yield* resolveClaudeSetupPaths({ homePath: "" }, {}).pipe(
+            Effect.provideService(HostProcess.HomeDirectory, home),
+          ),
+        ).toEqual({
+          configDir: path.join(home, ".claude"),
+          accountConfigPath: path.join(home, ".claude.json"),
+        });
       }),
     );
 
