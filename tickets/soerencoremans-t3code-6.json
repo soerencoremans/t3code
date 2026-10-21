@@ -1,0 +1,29 @@
+{
+  "kind": "ticket",
+  "ticket": {
+    "repo": "soerencoremans/t3code",
+    "number": 6,
+    "url": "https://github.com/soerencoremans/t3code/issues/6",
+    "auftrag": 2
+  },
+  "repositoryPath": "/home/soeren/shared/fastnd/t3code",
+  "baseBranch": "loop/main",
+  "baseWorktree": {
+    "branch": "auftrag/2",
+    "path": "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/auftrag-2"
+  },
+  "ticketWorktree": {
+    "branch": "ticket/6",
+    "path": "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-6"
+  },
+  "label": null,
+  "conflict": false,
+  "counters": {
+    "crFails": 0,
+    "qaFails": 0,
+    "escalations": 0,
+    "countedEvent": null
+  },
+  "turns": {},
+  "turn": null
+}
