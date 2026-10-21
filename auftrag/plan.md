@@ -86,3 +86,9 @@ ClaudeLoginCheck.layer + ClaudeExternalProcesses.layer in server.ts; invalidateC
 - ticket-4 (was ticket-3): stop sessions of ALL affectedInstanceIds (interrupt runs, release sessions,
   also probes/text-gen?) between checkSwitch and applySwitch; invalidateCaches for all; wire
   ClaudeAccounts/ClaudeLoginCheck/ClaudeExternalProcesses layers in server.ts. AK-10..15,21,25,26,31.
+
+## Ticket-2 CLOSED (#4, round 2 ruling). Carry to ticket-3: architect-3 (one constructor for marker),
+architect-4 (pid from one place), security-3 (cmdline first, environ only for claude), testability-3
+(unreadable environ skip as root), testability-1 (per-site marker tests), security out-of-lens (re-scan
+right before apply?). Carry to ticket-4: data-safety OOL — T3 probe/text-gen CLIs of affected instances
+may renew mid-switch; stop/await them too or accept. Login check uses ~29s under accountsLock.
