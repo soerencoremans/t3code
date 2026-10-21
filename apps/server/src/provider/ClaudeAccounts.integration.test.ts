@@ -488,7 +488,7 @@ const makeAccountsTestLayer = (options: {
           ProviderAdapterRegistry.layerFromProviderInstanceRegistry.pipe(
             Layer.provide(layerInstances),
           ),
-          { databaseLayer: layerDatabase, runEffectWorker: true },
+          { databaseLayer: layerDatabase, runEffectWorker: true, stopDelegatedTasks: true },
         ),
       ),
     ),

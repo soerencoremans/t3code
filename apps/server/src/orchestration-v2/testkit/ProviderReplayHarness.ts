@@ -274,6 +274,8 @@ export function layerWithRegistry<Error>(
     readonly runContinuationWorker?: boolean;
     readonly recoverOnStartup?: boolean;
     readonly continueThreadsAfterServerUpdate?: boolean;
+    /** Lets the worker settle `holdQueue: true` interrupts, as the real thread service does. */
+    readonly stopDelegatedTasks?: boolean;
   } = {},
 ): Layer.Layer<
   | Orchestrator.OrchestratorV2
@@ -472,7 +474,6 @@ export function layerWithRegistry<Error>(
   const layerThreadManagementProvided = Layer.unwrap(
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
-      // The worker runs this for an interrupt with `holdQueue: true`, as the real service does.
       const stopDelegatedTasks: ThreadManagementService.ThreadManagementService["Service"]["stopDelegatedTasks"] =
         (input) =>
           orchestrator.getThreadRecords(input.threadId, ["subagents"]).pipe(
@@ -500,7 +501,7 @@ export function layerWithRegistry<Error>(
           );
       return Layer.mock(ThreadManagementService.ThreadManagementService)({
         dispatch: orchestrator.dispatch,
-        stopDelegatedTasks,
+        ...(options.stopDelegatedTasks === true ? { stopDelegatedTasks } : {}),
         getThreadRecords: orchestrator.getThreadRecords,
         getThreadProjection: orchestrator.getThreadProjection,
         recoverDelegatedTask: orchestrator.recoverDelegatedTask,
