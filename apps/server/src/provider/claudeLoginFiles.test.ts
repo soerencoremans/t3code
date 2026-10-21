@@ -4,12 +4,15 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 
 import {
   ClaudeLoginFileError,
+  ClaudeLoginWriteError,
   readClaudeSetupLogin,
   sameClaudeAccount,
+  writeClaudeSetupLogin,
   type ClaudeAccountIdentity,
 } from "./claudeLoginFiles.ts";
 
@@ -136,4 +139,182 @@ it("sameClaudeAccount is true only when account and organization both match", ()
   assert.isFalse(sameClaudeAccount(identity("a", "o"), identity("b", "o")));
   assert.isFalse(sameClaudeAccount(identity("a", "o"), identity("a", "p")));
   assert.isFalse(sameClaudeAccount(identity("a", "o"), identity("a", null)));
+});
+
+const NEW_SECRET = "tok-2c8e5d0a-unique-new-secret";
+
+const newLogin = {
+  claudeAiOauth: Redacted.make({ accessToken: NEW_SECRET, scopes: ["user:inference"] }),
+  oauthAccount: { emailAddress: "bob@example.com", accountUuid: "acc-2" },
+};
+
+const modeOf = (filePath: string) =>
+  FileSystem.FileSystem.pipe(
+    Effect.flatMap((fs) => fs.stat(filePath)),
+    Effect.map((info) => info.mode & 0o777),
+  );
+
+// Key order matters: the swap must not reshuffle the files the Claude CLI also writes.
+const loginFixture = (credentialsMode: number) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const fixture = yield* setup({
+      credentials: JSON.stringify(
+        { mcpOAuth: { srv: { accessToken: "mcp-7d1f-unique" } }, claudeAiOauth, extra: [1] },
+        null,
+        2,
+      ),
+      account: JSON.stringify({ numStartups: 3, oauthAccount, projects: { "/x": {} } }, null, 2),
+    });
+    yield* fs.chmod(fixture.credentialsPath, credentialsMode);
+    yield* fs.chmod(fixture.paths.accountConfigPath, 0o644);
+    return fixture;
+  });
+
+const renameFault = (failing: (to: string, renamesToCredentials: number) => boolean) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    let credentialsRenames = 0;
+    return FileSystem.make({
+      ...fs,
+      rename: (from, to) => {
+        if (path.basename(to) === ".credentials.json") credentialsRenames += 1;
+        return failing(to, credentialsRenames)
+          ? Effect.fail(
+              PlatformError.systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "rename",
+                pathOrDescriptor: to,
+                description: `denied ${NEW_SECRET}`,
+              }),
+            )
+          : fs.rename(from, to);
+      },
+    });
+  });
+
+it.layer(NodeServices.layer)("writeClaudeSetupLogin", (it) => {
+  it.effect.each([0o600, 0o644])(
+    "replaces both logins, keeps other keys in order and narrows credentials (from mode %o)",
+    (credentialsMode) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { paths, credentialsPath } = yield* loginFixture(credentialsMode);
+        const beforeCredentials = JSON.parse(yield* fs.readFileString(credentialsPath));
+        const beforeAccount = JSON.parse(yield* fs.readFileString(paths.accountConfigPath));
+
+        yield* writeClaudeSetupLogin(paths, newLogin);
+
+        const afterCredentials = JSON.parse(yield* fs.readFileString(credentialsPath));
+        const afterAccount = JSON.parse(yield* fs.readFileString(paths.accountConfigPath));
+        assert.deepStrictEqual(afterCredentials, {
+          ...beforeCredentials,
+          claudeAiOauth: Redacted.value(newLogin.claudeAiOauth),
+        });
+        assert.deepStrictEqual(afterAccount, {
+          ...beforeAccount,
+          oauthAccount: newLogin.oauthAccount,
+        });
+        assert.deepStrictEqual(Object.keys(afterCredentials), Object.keys(beforeCredentials));
+        assert.deepStrictEqual(Object.keys(afterAccount), Object.keys(beforeAccount));
+        assert.strictEqual(yield* modeOf(credentialsPath), 0o600);
+        assert.strictEqual(yield* modeOf(paths.accountConfigPath), 0o644);
+        assert.deepStrictEqual((yield* fs.readDirectory(paths.configDir)).toSorted(), [
+          ".claude.json",
+          ".credentials.json",
+        ]);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("writes through a symlinked .claude.json and keeps the link", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { paths } = yield* loginFixture(0o600);
+      const other = yield* fs.makeTempDirectoryScoped({ prefix: "t3-login-files-other-" });
+      const destination = path.join(other, "claude.json");
+      yield* fs.rename(paths.accountConfigPath, destination);
+      yield* fs.symlink(destination, paths.accountConfigPath);
+
+      yield* writeClaudeSetupLogin(paths, newLogin);
+
+      assert.strictEqual(yield* fs.readLink(paths.accountConfigPath), destination);
+      assert.deepStrictEqual(JSON.parse(yield* fs.readFileString(destination)).oauthAccount, {
+        ...newLogin.oauthAccount,
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("fails before writing when a file is missing or not a JSON object", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { paths, credentialsPath } = yield* loginFixture(0o600);
+      const before = yield* fs.readFileString(credentialsPath);
+      yield* fs.writeFileString(paths.accountConfigPath, "[1]");
+
+      const notObject = yield* Effect.flip(writeClaudeSetupLogin(paths, newLogin));
+      yield* fs.remove(paths.accountConfigPath);
+      const missing = yield* Effect.flip(writeClaudeSetupLogin(paths, newLogin));
+
+      assert.deepStrictEqual(
+        [notObject, missing].map((error) => [error.path, error.restored]),
+        [
+          [paths.accountConfigPath, true],
+          [paths.accountConfigPath, true],
+        ],
+      );
+      assert.strictEqual(yield* fs.readFileString(credentialsPath), before);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "restores .credentials.json byte-identically when .claude.json cannot be replaced",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { paths, credentialsPath } = yield* loginFixture(0o644);
+        const before = yield* fs.readFileString(credentialsPath);
+        const faulty = yield* renameFault((to) => to.endsWith(".claude.json"));
+
+        const error = yield* writeClaudeSetupLogin(paths, newLogin).pipe(
+          Effect.provideService(FileSystem.FileSystem, faulty),
+          Effect.flip,
+        );
+
+        assert.instanceOf(error, ClaudeLoginWriteError);
+        assert.strictEqual(error.path, paths.accountConfigPath);
+        assert.isTrue(error.restored);
+        assert.strictEqual(yield* fs.readFileString(credentialsPath), before);
+        assert.strictEqual(yield* modeOf(credentialsPath), 0o600);
+        assert.notInclude(JSON.stringify(error), NEW_SECRET);
+        assert.notInclude(error.message, NEW_SECRET);
+        assert.deepStrictEqual((yield* fs.readDirectory(paths.configDir)).toSorted(), [
+          ".claude.json",
+          ".credentials.json",
+        ]);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("reports restored: false when the rollback fails too", () =>
+    Effect.gen(function* () {
+      const { paths } = yield* loginFixture(0o600);
+      const faulty = yield* renameFault(
+        (to, credentialsRenames) =>
+          to.endsWith(".claude.json") ||
+          (to.endsWith(".credentials.json") && credentialsRenames > 1),
+      );
+
+      const error = yield* writeClaudeSetupLogin(paths, newLogin).pipe(
+        Effect.provideService(FileSystem.FileSystem, faulty),
+        Effect.flip,
+      );
+
+      assert.strictEqual(error.path, paths.accountConfigPath);
+      assert.isFalse(error.restored);
+      assert.notInclude(JSON.stringify(error), NEW_SECRET);
+      assert.notInclude(error.message, NEW_SECRET);
+    }).pipe(Effect.scoped),
+  );
 });

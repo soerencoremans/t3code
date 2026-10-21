@@ -17,11 +17,13 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
+import { ClaudeLoginCheck } from "./ClaudeLoginCheck.ts";
 import { resolveClaudeSetupPaths, type ClaudeSetupPaths } from "./Drivers/ClaudeHome.ts";
 import {
   claudeAccountIdentity,
   readClaudeSetupLogin,
   sameClaudeAccount,
+  writeClaudeSetupLogin,
   type ClaudeAccountIdentity,
   type JsonObject,
 } from "./claudeLoginFiles.ts";
@@ -37,6 +39,11 @@ export const ClaudeAccountErrorReason = Schema.Literals([
   "alreadyRemembered",
   "accountNotFound",
   "storage",
+  "currentNotRemembered",
+  "needsFreshLogin",
+  "loginCheckFailed",
+  "switchFailed",
+  "switchRollbackFailed",
 ]);
 export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
 
@@ -68,6 +75,16 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
         return `No remembered Claude account is named "${this.name}".`;
       case "storage":
         return "Could not read or save the remembered Claude accounts.";
+      case "currentNotRemembered":
+        return `The account logged in on setup "${this.instanceId}" is not remembered. Remember it first, then switch.`;
+      case "needsFreshLogin":
+        return `The saved login of "${this.name}" no longer works. Log in to that account again with \`claude auth login\`, then forget "${this.name}" and remember it again.`;
+      case "loginCheckFailed":
+        return `Could not check the saved login of "${this.name}". Try again.`;
+      case "switchFailed":
+        return `Switching setup "${this.instanceId}" failed. The setup is logged in as before.`;
+      case "switchRollbackFailed":
+        return `Switching setup "${this.instanceId}" failed and its login files could not be restored. Log in again with \`claude auth login\` for this setup.`;
     }
   }
 }
@@ -90,6 +107,14 @@ export const ClaudeAccountList = Schema.Struct({
 });
 export type ClaudeAccountList = typeof ClaudeAccountList.Type;
 
+export const ClaudeSwitchResult = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  active: RememberedClaudeAccount,
+  /** Every Claude setup on the same config dir, the requested one first. */
+  affectedInstanceIds: Schema.Array(ProviderInstanceId),
+});
+export type ClaudeSwitchResult = typeof ClaudeSwitchResult.Type;
+
 export class ClaudeAccounts extends Context.Service<
   ClaudeAccounts,
   {
@@ -99,6 +124,10 @@ export class ClaudeAccounts extends Context.Service<
     }) => Effect.Effect<RememberedClaudeAccount, ClaudeAccountError>;
     readonly list: Effect.Effect<ClaudeAccountList, ClaudeAccountError>;
     readonly forget: (input: { readonly name: string }) => Effect.Effect<void, ClaudeAccountError>;
+    readonly switch: (input: {
+      readonly instanceId: ProviderInstanceId;
+      readonly name: string;
+    }) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
   }
 >()("t3/provider/ClaudeAccounts") {}
 
@@ -133,6 +162,22 @@ interface ClaudeSetup {
   readonly instanceId: ProviderInstanceId;
   readonly displayName: string | null;
   readonly paths: ClaudeSetupPaths;
+  readonly settings: ClaudeSettings;
+  readonly environment: NodeJS.ProcessEnv;
+}
+
+interface SwitchPlan {
+  readonly _tag: "SwitchPlan";
+  readonly setup: ClaudeSetup;
+  readonly affectedInstanceIds: ReadonlyArray<ProviderInstanceId>;
+  readonly outgoingName: string;
+  readonly target: StoredAccount;
+  readonly newClaudeAiOauth: Redacted.Redacted<JsonObject>;
+}
+
+interface AlreadyActive {
+  readonly _tag: "AlreadyActive";
+  readonly result: ClaudeSwitchResult;
 }
 
 const storageError = () => new ClaudeAccountError({ reason: "storage" });
@@ -147,6 +192,7 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
+  const loginCheck = yield* ClaudeLoginCheck;
   const settings = yield* ServerSettingsService;
   const accountsLock = yield* Semaphore.make(1);
 
@@ -158,6 +204,12 @@ export const make = Effect.gen(function* () {
 
   const readLogin = (paths: ClaudeSetupPaths) =>
     readClaudeSetupLogin(paths).pipe(Effect.provideService(FileSystem.FileSystem, fileSystem));
+
+  const writeLogin = (...args: Parameters<typeof writeClaudeSetupLogin>) =>
+    writeClaudeSetupLogin(...args).pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+    );
 
   const setupFromEntry = Effect.fn("ClaudeAccounts.setupFromEntry")(function* (
     instanceId: ProviderInstanceId,
@@ -173,7 +225,13 @@ export const make = Effect.gen(function* () {
     const paths = yield* resolveClaudeSetupPaths(config, environment).pipe(
       Effect.provideService(Path.Path, path),
     );
-    return { instanceId, displayName: entry.displayName ?? null, paths } satisfies ClaudeSetup;
+    return {
+      instanceId,
+      displayName: entry.displayName ?? null,
+      paths,
+      settings: config,
+      environment,
+    } satisfies ClaudeSetup;
   });
 
   const claudeEntries = Effect.fn("ClaudeAccounts.claudeEntries")(function* () {
@@ -325,11 +383,172 @@ export const make = Effect.gen(function* () {
     yield* Effect.logInfo("Claude account forgotten", { operation: "forget", name });
   });
 
-  return ClaudeAccounts.of({ remember, list: list(), forget });
+  const unreadable = (instanceId: ProviderInstanceId) => () =>
+    new ClaudeAccountError({ reason: "setupUnreadable", instanceId });
+
+  const sameConfigDirSetups = Effect.fn("ClaudeAccounts.sameConfigDirSetups")(function* (
+    setup: ClaudeSetup,
+  ) {
+    const configDir = path.resolve(setup.paths.configDir);
+    const siblings: Array<ProviderInstanceId> = [];
+    for (const [candidate, entry] of yield* claudeEntries()) {
+      if (candidate === setup.instanceId) continue;
+      // A sibling whose own config cannot be resolved is not switched with this one.
+      const resolved = yield* Effect.option(setupFromEntry(candidate, entry));
+      if (Option.isSome(resolved) && path.resolve(resolved.value.paths.configDir) === configDir) {
+        siblings.push(candidate);
+      }
+    }
+    return [setup.instanceId, ...siblings] as ReadonlyArray<ProviderInstanceId>;
+  });
+
+  const checkSwitch = Effect.fn("ClaudeAccounts.checkSwitch")(function* (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly name: string;
+  }) {
+    const { instanceId } = input;
+    yield* requireLinux();
+    const setup = yield* resolveSetup(instanceId);
+    const affectedInstanceIds = yield* sameConfigDirSetups(setup);
+    const login = yield* readLogin(setup.paths).pipe(Effect.mapError(unreadable(instanceId)));
+    if (Option.isNone(login)) {
+      return yield* new ClaudeAccountError({ reason: "notLoggedIn", instanceId });
+    }
+    const accounts = yield* loadAccounts();
+    const outgoing = accounts.find((account) =>
+      sameClaudeAccount(account.identity, login.value.identity),
+    );
+    if (outgoing === undefined) {
+      return yield* new ClaudeAccountError({ reason: "currentNotRemembered", instanceId });
+    }
+    const name = input.name.trim();
+    const target = accounts.find((account) => sameName(account.name, name));
+    if (target === undefined) {
+      return yield* new ClaudeAccountError({ reason: "accountNotFound", name });
+    }
+    if (target === outgoing) {
+      return {
+        _tag: "AlreadyActive",
+        result: {
+          instanceId,
+          active: { name: target.name, email: target.identity.email },
+          affectedInstanceIds,
+        },
+      } satisfies AlreadyActive;
+    }
+
+    const checked = yield* loginCheck.check({
+      claudeAiOauth: target.claudeAiOauth,
+      oauthAccount: target.oauthAccount,
+      settings: setup.settings,
+      environment: setup.environment,
+    });
+    // The check's renewal rotates the refresh token, so the stored copy is dead once it ran.
+    const renewed = Option.getOrElse(checked.latestClaudeAiOauth, () => target.claudeAiOauth);
+    if (Option.isSome(checked.latestClaudeAiOauth)) {
+      yield* saveAccounts(
+        accounts.map((account) =>
+          account === target ? { ...account, claudeAiOauth: renewed } : account,
+        ),
+      );
+    }
+    if (checked.verdict === "NeedsLogin") {
+      return yield* new ClaudeAccountError({ reason: "needsFreshLogin", name: target.name });
+    }
+    if (checked.verdict === "Unknown") {
+      return yield* new ClaudeAccountError({ reason: "loginCheckFailed", name: target.name });
+    }
+    return {
+      _tag: "SwitchPlan",
+      setup,
+      affectedInstanceIds,
+      outgoingName: outgoing.name,
+      target,
+      newClaudeAiOauth: renewed,
+    } satisfies SwitchPlan;
+  });
+
+  const applySwitch = Effect.fn("ClaudeAccounts.applySwitch")(function* (plan: SwitchPlan) {
+    const { setup, target, affectedInstanceIds } = plan;
+    const { instanceId } = setup;
+    const switchFailed = () => new ClaudeAccountError({ reason: "switchFailed", instanceId });
+    // T3's own sessions may have renewed the login since checkSwitch read it.
+    const current = yield* readLogin(setup.paths).pipe(Effect.mapError(switchFailed));
+    if (Option.isNone(current)) return yield* switchFailed();
+    const accounts = yield* loadAccounts();
+    const outgoing = accounts.find((account) => account.name === plan.outgoingName);
+    if (outgoing === undefined || !sameClaudeAccount(outgoing.identity, current.value.identity)) {
+      return yield* switchFailed();
+    }
+    yield* saveAccounts(
+      accounts.map((account) =>
+        account === outgoing
+          ? {
+              ...account,
+              claudeAiOauth: current.value.claudeAiOauth,
+              oauthAccount: current.value.oauthAccount,
+            }
+          : account,
+      ),
+    );
+    yield* writeLogin(setup.paths, {
+      claudeAiOauth: plan.newClaudeAiOauth,
+      oauthAccount: target.oauthAccount,
+    }).pipe(
+      Effect.catch((failure) =>
+        failure.restored
+          ? Effect.logWarning("Claude account switch failed", {
+              operation: "switch",
+              outcome: "switchFailed",
+              instanceId,
+              from: plan.outgoingName,
+              to: target.name,
+            }).pipe(Effect.andThen(Effect.fail(switchFailed())))
+          : Effect.logError("Claude account switch could not restore the setup files", {
+              instanceId,
+              path: failure.path,
+            }).pipe(
+              Effect.andThen(
+                Effect.fail(new ClaudeAccountError({ reason: "switchRollbackFailed", instanceId })),
+              ),
+            ),
+      ),
+    );
+    yield* Effect.logInfo("Claude account switched", {
+      operation: "switch",
+      instanceId,
+      affectedInstanceIds,
+      from: plan.outgoingName,
+      to: target.name,
+    });
+    return {
+      instanceId,
+      active: { name: target.name, email: target.identity.email },
+      affectedInstanceIds,
+    } satisfies ClaudeSwitchResult;
+  });
+
+  const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly name: string;
+  }) {
+    return yield* accountsLock.withPermits(1)(
+      Effect.gen(function* () {
+        const plan = yield* checkSwitch(input);
+        return plan._tag === "AlreadyActive" ? plan.result : yield* applySwitch(plan);
+      }),
+    );
+  });
+
+  return ClaudeAccounts.of({ remember, list: list(), forget, switch: switchAccount });
 });
 
 export const layer: Layer.Layer<
   ClaudeAccounts,
   never,
-  ServerSecretStore.ServerSecretStore | ServerSettingsService | FileSystem.FileSystem | Path.Path
+  | ServerSecretStore.ServerSecretStore
+  | ServerSettingsService
+  | FileSystem.FileSystem
+  | Path.Path
+  | ClaudeLoginCheck
 > = Layer.effect(ClaudeAccounts, make);

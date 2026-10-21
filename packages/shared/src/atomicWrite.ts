@@ -29,6 +29,8 @@ const LOCKED_RENAME_RETRY_DELAY = "100 millis";
 export const writeFileStringAtomically = (input: {
   readonly filePath: string;
   readonly contents: string;
+  /** When set, the temp file is written with this mode and chmod-ed to it before the rename. */
+  readonly mode?: number;
 }) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -51,7 +53,13 @@ export const writeFileStringAtomically = (input: {
       );
       const tempPath = path.join(tempDirectory, "contents.tmp");
 
-      yield* fs.writeFileString(tempPath, input.contents);
+      yield* fs.writeFileString(
+        tempPath,
+        input.contents,
+        input.mode === undefined ? undefined : { mode: input.mode },
+      );
+      // The create mode is masked by the umask, so only chmod guarantees the requested bits.
+      if (input.mode !== undefined) yield* fs.chmod(tempPath, input.mode);
       if (platform !== "win32") return yield* fs.rename(tempPath, targetPath);
 
       // A retry must not replace a save another process landed while this one

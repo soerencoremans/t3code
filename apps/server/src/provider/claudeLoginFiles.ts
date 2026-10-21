@@ -1,8 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 
 import type { ClaudeSetupPaths } from "./Drivers/ClaudeHome.ts";
 
@@ -101,4 +105,86 @@ export const readClaudeSetupLogin = Effect.fn("claudeLoginFiles.readClaudeSetupL
     oauthAccount,
     identity: identity.value,
   });
+});
+
+// Never carries a cause: a write error's cause can quote the file's content, which is a login.
+export class ClaudeLoginWriteError extends Schema.TaggedError<ClaudeLoginWriteError>()(
+  "ClaudeLoginWriteError",
+  {
+    /** The file whose read or write failed first. */
+    path: Schema.String,
+    /** True when every file already written was put back. */
+    restored: Schema.Boolean,
+  },
+) {
+  override get message(): string {
+    return `Could not write the Claude login file ${this.path}.`;
+  }
+}
+
+// Matches the Claude CLI's own two-space layout.
+const serializeLoginFile = (value: JsonObject) => JSON.stringify(value, null, 2);
+
+interface LoginFile {
+  readonly path: string;
+  readonly text: string;
+  readonly parsed: JsonObject;
+  readonly mode: number;
+}
+
+const readLoginFile = Effect.fn("claudeLoginFiles.readLoginFile")(function* (filePath: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* resolveSymlinkTarget(filePath);
+  const text = yield* fileSystem.readFileString(path);
+  const info = yield* fileSystem.stat(path);
+  const parsed = yield* decodeJsonObject(text);
+  return { path, text, parsed, mode: info.mode } satisfies LoginFile;
+});
+
+export const writeClaudeSetupLogin = Effect.fn("claudeLoginFiles.writeClaudeSetupLogin")(function* (
+  paths: ClaudeSetupPaths,
+  login: {
+    readonly claudeAiOauth: Redacted.Redacted<JsonObject>;
+    readonly oauthAccount: JsonObject;
+  },
+) {
+  const path = yield* Path.Path;
+  const credentialsPath = path.join(paths.configDir, ".credentials.json");
+  // Reads and writes drop their cause: it can quote the file's content, which is a login.
+  const failed = (failedPath: string, restored: boolean) =>
+    Effect.fail(new ClaudeLoginWriteError({ path: failedPath, restored }));
+  const read = (filePath: string) =>
+    readLoginFile(filePath).pipe(Effect.catch(() => failed(filePath, true)));
+  const credentials = yield* read(credentialsPath);
+  const account = yield* read(paths.accountConfigPath);
+
+  // `.credentials.json` is never wider than 0o600, whatever it was before.
+  const credentialsMode = credentials.mode & 0o600;
+  yield* writeFileStringAtomically({
+    filePath: credentialsPath,
+    contents: serializeLoginFile({
+      ...credentials.parsed,
+      claudeAiOauth: Redacted.value(login.claudeAiOauth),
+    }),
+    mode: credentialsMode,
+  }).pipe(Effect.catch(() => failed(credentialsPath, true)));
+
+  yield* writeFileStringAtomically({
+    filePath: paths.accountConfigPath,
+    contents: serializeLoginFile({ ...account.parsed, oauthAccount: login.oauthAccount }),
+    mode: account.mode & 0o777,
+  }).pipe(
+    Effect.catch(() =>
+      writeFileStringAtomically({
+        filePath: credentialsPath,
+        contents: credentials.text,
+        mode: credentialsMode,
+      }).pipe(
+        Effect.matchEffect({
+          onSuccess: () => failed(paths.accountConfigPath, true),
+          onFailure: () => failed(paths.accountConfigPath, false),
+        }),
+      ),
+    ),
+  );
 });
