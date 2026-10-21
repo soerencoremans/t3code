@@ -740,21 +740,22 @@ export const make = Effect.gen(function* () {
         duration: CLAUDE_SWITCH_STOP_TIMEOUT,
         orElse: () => Effect.fail(stopStepFailed("timeout")()),
       }),
-      Effect.catchTag("SessionStopStepError", (failure) =>
-        Effect.logWarning("Claude account switch could not stop sessions", {
-          operation: "switch",
-          outcome: "sessionStopFailed",
-          instanceId: requestedId,
-          step: failure.step,
-          errorTag: failure.errorTag,
-        }).pipe(
-          Effect.andThen(
-            Effect.fail(
-              new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
+      Effect.catchTags({
+        SessionStopStepError: (failure) =>
+          Effect.logWarning("Claude account switch could not stop sessions", {
+            operation: "switch",
+            outcome: "sessionStopFailed",
+            instanceId: requestedId,
+            step: failure.step,
+            errorTag: failure.errorTag,
+          }).pipe(
+            Effect.andThen(
+              Effect.fail(
+                new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
+              ),
             ),
           ),
-        ),
-      ),
+      }),
     );
     yield* Effect.logInfo("Claude account switch stopped sessions", {
       operation: "switch",
