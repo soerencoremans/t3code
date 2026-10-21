@@ -1,0 +1,18 @@
+{
+  "machine": "soeren-MS-7A32",
+  "machineId": "83966574-d53d-433a-a785-803aa2fe9861",
+  "item": "soerencoremans-t3code-2",
+  "conversationsShared": false,
+  "conversationsWithheld": null,
+  "turns": [
+    {
+      "session": "e28fc2f1-996d-45ef-bf88-c2d54aeaf49d",
+      "role": "eval",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-2/e28fc2f1-996d-45ef-bf88-c2d54aeaf49d.jsonl",
+      "from": "1",
+      "to": "139",
+      "copy": null
+    }
+  ]
+}

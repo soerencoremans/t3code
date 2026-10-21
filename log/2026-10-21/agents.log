@@ -1,0 +1,5 @@
+2026-10-21T12:03:43.115Z turn-end session=e28fc2f1-996d-45ef-bf88-c2d54aeaf49d role=eval provider=anthropic model=opus exit=0 error=false apiStatus=- terminalReason=completed ms=93249 apiMs=80436 turns=13 denials=0 cost=0.6874 in=26 out=7501 cacheW=51191 cacheR=638752 models="claude-opus-5-5=0.6874" basis=first stderr=- text=-
+2026-10-21T12:03:43.139Z turn-transcript session=e28fc2f1-996d-45ef-bf88-c2d54aeaf49d role=eval part=main file=/home/soeren/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-2/e28fc2f1-996d-45ef-bf88-c2d54aeaf49d.jsonl from=1 to=139
+2026-10-21T12:03:44.821Z usage-limit session=e28fc2f1-996d-45ef-bf88-c2d54aeaf49d role=eval fiveHour=16 d5h=1 sevenDay=23 d7d=0 scoped=16 scopedModel=Fable resetsAt=2026-10-21T13:09:59.913828+00:00
+2026-10-21T12:03:44.831Z turn-calls session=e28fc2f1-996d-45ef-bf88-c2d54aeaf49d role=eval calls=13 tools=12 perCall=0.92 batched=0 maxBatch=1 mix="Bash=12"
+2026-10-21T12:03:54.848Z run-total turns=1 ms=93249 cost=0.6874 in=26 out=7501 cacheW=51191 cacheR=638752 models="claude-opus-5-5=0.6874" unaccounted=0
