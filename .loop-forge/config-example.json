@@ -1,0 +1,6 @@
+{
+  "base-branch": "loop/main",
+  "test": "vp i --frozen-lockfile --prefer-offline -- --yes && node .loop-forge/test-affected.mjs",
+  "test-scoped": "vp i --frozen-lockfile --prefer-offline -- --yes && node .loop-forge/test-scoped.mjs {files}",
+  "test-files": "**/*.test.*"
+}
