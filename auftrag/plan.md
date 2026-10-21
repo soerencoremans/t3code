@@ -1,7 +1,7 @@
 # Plan — Auftrag #2 (soerencoremans/t3code): switch the Claude account behind a Claude setup
 
-Private working plan of the Gremium Author. Never posted. 3 tickets: ticket-1, ticket-2, ticket-3.
-After ticket-3 there is NO ticket-4 → a draft turn for ticket-4 posts the closing comment.
+Private working plan of the Gremium Author. Never posted. AMENDED (ticket-2 round 2, pragmatist-2): 4 tickets: ticket-1, ticket-2, ticket-3, ticket-4.
+After ticket-4 there is NO ticket-5 → a draft turn for ticket-5 posts the closing comment.
 
 ## Shape
 
@@ -70,3 +70,19 @@ Seats: data-safety, integration, testability. Decisions: login check = probeClau
 own keep-mode atomic write; whole switch under accountsLock; switch = checkSwitch + applySwitch.
 Ticket-3 notes: insert stop step between checkSwitch and applySwitch; wire ClaudeAccounts.layer +
 ClaudeLoginCheck.layer + ClaudeExternalProcesses.layer in server.ts; invalidateCaches after apply.
+
+## AMENDMENT (ticket-2 fixes, round 2) — 4 tickets
+- ticket-2 (#4): switch + write/rollback + login check; AK-16,17,18,19,22,30. No marker, no /proc scan.
+  Siblings: all instances on the same configDir switched together (affectedInstanceIds in SwitchPlan/result).
+  Check returns latestClaudeAiOauth always; saved to target record right after check.
+  writeFileStringAtomically gains optional mode (packages/shared).
+- ticket-3 (NEW): external-process gate. Marker T3CODE_CLAUDE_OWNER_PID (consider one constructor,
+  architect-3; pid from one place, architect-4), spawn sites ClaudeProvider 357/441, ClaudeTextGeneration 93,
+  ClaudeAdapterV2 10338 — per-site tests through seams (fake claude on PATH, ClaudeAgentSdkQueryRunner double)
+  (testability-1); ClaudeExternalProcesses /proc scan, cmdline first, environ only for claude pids
+  (security-3); reasons externalClaudePrograms/processCheckFailed; gate in checkSwitch before login check;
+  sibling instances' marked CLIs allowed. AK-20. Seats: integration, testability, security-relevant.
+  Note integration out-of-lens: scan before 25s check → re-scan right before apply?
+- ticket-4 (was ticket-3): stop sessions of ALL affectedInstanceIds (interrupt runs, release sessions,
+  also probes/text-gen?) between checkSwitch and applySwitch; invalidateCaches for all; wire
+  ClaudeAccounts/ClaudeLoginCheck/ClaudeExternalProcesses layers in server.ts. AK-10..15,21,25,26,31.
