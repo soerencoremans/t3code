@@ -1,21 +1,33 @@
 import {
   ClaudeSettings,
+  CommandId,
   ProviderInstanceId,
+  type OrchestrationV2Run,
+  type ProjectId,
   type ProviderInstanceConfig,
+  type ThreadId,
 } from "@t3tools/contracts";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { ClaudeExternalProcesses } from "./ClaudeExternalProcesses.ts";
 import { ClaudeLoginCheck } from "./ClaudeLoginCheck.ts";
@@ -47,6 +59,7 @@ export const ClaudeAccountErrorReason = Schema.Literals([
   "switchRollbackFailed",
   "externalClaudePrograms",
   "processCheckFailed",
+  "sessionStopFailed",
 ]);
 export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
 
@@ -92,6 +105,8 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
         return `Claude programs started outside T3 are using setup "${this.instanceId}". Close them, then switch again.`;
       case "processCheckFailed":
         return `Could not check whether Claude programs outside T3 are using setup "${this.instanceId}". Try again.`;
+      case "sessionStopFailed":
+        return `Could not stop the running turns on setup "${this.instanceId}". The setup is still logged in as before. Try again.`;
     }
   }
 }
@@ -137,6 +152,10 @@ export class ClaudeAccounts extends Context.Service<
     }) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
   }
 >()("t3/provider/ClaudeAccounts") {}
+
+/** How long a switch waits for the setup's T3 turns to stop, under `accountsLock`. */
+export const CLAUDE_SWITCH_STOP_TIMEOUT = Duration.seconds(10);
+const SWITCH_STOP_REASON = "Stopped for a Claude account switch";
 
 const STORAGE_NAME = "claude-accounts";
 const MAX_NAME_LENGTH = 64;
@@ -187,6 +206,29 @@ interface AlreadyActive {
   readonly result: ClaudeSwitchResult;
 }
 
+interface HeldThread {
+  readonly projectId: ProjectId;
+  readonly threadId: ThreadId;
+}
+
+type SessionStopStep = "enumerate" | "interrupt" | "wait" | "close" | "verify" | "timeout";
+
+class SessionStopStepError extends Data.TaggedError("SessionStopStepError")<{
+  readonly step: SessionStopStep;
+  readonly errorTag: string | undefined;
+}> {}
+
+const errorTagOf = (cause: unknown) =>
+  typeof cause === "object" && cause !== null && "_tag" in cause && typeof cause._tag === "string"
+    ? cause._tag
+    : undefined;
+
+const stopStepFailed = (step: SessionStopStep) => (cause?: unknown) =>
+  new SessionStopStepError({ step, errorTag: errorTagOf(cause) });
+
+const isLiveSession = (session: { readonly status: string }) =>
+  session.status !== "stopped" && session.status !== "error";
+
 const storageError = () => new ClaudeAccountError({ reason: "storage" });
 
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -202,6 +244,10 @@ export const make = Effect.gen(function* () {
   const loginCheck = yield* ClaudeLoginCheck;
   const externalProcesses = yield* ClaudeExternalProcesses;
   const settings = yield* ServerSettingsService;
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const crypto = yield* Crypto.Crypto;
   const accountsLock = yield* Semaphore.make(1);
 
   const requireLinux = Effect.fn("ClaudeAccounts.requireLinux")(function* () {
@@ -569,14 +615,211 @@ export const make = Effect.gen(function* () {
     } satisfies ClaudeSwitchResult;
   });
 
+  // The same query ProviderAuthService.stopSessions uses for threads with live provider work.
+  const activeRunsOn = Effect.fn("ClaudeAccounts.activeRunsOn")(
+    function* (affected: ReadonlySet<ProviderInstanceId>) {
+      const found: Array<HeldThread & { readonly run: OrchestrationV2Run }> = [];
+      for (const threadId of yield* projections.getRecoveryThreadIds("runtime")) {
+        const records = yield* projections.getThreadRecords(threadId, ["runs"]);
+        const run = ThreadManagementService.latestActiveRun(records);
+        if (run === undefined || !affected.has(run.providerInstanceId)) continue;
+        found.push({ projectId: records.thread.projectId, threadId, run });
+      }
+      return found;
+    },
+    Effect.mapError(stopStepFailed("enumerate")),
+  );
+
+  const runEnded = (threadId: ThreadId, runId: OrchestrationV2Run["id"]) =>
+    projections.getThreadRecords(threadId, ["runs"]).pipe(
+      Effect.map((records) => {
+        const run = records.runs.find((candidate) => candidate.id === runId);
+        return run !== undefined && !ThreadManagementService.isActiveRun(run);
+      }),
+    );
+
+  // Interrupting rather than releasing the session ends the turn as interrupted, not failed.
+  const stopRun = Effect.fn("ClaudeAccounts.stopRun")(function* (
+    target: HeldThread & { readonly run: OrchestrationV2Run },
+    switchId: string,
+    held: Ref.Ref<ReadonlyArray<HeldThread>>,
+  ) {
+    const { projectId, threadId, run } = target;
+    const interrupted = yield* threads
+      .dispatch({
+        type: "run.interrupt",
+        commandId: CommandId.make(`claude-account-switch:${switchId}:${run.id}`),
+        threadId,
+        runId: run.id,
+        reason: SWITCH_STOP_REASON,
+        holdQueue: true,
+      })
+      .pipe(
+        Effect.as(true),
+        // A run that ended on its own meanwhile is no longer interruptible, and is done.
+        Effect.catch((cause) =>
+          runEnded(threadId, run.id).pipe(
+            Effect.mapError(stopStepFailed("interrupt")),
+            Effect.flatMap((ended) =>
+              ended ? Effect.succeed(false) : Effect.fail(stopStepFailed("interrupt")(cause)),
+            ),
+          ),
+        ),
+      );
+    if (!interrupted) return false;
+    yield* Ref.update(held, (current) =>
+      current.some((entry) => entry.threadId === threadId)
+        ? current
+        : [...current, { projectId, threadId }],
+    );
+    const waited = yield* threads
+      .waitForThread({
+        projectId,
+        threadId,
+        runId: run.id,
+        // A backstop only: the stop's own timeout bounds the whole wait and names the step.
+        timeoutMs: Duration.toMillis(Duration.times(CLAUDE_SWITCH_STOP_TIMEOUT, 2)),
+      })
+      .pipe(Effect.mapError(stopStepFailed("wait")));
+    if (waited.timedOut) return yield* stopStepFailed("wait")();
+    return true;
+  });
+
+  const stopPass = Effect.fn("ClaudeAccounts.stopPass")(function* (
+    affected: ReadonlySet<ProviderInstanceId>,
+    switchId: string,
+    held: Ref.Ref<ReadonlyArray<HeldThread>>,
+  ) {
+    const stopped = yield* Effect.forEach(
+      yield* activeRunsOn(affected),
+      (target) => stopRun(target, switchId, held),
+      { concurrency: "unbounded" },
+    );
+    return stopped.filter(Boolean).length;
+  });
+
+  const verifyStopped = Effect.fn("ClaudeAccounts.verifyStopped")(
+    function* (affected: ReadonlySet<ProviderInstanceId>) {
+      for (const threadId of yield* projections.getRecoveryThreadIds("runtime")) {
+        const records = yield* projections.getThreadRecords(threadId, ["runs", "providerSessions"]);
+        const run = ThreadManagementService.latestActiveRun(records);
+        const liveSession = records.providerSessions.some(
+          (session) => affected.has(session.providerInstanceId) && isLiveSession(session),
+        );
+        if ((run !== undefined && affected.has(run.providerInstanceId)) || liveSession) {
+          return yield* stopStepFailed("verify")();
+        }
+      }
+    },
+    Effect.mapError((failure) =>
+      failure instanceof SessionStopStepError ? failure : stopStepFailed("verify")(failure),
+    ),
+  );
+
+  const stopSetupSessions = Effect.fn("ClaudeAccounts.stopSetupSessions")(function* (
+    instanceIds: ReadonlyArray<ProviderInstanceId>,
+    requestedId: ProviderInstanceId,
+    held: Ref.Ref<ReadonlyArray<HeldThread>>,
+    switchId: string,
+  ) {
+    const affected = new Set(instanceIds);
+    const interruptedRuns = yield* Effect.gen(function* () {
+      const first = yield* stopPass(affected, switchId, held);
+      // Catches a turn sent on an idle thread of the setup during the first pass.
+      const second = yield* stopPass(affected, switchId, held);
+      // Also releases idle sessions: an idle Claude process still holds and renews the old login.
+      for (const instanceId of instanceIds) {
+        yield* providerSessions
+          .closeInstance(instanceId)
+          .pipe(Effect.mapError(stopStepFailed("close")));
+      }
+      yield* verifyStopped(affected);
+      return first + second;
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: CLAUDE_SWITCH_STOP_TIMEOUT,
+        orElse: () => Effect.fail(stopStepFailed("timeout")()),
+      }),
+      Effect.catchTag("SessionStopStepError", (failure) =>
+        Effect.logWarning("Claude account switch could not stop sessions", {
+          operation: "switch",
+          outcome: "sessionStopFailed",
+          instanceId: requestedId,
+          step: failure.step,
+          errorTag: failure.errorTag,
+        }).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
+            ),
+          ),
+        ),
+      ),
+    );
+    yield* Effect.logInfo("Claude account switch stopped sessions", {
+      operation: "switch",
+      instanceId: requestedId,
+      affectedInstanceIds: instanceIds,
+      interruptedRuns,
+    });
+    return interruptedRuns;
+  });
+
+  const resumeHeldQueues = Effect.fn("ClaudeAccounts.resumeHeldQueues")(function* (
+    held: Ref.Ref<ReadonlyArray<HeldThread>>,
+    switchId: string,
+  ) {
+    for (const { threadId } of yield* Ref.get(held)) {
+      yield* threads
+        .dispatch({
+          type: "queue.resume",
+          commandId: CommandId.make(`claude-account-switch:${switchId}:resume:${threadId}`),
+          threadId,
+        })
+        .pipe(
+          Effect.uninterruptible,
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Claude account switch could not resume a held queue", {
+              operation: "switch",
+              outcome: "queueResumeFailed",
+              threadId,
+              errorTag: errorTagOf(Cause.squash(cause)),
+            }),
+          ),
+        );
+    }
+  });
+
   const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (input: {
     readonly instanceId: ProviderInstanceId;
     readonly name: string;
   }) {
     return yield* accountsLock.withPermits(1)(
       Effect.gen(function* () {
+        // Every refusal comes before anything is stopped, so a refused switch leaves turns alone.
         const plan = yield* checkSwitch(input);
-        return plan._tag === "AlreadyActive" ? plan.result : yield* applySwitch(plan);
+        if (plan._tag === "AlreadyActive") return plan.result;
+        // Command ids are persisted receipts, so they must stay unique across restarts.
+        const switchId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+        const held = yield* Ref.make<ReadonlyArray<HeldThread>>([]);
+        return yield* Effect.gen(function* () {
+          const interruptedRuns = yield* stopSetupSessions(
+            plan.affectedInstanceIds,
+            input.instanceId,
+            held,
+            switchId,
+          );
+          return yield* applySwitch(plan).pipe(
+            Effect.tapError((error) =>
+              Effect.logInfo("Claude account switch refused after stopping sessions", {
+                operation: "switch",
+                instanceId: input.instanceId,
+                reason: error.reason,
+                interruptedRuns,
+              }),
+            ),
+          );
+        }).pipe(Effect.ensuring(resumeHeldQueues(held, switchId)));
       }),
     );
   });
@@ -593,4 +836,8 @@ export const layer: Layer.Layer<
   | Path.Path
   | ClaudeLoginCheck
   | ClaudeExternalProcesses
+  | ThreadManagementService.ThreadManagementService
+  | ProviderSessionManager.ProviderSessionManagerV2
+  | ProjectionStore.ProjectionStoreV2
+  | Crypto.Crypto
 > = Layer.effect(ClaudeAccounts, make);

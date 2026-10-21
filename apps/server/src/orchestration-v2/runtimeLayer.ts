@@ -9,6 +9,9 @@ import * as McpAppRequests from "../mcpApps/McpAppRequests.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
+import * as ClaudeAccounts from "../provider/ClaudeAccounts.ts";
+import * as ClaudeExternalProcesses from "../provider/ClaudeExternalProcesses.ts";
+import * as ClaudeLoginCheck from "../provider/ClaudeLoginCheck.ts";
 import * as AgentSessionImporter from "../project/AgentSessionImporter.ts";
 import * as AgentSessionScanner from "../project/AgentSessionScanner.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -335,6 +338,18 @@ const layerProviderRuntimeRecoveryProvided = ProviderRuntimeRecoveryService.laye
   ),
 );
 
+const layerClaudeAccountsProvided = ClaudeAccounts.layer.pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      ClaudeLoginCheck.layer,
+      ClaudeExternalProcesses.layer,
+      layerThreadManagementProvided,
+      layerProviderSessionManagerProvided,
+      ProjectionStore.layer,
+    ),
+  ),
+);
+
 const layerMcpAppRequestsProvided = McpAppRequests.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -378,6 +393,7 @@ export const layerProduction = Layer.mergeAll(
   ),
   layerProviderContinuationWorkerProvided,
   layerAgentSessionImporterProvided,
+  layerClaudeAccountsProvided,
   EffectOutbox.layerPruneWorker.pipe(Layer.provide(EffectOutbox.layer)),
 ).pipe(
   Layer.provide(ResourceCleanupService.layer.pipe(Layer.provide(layerScheduledTaskProvided))),

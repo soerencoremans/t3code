@@ -1,33 +1,67 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  CommandId,
+  MessageId,
+  ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ProviderThreadId,
+  ProviderTurnId,
+  type RunId,
+  ThreadId,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import {
+  defaultProviderContinuationIdentity,
+  type ProviderDriver,
+  type ProviderInstance,
+} from "@t3tools/provider-core/server/driver";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as References from "effect/References";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as NodeUtil from "node:util";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { ClaudeProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
+import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
+import * as EffectOutbox from "../orchestration-v2/EffectOutbox.ts";
+import * as EventStore from "../orchestration-v2/EventStore.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
+import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
+import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as ClaudeAccountsModule from "./ClaudeAccounts.ts";
 import * as ClaudeExternalProcesses from "./ClaudeExternalProcesses.ts";
 import { ClaudeLoginCheck, type ClaudeLoginCheckResult } from "./ClaudeLoginCheck.ts";
 import type { JsonObject } from "./claudeLoginFiles.ts";
+import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
+import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
 
 const { ClaudeAccountError, ClaudeAccounts } = ClaudeAccountsModule;
 
@@ -210,6 +244,276 @@ const renameFaultFileSystem = (mode: "claudeJson" | "rollbackToo") =>
     });
   });
 
+const CLAUDE_DRIVER = ProviderDriverKind.make("claudeAgent");
+
+interface OpenedSession {
+  readonly instanceId: string;
+  readonly threadId: string;
+  /** The native thread id the session was asked to resume, if any. */
+  readonly resume: string | null;
+}
+
+// Stands in for the Claude CLI behind every instance of the test driver.
+interface FakeClaude {
+  readonly opens: Array<OpenedSession>;
+  readonly interrupts: Array<{ readonly instanceId: string; readonly threadId: string }>;
+  /** Holds the next turn started on a thread until the Deferred completes. */
+  readonly holds: Map<string, Deferred.Deferred<void>>;
+  readonly started: (threadId: string) => Deferred.Deferred<void>;
+  readonly interruptSeen: (threadId: string) => Deferred.Deferred<void>;
+  readonly ignoreInterrupts: Set<string>;
+  onInterrupt: (threadId: string) => Effect.Effect<void>;
+}
+
+const makeFakeClaude = (): FakeClaude => {
+  const once = () => {
+    const deferreds = new Map<string, Deferred.Deferred<void>>();
+    return (threadId: string) => {
+      const existing = deferreds.get(threadId);
+      if (existing !== undefined) return existing;
+      const created = Deferred.makeUnsafe<void>();
+      deferreds.set(threadId, created);
+      return created;
+    };
+  };
+  return {
+    opens: [],
+    interrupts: [],
+    holds: new Map(),
+    started: once(),
+    interruptSeen: once(),
+    ignoreInterrupts: new Set(),
+    onInterrupt: () => Effect.void,
+  };
+};
+
+const nativeThreadId = (threadId: string) => `claude-native:${threadId}`;
+
+const makeFakeAdapter = (
+  instanceId: ProviderInstanceId,
+  fake: FakeClaude,
+  scope: Scope.Scope,
+): ProviderAdapter.ProviderAdapterV2["Service"] => ({
+  instanceId,
+  driver: CLAUDE_DRIVER,
+  getCapabilities: () => Effect.succeed(ClaudeProviderCapabilitiesV2),
+  planSelectionTransition: () => Effect.succeed({ type: "apply_on_next_turn" }),
+  openSession: (input) =>
+    Effect.gen(function* () {
+      fake.opens.push({
+        instanceId,
+        threadId: input.threadId,
+        resume: input.initialNativeThreadId ?? null,
+      });
+      const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
+      const now = yield* DateTime.now;
+      const running = new Map<
+        string,
+        { readonly turn: ProviderAdapter.ProviderAdapterV2TurnInput; settled: boolean }
+      >();
+      const providerTurn = (
+        turn: ProviderAdapter.ProviderAdapterV2TurnInput,
+        status: "running" | "completed" | "interrupted",
+        at: DateTime.Utc,
+      ): ProviderAdapter.ProviderAdapterV2Event => ({
+        type: "provider_turn.updated",
+        driver: CLAUDE_DRIVER,
+        providerTurn: {
+          id: ProviderTurnId.make(`provider-turn:${turn.attemptId}`),
+          providerThreadId: turn.providerThread.id,
+          nodeId: turn.rootNodeId,
+          runAttemptId: turn.attemptId,
+          nativeTurnRef: {
+            driver: CLAUDE_DRIVER,
+            nativeId: `native-turn:${turn.attemptId}`,
+            strength: "strong",
+          },
+          ordinal: turn.providerTurnOrdinal,
+          status,
+          startedAt: at,
+          completedAt: status === "running" ? null : at,
+        },
+      });
+      const settle = (
+        entry: { readonly turn: ProviderAdapter.ProviderAdapterV2TurnInput; settled: boolean },
+        status: "completed" | "interrupted",
+      ) =>
+        Effect.gen(function* () {
+          if (entry.settled) return;
+          entry.settled = true;
+          const at = yield* DateTime.now;
+          yield* Queue.offerAll(events, [
+            providerTurn(entry.turn, status, at),
+            {
+              type: "turn.terminal",
+              driver: CLAUDE_DRIVER,
+              providerThreadId: entry.turn.providerThread.id,
+              providerTurnId: ProviderTurnId.make(`provider-turn:${entry.turn.attemptId}`),
+              runOrdinal: entry.turn.runOrdinal,
+              status,
+              failure: null,
+              threadDisposition: "reusable",
+            },
+          ]);
+        });
+      return {
+        instanceId,
+        driver: CLAUDE_DRIVER,
+        providerSessionId: input.providerSessionId,
+        providerSession: {
+          id: input.providerSessionId,
+          driver: CLAUDE_DRIVER,
+          providerInstanceId: instanceId,
+          status: "ready",
+          cwd: input.runtimePolicy.cwd ?? process.cwd(),
+          model: input.modelSelection.model,
+          capabilities: ClaudeProviderCapabilitiesV2,
+          createdAt: now,
+          updatedAt: now,
+          lastError: null,
+        },
+        events: Stream.fromQueue(events),
+        ensureThread: ({ threadId }) =>
+          Effect.succeed({
+            id: ProviderThreadId.make(`provider-thread:claude:${threadId}`),
+            driver: CLAUDE_DRIVER,
+            providerInstanceId: instanceId,
+            providerSessionId: input.providerSessionId,
+            appThreadId: threadId,
+            ownerNodeId: null,
+            nativeThreadRef: {
+              driver: CLAUDE_DRIVER,
+              nativeId: nativeThreadId(threadId),
+              strength: "strong",
+            },
+            nativeConversationHeadRef: null,
+            status: "idle",
+            firstRunOrdinal: null,
+            lastRunOrdinal: null,
+            handoffIds: [],
+            forkedFrom: null,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        resumeThread: ({ providerThread }) => Effect.succeed(providerThread),
+        startTurn: (turn) =>
+          Effect.gen(function* () {
+            yield* Queue.offer(events, providerTurn(turn, "running", yield* DateTime.now));
+            const entry = { turn, settled: false };
+            const release = fake.holds.get(turn.threadId);
+            if (release === undefined) {
+              yield* settle(entry, "completed");
+            } else {
+              fake.holds.delete(turn.threadId);
+              running.set(turn.threadId, entry);
+              yield* Deferred.await(release).pipe(
+                Effect.andThen(settle(entry, "completed")),
+                Effect.forkIn(scope),
+              );
+            }
+            yield* Deferred.succeed(fake.started(turn.threadId), undefined);
+          }),
+        steerTurn: () => Effect.die("unused"),
+        interruptTurn: (interrupt) =>
+          Effect.gen(function* () {
+            const threadId = interrupt.providerThread.appThreadId ?? "";
+            fake.interrupts.push({ instanceId, threadId });
+            yield* Deferred.succeed(fake.interruptSeen(threadId), undefined);
+            yield* fake.onInterrupt(threadId);
+            if (fake.ignoreInterrupts.has(threadId)) return;
+            const entry = running.get(threadId);
+            if (entry !== undefined) yield* settle(entry, "interrupted");
+          }),
+        respondToRuntimeRequest: () => Effect.die("unused"),
+        readThreadSnapshot: () => Effect.die("unused"),
+        rollbackThread: () => Effect.die("unused"),
+        forkThread: () => Effect.die("unused"),
+      } satisfies ProviderAdapter.ProviderAdapterV2SessionRuntime;
+    }),
+});
+
+// A hand-written claudeAgent driver: the provider CLI boundary, nothing else.
+const testClaudeDriver = (fake: FakeClaude, scope: Scope.Scope): ProviderDriver<unknown> => ({
+  driverKind: CLAUDE_DRIVER,
+  metadata: { displayName: "Claude (test)" },
+  configSchema: Schema.Unknown,
+  defaultConfig: () => ({}),
+  create: (input) =>
+    Effect.succeed({
+      instanceId: input.instanceId,
+      driverKind: CLAUDE_DRIVER,
+      continuationIdentity: defaultProviderContinuationIdentity({
+        driverKind: CLAUDE_DRIVER,
+        instanceId: input.instanceId,
+      }),
+      displayName: input.displayName,
+      enabled: input.enabled,
+      snapshot: {} as ProviderInstance["snapshot"],
+      orchestrationAdapter: makeFakeAdapter(input.instanceId, fake, scope),
+      textGeneration: {} as ProviderInstance["textGeneration"],
+    } satisfies ProviderInstance),
+});
+
+// A fresh stack per call: memory SQLite, registry, orchestration and the account service.
+const makeAccountsTestLayer = (options: {
+  readonly providerInstances: Record<string, ProviderInstanceConfig>;
+  readonly procRoot: string;
+  readonly checkLayer: Layer.Layer<ClaudeLoginCheck>;
+  readonly fileSystem: FileSystem.FileSystem;
+  readonly fake: FakeClaude;
+  readonly scope: Scope.Scope;
+}) => {
+  const layerDatabase = SqlitePersistence.layerMemory;
+  const layerSettings = ServerSettingsService.layerTest({
+    providerInstances: options.providerInstances,
+  });
+  const layerInstances = Layer.unwrap(
+    Effect.gen(function* () {
+      const current = yield* (yield* ServerSettingsService).getSettings.pipe(Effect.orDie);
+      return ProviderInstanceRegistry.layer({
+        drivers: [testClaudeDriver(options.fake, options.scope)],
+        configMap: deriveProviderInstanceConfigMap(current),
+      });
+    }),
+  ).pipe(Layer.provide(layerSettings));
+  const layerOrchestration = ThreadManagementService.layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        layerDatabase,
+        ProjectionStore.layer.pipe(Layer.provide(layerDatabase)),
+        EventStore.layer.pipe(Layer.provide(layerDatabase)),
+        EffectOutbox.layer.pipe(Layer.provide(layerDatabase)),
+        ProviderReplayHarness.layerWithRegistry(
+          { name: "claude-accounts" },
+          ProviderAdapterRegistry.layerFromProviderInstanceRegistry.pipe(
+            Layer.provide(layerInstances),
+          ),
+          { databaseLayer: layerDatabase, runEffectWorker: true },
+        ),
+      ),
+    ),
+    Layer.provideMerge(CommandReceiptStore.layer.pipe(Layer.provide(layerDatabase))),
+  );
+  return ClaudeAccountsModule.layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        ServerSecretStore.layer,
+        options.checkLayer,
+        ClaudeExternalProcesses.layerWith({ procRoot: options.procRoot }),
+        layerOrchestration,
+      ).pipe(
+        Layer.provideMerge(layerSettings),
+        Layer.provideMerge(
+          ServerConfig.ServerConfig.layerTest(process.cwd(), {
+            prefix: "t3-claude-accounts-test-",
+          }),
+        ),
+      ),
+    ),
+    Layer.provide(Layer.succeed(FileSystem.FileSystem, options.fileSystem)),
+  );
+};
+
 const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -256,29 +560,30 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
   const serviceFileSystem =
     spec.renameFault === undefined ? fileSystem : yield* renameFaultFileSystem(spec.renameFault);
 
+  const fake = makeFakeClaude();
+  const scope = yield* Effect.scope;
   const context = yield* Layer.build(
-    ClaudeAccountsModule.layer.pipe(
-      Layer.provideMerge(
-        Layer.mergeAll(
-          ServerSecretStore.layer,
-          ServerSettingsService.layerTest({ providerInstances }),
-          checkLayer,
-          ClaudeExternalProcesses.layerWith({ procRoot }),
-        ).pipe(
-          Layer.provideMerge(
-            ServerConfig.ServerConfig.layerTest(process.cwd(), {
-              prefix: "t3-claude-accounts-test-",
-            }),
-          ),
-        ),
-      ),
-      Layer.provide(Layer.succeed(FileSystem.FileSystem, serviceFileSystem)),
+    Layer.fresh(
+      makeAccountsTestLayer({
+        providerInstances,
+        procRoot,
+        checkLayer,
+        fileSystem: serviceFileSystem,
+        fake,
+        scope,
+      }),
     ),
   );
   const config = Context.get(context, ServerConfig.ServerConfig);
   const secrets = Context.get(context, ServerSecretStore.ServerSecretStore);
   return {
     accounts: Context.get(context, ClaudeAccounts),
+    threads: Context.get(context, ThreadManagementService.ThreadManagementService),
+    orchestrator: Context.get(context, Orchestrator.OrchestratorV2),
+    providerSessions: Context.get(context, ProviderSessionManager.ProviderSessionManagerV2),
+    sql: Context.get(context, SqlClient.SqlClient),
+    fake,
+    procDir,
     secrets,
     baseDir: config.baseDir,
     secretsDir: config.secretsDir,
@@ -360,7 +665,9 @@ type Harness = Effect.Success<ReturnType<typeof buildHarness>>;
 // Every dependency on the host OS is pinned: nothing can fall back to a real `~/.claude`.
 const run = <A, E>(
   spec: HarnessSpec,
-  body: (harness: Harness) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
+  body: (
+    harness: Harness,
+  ) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope | Crypto.Crypto>,
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -395,6 +702,134 @@ const refusal = Effect.fn("test.refusal")(function* (
 
 const work = (harness: Harness, instanceId = "claudeAgent", name = "Work") =>
   harness.accounts.remember({ instanceId: id(instanceId), name });
+
+const MODEL = "claude-sonnet-4-6";
+const PROJECT_A = ProjectId.make("project:claude-accounts-a");
+const PROJECT_B = ProjectId.make("project:claude-accounts-b");
+// A guard for a broken test, not a condition any test passes on.
+const WAIT_MS = 60_000;
+
+interface TestThread {
+  readonly projectId: ProjectId;
+  readonly threadId: ThreadId;
+}
+
+const createThread = Effect.fn("test.createThread")(function* (
+  h: Harness,
+  name: string,
+  instanceId = "claudeAgent",
+  projectId = PROJECT_A,
+) {
+  const threadId = ThreadId.make(`thread:${name}`);
+  yield* h.threads.dispatch({
+    type: "thread.create",
+    commandId: CommandId.make(`create:${name}`),
+    threadId,
+    projectId,
+    title: name,
+    modelSelection: { instanceId: id(instanceId), model: MODEL },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    branch: null,
+    worktreePath: null,
+    createdBy: "user",
+    creationSource: "web",
+  });
+  return { projectId, threadId } satisfies TestThread;
+});
+
+const send = (h: Harness, thread: TestThread, text: string, mode: "auto" | "queue" = "auto") =>
+  h.threads
+    .sendToThread({
+      projectId: thread.projectId,
+      commandId: CommandId.make(`send:${thread.threadId}:${text}`),
+      threadId: thread.threadId,
+      messageId: MessageId.make(`message:${thread.threadId}:${text}`),
+      text,
+      attachments: [],
+      mode,
+      createdBy: "user",
+      creationSource: "web",
+    })
+    .pipe(Effect.map((sent) => sent.run));
+
+const waitForRun = Effect.fn("test.waitForRun")(function* (
+  h: Harness,
+  thread: TestThread,
+  runId: RunId,
+) {
+  const waited = yield* h.threads.waitForThread({ ...thread, runId, timeoutMs: WAIT_MS });
+  assert.isFalse(waited.timedOut);
+  return waited.run!;
+});
+
+/** Sends a message whose turn completes at once, and waits for it. */
+const completeTurn = Effect.fn("test.completeTurn")(function* (
+  h: Harness,
+  thread: TestThread,
+  text: string,
+) {
+  const run = yield* send(h, thread, text);
+  const done = yield* waitForRun(h, thread, run.id);
+  assert.strictEqual(done.status, "completed");
+  return done;
+});
+
+/** Holds the thread's next turn until the returned Deferred completes, released at the latest when the test ends. */
+const holdNextTurn = Effect.fn("test.holdNextTurn")(function* (h: Harness, thread: TestThread) {
+  const release = yield* Deferred.make<void>();
+  h.fake.holds.set(thread.threadId, release);
+  yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined));
+  return release;
+});
+
+/** Starts a turn the fake CLI holds, and waits until the orchestrator sees it running. */
+const startHeldTurn = Effect.fn("test.startHeldTurn")(function* (
+  h: Harness,
+  thread: TestThread,
+  text: string,
+) {
+  const release = yield* holdNextTurn(h, thread);
+  const running = yield* h.orchestrator.streamDomainEvents.pipe(
+    Stream.filter(
+      (event) =>
+        event.type === "provider-turn.updated" &&
+        event.threadId === thread.threadId &&
+        event.payload.status === "running",
+    ),
+    Stream.take(1),
+    Stream.runDrain,
+    Effect.forkScoped,
+  );
+  const run = yield* send(h, thread, text);
+  yield* Deferred.await(h.fake.started(thread.threadId));
+  yield* Fiber.join(running);
+  return { run, release };
+});
+
+const records = (h: Harness, thread: TestThread) =>
+  h.threads.getThreadRecords(thread.threadId, ["runs", "attempts", "providerSessions"]);
+
+const runStatus = Effect.fn("test.runStatus")(function* (
+  h: Harness,
+  thread: TestThread,
+  runId: RunId,
+) {
+  return (yield* records(h, thread)).runs.find((run) => run.id === runId)?.status;
+});
+
+const sessionStatuses = Effect.fn("test.sessionStatuses")(function* (
+  h: Harness,
+  thread: TestThread,
+) {
+  return (yield* records(h, thread)).providerSessions.map((session) => session.status);
+});
+
+const interruptsOn = (h: Harness, thread: TestThread) =>
+  h.fake.interrupts.filter((entry) => entry.threadId === thread.threadId);
+
+const opensAfter = (h: Harness, mark: number, thread: TestThread) =>
+  h.fake.opens.slice(mark).filter((open) => open.threadId === thread.threadId);
 
 it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
   it.effect("AK-1: remembers the account logged in on a setup under a chosen name", () =>
@@ -794,6 +1229,12 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
             operation: "switch",
             instanceId: "claudeAgent",
             affectedInstanceIds: ["claudeAgent"],
+            interruptedRuns: 0,
+          },
+          {
+            operation: "switch",
+            instanceId: "claudeAgent",
+            affectedInstanceIds: ["claudeAgent"],
             from: "Work",
             to: "Private",
           },
@@ -1110,6 +1551,447 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
     ),
   );
 
+  const privateLogin = Effect.fn("test.privateLogin")(function* (h: Harness) {
+    return {
+      claudeAiOauth: (yield* h.readJson("claudeWork2", ".credentials.json")).claudeAiOauth,
+      oauthAccount: (yield* h.readJson("claudeWork2", ".claude.json")).oauthAccount,
+    };
+  });
+  const assertSetupHolds = Effect.fn("test.assertSetupHolds")(function* (
+    h: Harness,
+    instance: string,
+    login: { readonly claudeAiOauth: unknown; readonly oauthAccount: unknown },
+  ) {
+    assert.deepEqual(
+      (yield* h.readJson(instance, ".credentials.json")).claudeAiOauth,
+      login.claudeAiOauth,
+    );
+    assert.deepEqual(
+      (yield* h.readJson(instance, ".claude.json")).oauthAccount,
+      login.oauthAccount,
+    );
+  });
+  const PRIVATE_ACTIVE = { email: "bob@example.com", rememberedAs: "Private" };
+  const activeOn = (h: Harness, instance: string) =>
+    Effect.map(
+      h.accounts.list,
+      (list) => list.setups.find((setup) => setup.instanceId === instance)?.active,
+    );
+
+  it.effect(
+    "AK-10, AK-26: after a switch, every thread on the setup works with the new account",
+    () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          const first = yield* createThread(h, "ak10-a", "claudeAgent", PROJECT_A);
+          const second = yield* createThread(h, "ak10-b", "claudeAgent", PROJECT_B);
+          yield* completeTurn(h, first, "hello");
+          yield* completeTurn(h, second, "hello");
+          const login = yield* privateLogin(h);
+
+          // Requested from the service itself: no WebSocket, HTTP or client layer is in this test.
+          const result = yield* switchTo(h);
+          const mark = h.fake.opens.length;
+
+          assert.deepEqual(result, {
+            instanceId: id("claudeAgent"),
+            active: { name: "Private", email: "bob@example.com" },
+            affectedInstanceIds: [id("claudeAgent")],
+          });
+          for (const thread of [first, second]) {
+            assert.deepEqual(yield* sessionStatuses(h, thread), ["stopped"]);
+          }
+          assert.deepEqual(yield* activeOn(h, "claudeAgent"), PRIVATE_ACTIVE);
+          yield* assertSetupHolds(h, "claudeAgent", login);
+          for (const thread of [first, second]) {
+            yield* completeTurn(h, thread, "after the switch");
+            assert.deepEqual(
+              opensAfter(h, mark, thread).map((open) => open.instanceId),
+              ["claudeAgent"],
+            );
+          }
+        }),
+      ),
+  );
+
+  it.effect("AK-11: a switch keeps every thread's history and continues the conversation", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const thread = yield* createThread(h, "ak11");
+        yield* completeTurn(h, thread, "first");
+        yield* completeTurn(h, thread, "second");
+        const history = Effect.map(h.threads.getThreadSnapshot(thread.threadId), (snapshot) => ({
+          messages: snapshot.projection.messages.map((message) => [message.id, message.text]),
+          turnItems: snapshot.projection.turnItems.map((item) => [
+            item.id,
+            "text" in item ? item.text : null,
+          ]),
+        }));
+        const before = yield* history;
+
+        yield* switchTo(h);
+        const mark = h.fake.opens.length;
+
+        assert.deepEqual(yield* history, before);
+        yield* completeTurn(h, thread, "third");
+        assert.deepEqual(opensAfter(h, mark, thread), [
+          {
+            instanceId: "claudeAgent",
+            threadId: thread.threadId,
+            resume: nativeThreadId(thread.threadId),
+          },
+        ]);
+        const handoffs = yield* h.threads.getThreadRecords(thread.threadId, ["contextHandoffs"]);
+        assert.deepEqual(handoffs.contextHandoffs, []);
+      }),
+    ),
+  );
+
+  it.effect("AK-12: a switch does not touch threads on another setup", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const other = yield* createThread(h, "ak12", "claudeWork2");
+        yield* completeTurn(h, other, "hello");
+        const filesBefore = yield* h.readSetupFiles("claudeWork2");
+
+        yield* switchTo(h);
+        const mark = h.fake.opens.length;
+
+        assert.notInclude(yield* sessionStatuses(h, other), "stopped");
+        assert.deepEqual(yield* h.readSetupFiles("claudeWork2"), filesBefore);
+        assert.deepEqual(yield* activeOn(h, "claudeWork2"), PRIVATE_ACTIVE);
+        yield* completeTurn(h, other, "after the switch");
+        assert.deepEqual(opensAfter(h, mark, other), []);
+      }),
+    ),
+  );
+
+  // Holds a turn on setup one, switches, and returns what the next turn needs.
+  const switchWhileTurnRuns = Effect.fn("test.switchWhileTurnRuns")(function* (h: Harness) {
+    yield* rememberBoth(h);
+    const thread = yield* createThread(h, "running");
+    const { run: held } = yield* startHeldTurn(h, thread, "long task");
+    const accountsDuringInterrupt: Array<unknown> = [];
+    h.fake.onInterrupt = () =>
+      h.readJson("claudeAgent", ".claude.json").pipe(
+        Effect.map((json) => {
+          accountsDuringInterrupt.push(json.oauthAccount?.emailAddress);
+        }),
+        Effect.orDie,
+      );
+    yield* switchTo(h);
+    return { thread, held, mark: h.fake.opens.length, accountsDuringInterrupt };
+  });
+
+  it.effect("AK-13: a running turn on the setup is stopped cleanly by a switch", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        const { thread, held, accountsDuringInterrupt } = yield* switchWhileTurnRuns(h);
+
+        const after = yield* records(h, thread);
+        assert.strictEqual(after.runs.find((run) => run.id === held.id)?.status, "interrupted");
+        const attempts = after.attempts.filter((attempt) => attempt.runId === held.id);
+        assert.isNotEmpty(attempts);
+        for (const attempt of attempts) assert.strictEqual(attempt.status, "interrupted");
+        assert.isUndefined(ThreadManagementService.latestActiveRun(after));
+        assert.strictEqual(interruptsOn(h, thread).length, 1);
+        // Read inside the fake interrupt: the files still named Work when the turn was stopped.
+        assert.deepEqual(accountsDuringInterrupt, ["alice@example.com"]);
+      }),
+    ),
+  );
+
+  it.effect("AK-14: a thread stopped by a switch continues on the new account", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        const { thread, mark } = yield* switchWhileTurnRuns(h);
+
+        yield* completeTurn(h, thread, "continue");
+
+        assert.deepEqual(opensAfter(h, mark, thread), [
+          {
+            instanceId: "claudeAgent",
+            threadId: thread.threadId,
+            resume: nativeThreadId(thread.threadId),
+          },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("AK-15: running turns on another setup are not stopped", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const other = yield* createThread(h, "ak15", "claudeWork2");
+        const { run: held, release } = yield* startHeldTurn(h, other, "long task");
+
+        yield* switchTo(h);
+
+        assert.strictEqual(yield* runStatus(h, other, held.id), "running");
+        assert.deepEqual(interruptsOn(h, other), []);
+        yield* Deferred.succeed(release, undefined);
+        assert.strictEqual((yield* waitForRun(h, other, held.id)).status, "completed");
+      }),
+    ),
+  );
+
+  it.effect("AK-21: a switch refused for outside Claude programs leaves running turns alone", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const thread = yield* createThread(h, "ak21");
+        const { run: held } = yield* startHeldTurn(h, thread, "long task");
+        // Not SERVER_PID: the scan never counts the server itself.
+        yield* h.addClaudeProcess(4343, h.setups.claudeAgent!.dir);
+
+        yield* refusal(h, switchTo(h), "externalClaudePrograms");
+
+        assert.strictEqual(yield* runStatus(h, thread, held.id), "running");
+        assert.deepEqual(h.fake.interrupts, []);
+        assert.notInclude(yield* sessionStatuses(h, thread), "stopped");
+      }),
+    ),
+  );
+
+  it.effect("AK-31: a switch refused for an unremembered account leaves running turns alone", () =>
+    run(two(carol, bob), (h) =>
+      Effect.gen(function* () {
+        yield* privateAccount(h);
+        const thread = yield* createThread(h, "ak31");
+        const { run: held } = yield* startHeldTurn(h, thread, "long task");
+
+        yield* refusal(h, switchTo(h), "currentNotRemembered");
+
+        assert.strictEqual(yield* runStatus(h, thread, held.id), "running");
+        assert.deepEqual(h.fake.interrupts, []);
+      }),
+    ),
+  );
+
+  it.effect("holds a queued message during the switch and starts it on the new login", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const thread = yield* createThread(h, "queued");
+        const { run: held } = yield* startHeldTurn(h, thread, "long task");
+        const queued = yield* send(h, thread, "next", "queue");
+        assert.strictEqual(queued.status, "queued");
+
+        yield* switchTo(h);
+        const mark = h.fake.opens.length;
+
+        assert.strictEqual(yield* runStatus(h, thread, held.id), "interrupted");
+        // The only session opened before the mark is the held turn's.
+        assert.strictEqual(
+          h.fake.opens.slice(0, mark).filter((open) => open.threadId === thread.threadId).length,
+          1,
+        );
+        assert.strictEqual((yield* waitForRun(h, thread, queued.id)).status, "completed");
+        assert.strictEqual(opensAfter(h, mark, thread).length, 1);
+        const commands = yield* h.sql<{ readonly command_id: string }>`
+          SELECT command_id FROM orchestration_events
+          WHERE command_id LIKE 'claude-account-switch:%'
+          GROUP BY command_id ORDER BY MIN(sequence)`;
+        assert.strictEqual(commands.length, 2);
+        assert.isTrue(commands[0]!.command_id.endsWith(`:${held.id}`));
+        assert.isTrue(commands[1]!.command_id.endsWith(`:resume:${thread.threadId}`));
+        // holdQueue: true is what marks the queued run held under the interrupt command.
+        const holds = yield* h.sql<{ readonly payload_json: string }>`
+          SELECT payload_json FROM orchestration_events
+          WHERE command_id LIKE 'claude-account-switch:%' AND event_type = 'run.updated'
+            AND json_extract(payload_json, '$.id') = ${queued.id}
+          ORDER BY sequence`;
+        assert.deepEqual(
+          holds.map((row) => (JSON.parse(row.payload_json) as { queueHeld?: boolean }).queueHeld),
+          [true, false],
+        );
+      }),
+    ),
+  );
+
+  it.effect("stops a turn sent on an idle thread of the setup while the stop runs", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const a = yield* createThread(h, "admitted-a");
+        const b = yield* createThread(h, "admitted-b");
+        const { run: heldA } = yield* startHeldTurn(h, a, "long task");
+        const queuedA = yield* send(h, a, "next", "queue");
+        const gate = yield* Deferred.make<void>();
+        yield* Effect.addFinalizer(() => Deferred.succeed(gate, undefined));
+        h.fake.onInterrupt = (threadId) =>
+          threadId === a.threadId ? Deferred.await(gate) : Effect.void;
+        const login = yield* privateLogin(h);
+
+        const switching = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
+        yield* Deferred.await(h.fake.interruptSeen(a.threadId));
+        yield* holdNextTurn(h, b);
+        const runB = yield* send(h, b, "sent during the stop");
+        yield* Deferred.await(h.fake.started(b.threadId));
+        yield* Deferred.succeed(gate, undefined);
+        yield* Fiber.join(switching);
+        const mark = h.fake.opens.length;
+
+        assert.strictEqual(yield* runStatus(h, a, heldA.id), "interrupted");
+        assert.strictEqual(yield* runStatus(h, b, runB.id), "interrupted");
+        assert.strictEqual((yield* waitForRun(h, a, queuedA.id)).status, "completed");
+        assert.strictEqual(opensAfter(h, mark, a).length, 1);
+        yield* assertSetupHolds(h, "claudeAgent", login);
+      }),
+    ),
+  );
+
+  it.effect("stops the turns of every setup on a shared config dir", () =>
+    run(
+      {
+        setups: [
+          { id: "claudeAgent", state: alice },
+          { id: "claudeWork2", state: "loggedOut", sharesDirWith: "claudeAgent" },
+          { id: "claudeBob3", state: bob },
+        ],
+      },
+      (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          yield* work(h, "claudeBob3", "Private");
+          const one = yield* createThread(h, "shared-one", "claudeAgent");
+          const two = yield* createThread(h, "shared-two", "claudeWork2");
+          const { run: heldOne } = yield* startHeldTurn(h, one, "long task");
+          const { run: heldTwo } = yield* startHeldTurn(h, two, "long task");
+
+          yield* switchTo(h);
+
+          assert.strictEqual(yield* runStatus(h, one, heldOne.id), "interrupted");
+          assert.strictEqual(yield* runStatus(h, two, heldTwo.id), "interrupted");
+          for (const thread of [one, two]) {
+            assert.deepEqual(yield* sessionStatuses(h, thread), ["stopped"]);
+          }
+        }),
+    ),
+  );
+
+  it.effect("refuses with sessionStopFailed when a turn does not stop in time", () => {
+    const logs = captureLogs();
+    return run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const thread = yield* createThread(h, "stuck");
+        yield* startHeldTurn(h, thread, "long task");
+        h.fake.ignoreInterrupts.add(thread.threadId);
+        const before = yield* h.readEverything("claudeAgent");
+
+        const switching = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
+        yield* Deferred.await(h.fake.interruptSeen(thread.threadId));
+        yield* TestClock.adjust(
+          Duration.sum(ClaudeAccountsModule.CLAUDE_SWITCH_STOP_TIMEOUT, Duration.seconds(1)),
+        );
+        const error = yield* refusal(h, Fiber.join(switching), "sessionStopFailed");
+
+        assert.strictEqual(
+          error.message,
+          'Could not stop the running turns on setup "claudeAgent". The setup is still logged in as before. Try again.',
+        );
+        assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+        const warnings = logs.switchLines("Warn");
+        assert.deepEqual(
+          warnings.map((line) => [line.outcome, line.step]),
+          [["sessionStopFailed", "timeout"]],
+        );
+      }),
+    ).pipe(Effect.provide(logs.layer));
+  });
+
+  it.effect("a switch refused after the stop leaves the old login and resumes the queue", () => {
+    const logs = captureLogs();
+    return run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const thread = yield* createThread(h, "refused-late");
+        const { run: held } = yield* startHeldTurn(h, thread, "long task");
+        const queued = yield* send(h, thread, "next", "queue");
+        h.fake.onInterrupt = () =>
+          h.addClaudeProcess(4343, h.setups.claudeAgent!.dir).pipe(Effect.orDie);
+        const before = yield* h.readEverything("claudeAgent");
+
+        yield* refusal(h, switchTo(h), "externalClaudePrograms");
+
+        assert.strictEqual(yield* runStatus(h, thread, held.id), "interrupted");
+        assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+        assert.strictEqual((yield* waitForRun(h, thread, queued.id)).status, "completed");
+        const refusedAfterStop = logs.lines.filter(
+          (line) =>
+            line.level === "Info" &&
+            line.message[0] === "Claude account switch refused after stopping sessions",
+        );
+        assert.deepEqual(
+          refusedAfterStop.map((line) => line.message[1]),
+          [
+            {
+              operation: "switch",
+              instanceId: "claudeAgent",
+              reason: "externalClaudePrograms",
+              interruptedRuns: 1,
+            },
+          ],
+        );
+      }),
+    ).pipe(Effect.provide(logs.layer));
+  });
+
+  it.effect("switching to the active account stops nothing", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const thread = yield* createThread(h, "already-active");
+        const { run: held } = yield* startHeldTurn(h, thread, "long task");
+
+        yield* switchTo(h, "Work");
+
+        assert.deepEqual(h.fake.interrupts, []);
+        assert.strictEqual(yield* runStatus(h, thread, held.id), "running");
+        assert.notInclude(yield* sessionStatuses(h, thread), "stopped");
+      }),
+    ),
+  );
+
+  it.effect("AK-25: logs, threads and stored records never reveal a login", () => {
+    const logs = captureLogs();
+    return run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const busy = yield* createThread(h, "ak25-busy");
+        const idle = yield* createThread(h, "ak25-idle");
+        yield* completeTurn(h, idle, "hello");
+        const { run: held } = yield* startHeldTurn(h, busy, "long task");
+
+        yield* switchTo(h);
+
+        assert.isNotEmpty(h.tokens);
+        assertNoLogin(h, NodeUtil.inspect(logs.lines, { depth: 12 }));
+        for (const thread of [busy, idle]) {
+          assertNoLogin(h, JSON.stringify(yield* h.threads.getThreadSnapshot(thread.threadId)));
+        }
+        const tables = yield* h.sql<{ readonly name: string }>`
+          SELECT name FROM sqlite_master WHERE type = 'table'`;
+        assert.isNotEmpty(tables);
+        for (const { name } of tables) {
+          const rows = yield* h.sql.unsafe(`SELECT * FROM "${name}"`);
+          assertNoLogin(h, JSON.stringify(rows));
+        }
+        const interruptRequests = (yield* h.threads.getThreadRecords(busy.threadId, [
+          "turnItems",
+        ])).turnItems
+          .filter((item) => item.runId === held.id && item.type === "run_interrupt_request")
+          .map((item) => ("message" in item ? item.message : null));
+        assert.deepEqual(interruptRequests, ["Stopped for a Claude account switch"]);
+      }),
+    ).pipe(Effect.provide(logs.layer), Effect.provideService(References.MinimumLogLevel, "All"));
+  });
+
   const EXTERNAL_MESSAGE =
     'Claude programs started outside T3 are using setup "claudeAgent". Close them, then switch again.';
 
@@ -1323,6 +2205,10 @@ it("explains each refusal in words that carry no login", () => {
   );
   assert.strictEqual(message("accountNotFound"), 'No remembered Claude account is named "Work".');
   assert.strictEqual(message("storage"), "Could not read or save the remembered Claude accounts.");
+  assert.strictEqual(
+    message("sessionStopFailed"),
+    'Could not stop the running turns on setup "claudeAgent". The setup is still logged in as before. Try again.',
+  );
   assert.strictEqual(
     message("needsFreshLogin"),
     'The saved login of "Work" no longer works. Log in to that account again with `claude auth login`, then forget "Work" and remember it again.',

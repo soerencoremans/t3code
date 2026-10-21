@@ -59,6 +59,14 @@ blocks every switch. The marker is a cooperative tag, not a proof of origin: any
 same user can set it, and that gains it nothing, because the same user can rewrite the login files
 directly. Build no other control on it.
 
+The Claude account switch does not follow the Antigravity order "close admission, then stop":
+Claude has no admission gate. It interrupts the setup's running turns with their queues held,
+waits for those interrupts in two passes, closes the instance's sessions, and verifies that none is
+live before it changes the login files and resumes the held queues. Interrupting first matters:
+releasing a session mid-turn fails the run instead of stopping it. A turn admitted between the last
+check and the file change can keep the old login. `ProviderAuthService.stopSessions` keeps its own
+release-and-fail order for sign-in and sign-out.
+
 ## Setup must not happen as a health-check side effect
 
 Opening a provider session can start MCP servers, run hooks, or launch a login browser.
