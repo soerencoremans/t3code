@@ -92,3 +92,11 @@ architect-4 (pid from one place), security-3 (cmdline first, environ only for cl
 (unreadable environ skip as root), testability-1 (per-site marker tests), security out-of-lens (re-scan
 right before apply?). Carry to ticket-4: data-safety OOL — T3 probe/text-gen CLIs of affected instances
 may renew mid-switch; stop/await them too or accept. Login check uses ~29s under accountsLock.
+
+## Ticket-3 drafted (round 1)
+Seats: integration, testability, codebase. Marker in makeClaudeEnvironment (always), makeClaudeTerminalEnvironment
+for Manager.ts (strips marker); HostProcess.ProcessId reference; ClaudeExternalProcesses layerWith({procRoot});
+gate refuseExternalPrograms in checkSwitch after already-active, before login check, AND first step of applySwitch.
+Reasons externalClaudePrograms/processCheckFailed. AK-20 only. Ticket-4 notes: provide ClaudeExternalProcesses.layer
+in server.ts; AK-21 proven in ticket 4 (stop step after checkSwitch, refusal leaves turns running); applySwitch's
+first step is the re-scan, so ticket-4's stop runs before it.
