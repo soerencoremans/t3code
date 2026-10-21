@@ -27,7 +27,9 @@ Backend only: no contracts, no WS RPC, no MCP tool. Service methods are the serv
 
 1. **ticket-1 — ClaudeAccounts: remember, list, forget.** Seats: api-contract, testability.
    Files: ClaudeHome.ts (+test), ClaudeDriver.ts, claudeResetCredits.ts (drop export), NEW
-   claudeLoginFiles.ts (read helpers), NEW ClaudeAccounts.ts, NEW ClaudeAccounts.integration.test.ts.
+   claudeLoginFiles.ts (+test), NEW ClaudeAccounts.ts, NEW ClaudeAccounts.integration.test.ts. CLOSED (#3).
+   Ticket-2 notes: claudeAiOauth is Redacted<JsonObject>; result types are Schemas with null absence;
+   ClaudeAccountError.instanceId is ProviderInstanceId; decide ResetCreditCoordinator serialisation.
    AKs: AK-1..AK-9, AK-23, AK-24, AK-27, AK-28, AK-29.
 2. **ticket-2 — ClaudeAccounts.switch: the file transaction.** Linux gate (AK-30), unremembered current
    refused (AK-17), external Claude programs refused (AK-20; NEW claudeExternalProcesses.ts, /proc scan with
@@ -41,6 +43,8 @@ Backend only: no contracts, no WS RPC, no MCP tool. Service methods are the serv
    (AK-21, AK-31), then for every Claude instance resolving to the same config dir: interrupt every active
    run (`run.interrupt` → status interrupted, AK-13) and drain, then release remaining live sessions
    (idle ones too, so no CLI keeps old tokens in memory), then file transaction, then `invalidateCaches`.
+   ALSO wires `ClaudeAccounts.layer` into server.ts (moved from ticket-1 by ruling pragmatist-2; needs
+   orchestration services below it in the layer chain).
    AKs: AK-10..AK-15, AK-21, AK-25, AK-26, AK-31. Seats likely: concurrency, reliability, async-jobs.
 
 ## Deliberately left out
