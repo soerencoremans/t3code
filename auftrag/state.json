@@ -41,7 +41,7 @@
       ]
     }
   },
-  "label": null,
+  "label": "Human",
   "conflict": false,
   "counters": {
     "item": null,
@@ -50,8 +50,23 @@
     "countedEvent": null
   },
   "tickets": {},
-  "turns": {},
-  "turn": null,
+  "turns": {
+    "eval": 1
+  },
+  "turn": {
+    "role": "eval",
+    "type": "initial",
+    "number": 1,
+    "attempt": 1,
+    "sessionId": "e28fc2f1-996d-45ef-bf88-c2d54aeaf49d",
+    "startedAt": "2026-10-21T12:02:07.062Z",
+    "lastCommentId": 0,
+    "lastLabelEventId": null,
+    "labelSet": true,
+    "comments": 1,
+    "setLabel": "Human",
+    "ended": true
+  },
   "sessions": {},
   "bodySnapshot": "### Repository\n\n~/shared/fastnd/t3code\n\n### Blocked by\n\n_No response_\n\n### Settings\n\n_No response_\n\n### Behavioural requirements\n\n- T3 can remember the Claude account currently logged in on one of its Claude setups, under a name the user chooses. Several accounts can be remembered per machine.\n- The user can see which accounts T3 remembers and which one is active on each Claude setup.\n- The user can make T3 forget an account. Forgetting the active account does not log that setup out.\n- The user can switch a Claude setup to another remembered account. Afterwards every thread that uses this setup works with the new account, and no thread loses its history.\n- Turns that are running on that setup when the switch starts are stopped cleanly; their threads can be continued afterwards on the new account.\n- Before switching away, T3 saves the latest login of the outgoing account, so switching back later works without logging in again.\n- A switch changes only which account is logged in. Everything else that belongs to the setup (settings, history, other logins) stays exactly as it was.\n- A switch either completes or leaves the setup exactly as before. There is never a half-switched state.\n- If Claude programs outside T3 are using the same setup, T3 refuses the switch and says why.\n- If the saved login of the target account no longer works, the user is told that this account needs a fresh login.\n- Remembered logins are stored as securely as T3's other secrets and never appear in logs, threads or the UI.\n- An agent in a thread can list, remember, forget and switch accounts on the user's behalf. Until a later Auftrag adds screens, this is the way to use the feature.\n- Only Linux is supported; on other systems these actions say they are unavailable.\n\n### Purpose\n\n- Subscription usage limits stop work mid-task. Switching accounts keeps threads going without a logout/login round trip and without losing context.\n- One setup is shared by many threads; switching per thread would leave them disagreeing about who is logged in.\n- Logins renew themselves over time, and an outdated copy locks the account out. That is why the outgoing login is saved at the moment of switching.\n- The setup also holds history and other logins the user depends on; a switch must never cost them.\n- Programs outside T3 would overwrite the switch or be broken by it; refusing is safer than guessing.\n- Agent access comes first because it needs no screens, so the feature is usable before the frontend Auftrag exists.\n- This is a personal build; Linux is the only platform in use, so other systems are out of scope.\n\n### Mocks\n\nNone. This Auftrag adds no screens; a follow-up frontend Auftrag will come with mocks.\n\n### No technical details\n\n- [X] This Auftrag names no files, libraries, tables or architecture. That is the Gremium's job.\n",
   "bodyBefore": null
