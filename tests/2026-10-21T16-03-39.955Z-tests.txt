@@ -1,0 +1,31 @@
+Scope: all 33 workspace projects
+✓ Lockfile passes supply-chain policies (verified 1d ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +3
++++
+Progress: resolved 3, reused 3, downloaded 0, added 3, done
+
+. prepare$ effect-tsgo patch && vp config --no-agent
+. prepare: typescript skipped because its hash matches the replacement.
+. prepare: Done
+Done in 3.5s using pnpm v11.10.0
+
+=== t3: src/provider/ClaudeAccounts.integration.test.ts src/provider/Drivers/ClaudeHome.test.ts src/provider/claudeLoginFiles.test.ts ===
+~/apps/server$ vp test run src/provider/ClaudeAccounts.integration.test.ts src/provider/Drivers/ClaudeHome.test.ts src/provider/claudeLoginFiles.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-3/apps/server
+
+
+ Test Files  3 passed (3)
+      Tests  46 passed (46)
+   Start at  18:03:44
+   Duration  7.57s (transform 58%, import 36%, tests 3%, setup 3%)
+
+  Transform  transforming modules took 4.19s · 58% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+
+All scoped tests passed.
