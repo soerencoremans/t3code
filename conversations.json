@@ -13,6 +13,33 @@
       "from": "1",
       "to": "139",
       "copy": null
+    },
+    {
+      "session": "b8758b6f-e514-40c6-a500-d4283f064f7b",
+      "role": "eval",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-2/b8758b6f-e514-40c6-a500-d4283f064f7b.jsonl",
+      "from": "1",
+      "to": "59",
+      "copy": null
+    },
+    {
+      "session": "10c24825-f5ef-45db-9388-589d6b1e32b8",
+      "role": "ak",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-2/10c24825-f5ef-45db-9388-589d6b1e32b8.jsonl",
+      "from": "1",
+      "to": "107",
+      "copy": null
+    },
+    {
+      "session": "3272337d-a725-4752-9c58-1db21bfc650a",
+      "role": "ak-review",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-2/3272337d-a725-4752-9c58-1db21bfc650a.jsonl",
+      "from": "1",
+      "to": "72",
+      "copy": null
     }
   ]
 }
