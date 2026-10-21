@@ -102,3 +102,9 @@ in server.ts; AK-21 proven in ticket 4 (stop step after checkSwitch, refusal lea
 first step is the re-scan, so ticket-4's stop runs before it.
 
 ## Ticket-3 CLOSED (#5, round 1 ruling, all suggestions). Added: ClaudeProcessScanError.reason (listFailed|processUnreadable|timeout), 5s timeout, realPath match, UserId stat. Ticket-4 note: setsid/nohup child keeps marker, may outlive stop.
+
+## Ticket-4 drafted (#6), round 1
+Seats: concurrency, reliability, testability. Stop = interruptThread + waitForThread (10 s CLAUDE_SWITCH_STOP_TIMEOUT) then
+closeInstance for all affected; sessionStopFailed reason; invalidateCaches after success; wired in runtimeLayer.ts layerProduction.
+Left out: probe/text-gen CLIs, turn started in stop→write window, setsid children. Known wording nit: stop-timeout test
+"constant overridden through TestClock" — really TestClock.adjust past 10 s. Next draft turn = ticket-5 → NO ENTRY → closing comment.
