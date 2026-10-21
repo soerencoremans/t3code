@@ -11,6 +11,7 @@ import {
   makeClaudeCapabilitiesCacheKey,
   makeClaudeContinuationGroupKey,
   makeClaudeEnvironment,
+  makeClaudeTerminalEnvironment,
   resolveClaudeHomePath,
   resolveClaudeSetupPaths,
 } from "./ClaudeHome.ts";
@@ -25,7 +26,10 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         expect(yield* resolveClaudeHomePath({ homePath: "" })).toBe(resolved);
         expect(yield* resolveClaudeHomePath({ homePath: "~/.claude" })).toBe(resolved);
         expect(yield* resolveClaudeHomePath({ homePath: resolved })).toBe(resolved);
-        expect(yield* makeClaudeEnvironment({ homePath: "" })).toBe(process.env);
+        expect(yield* makeClaudeEnvironment({ homePath: "" })).toEqual({
+          ...process.env,
+          T3CODE_CLAUDE_OWNER_PID: String(process.pid),
+        });
 
         const key = `claude:home:${resolved}`;
         expect(yield* makeClaudeContinuationGroupKey({ homePath: "" })).toBe(key);
@@ -46,6 +50,42 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         expect(yield* makeClaudeCapabilitiesCacheKey({ binaryPath: "claude", homePath })).toBe(
           `claude\0${resolved}\0`,
         );
+      }),
+    );
+
+    it.effect("marks the environment of a T3 spawn with the server pid, copying the input", () =>
+      Effect.gen(function* () {
+        const base = { A: "1" };
+        const marked = yield* makeClaudeEnvironment({ homePath: "" }, base).pipe(
+          Effect.provideService(HostProcess.ProcessId, 4242),
+        );
+        expect(marked).toEqual({ A: "1", T3CODE_CLAUDE_OWNER_PID: "4242" });
+        expect(base).toEqual({ A: "1" });
+
+        const path = yield* Path.Path;
+        const work = yield* makeClaudeEnvironment({ homePath: "~/.claude-work" }, base).pipe(
+          Effect.provideService(HostProcess.ProcessId, 4242),
+        );
+        expect(work.CLAUDE_CONFIG_DIR).toBe(path.resolve(NodeOS.homedir(), ".claude-work"));
+        expect(work.T3CODE_CLAUDE_OWNER_PID).toBe("4242");
+      }),
+    );
+
+    it.effect("never marks a terminal's environment and drops an inherited marker", () =>
+      Effect.gen(function* () {
+        const base = { A: "1" };
+        expect(yield* makeClaudeTerminalEnvironment({ homePath: "" }, base)).toBe(base);
+
+        const inherited = { A: "1", T3CODE_CLAUDE_OWNER_PID: "999" };
+        expect(yield* makeClaudeTerminalEnvironment({ homePath: "" }, inherited)).toEqual({
+          A: "1",
+        });
+        expect(inherited.T3CODE_CLAUDE_OWNER_PID).toBe("999");
+
+        const path = yield* Path.Path;
+        expect(
+          yield* makeClaudeTerminalEnvironment({ homePath: "~/.claude-work" }, inherited),
+        ).toEqual({ A: "1", CLAUDE_CONFIG_DIR: path.resolve(NodeOS.homedir(), ".claude-work") });
       }),
     );
 

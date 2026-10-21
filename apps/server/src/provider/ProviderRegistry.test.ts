@@ -4539,6 +4539,10 @@ it.layer(
           recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
           [(yield* Path.Path).resolve(claudeConfigDir)],
         );
+        assert.deepStrictEqual(
+          recorded.commands.map((command) => command.env?.T3CODE_CLAUDE_OWNER_PID),
+          recorded.commands.map(() => String(process.pid)),
+        );
       }).pipe(Effect.provide(recorded.layer));
     });
 

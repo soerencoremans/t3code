@@ -67,6 +67,7 @@ function withFakeClaudeEnv<A, E, R>(
     argsMustNotContain?: string;
     stdinMustContain?: string;
     configDirMustBe?: string;
+    ownerPidMustBe?: string;
     cwdMustNotBe?: string;
     claudeConfig?: Partial<ClaudeSettings>;
   },
@@ -85,6 +86,7 @@ function withFakeClaudeEnv<A, E, R>(
     const previousArgsMustNotContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
     const previousStdinMustContain = process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
     const previousConfigDirMustBe = process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
+    const previousOwnerPidMustBe = process.env.T3_FAKE_CLAUDE_OWNER_PID_MUST_BE;
     const previousCwdMustNotBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
 
     yield* Effect.acquireRelease(
@@ -132,6 +134,12 @@ function withFakeClaudeEnv<A, E, R>(
           process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = input.configDirMustBe;
         } else {
           delete process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
+        }
+
+        if (input.ownerPidMustBe !== undefined) {
+          process.env.T3_FAKE_CLAUDE_OWNER_PID_MUST_BE = input.ownerPidMustBe;
+        } else {
+          delete process.env.T3_FAKE_CLAUDE_OWNER_PID_MUST_BE;
         }
       }),
       () =>
@@ -184,6 +192,12 @@ function withFakeClaudeEnv<A, E, R>(
             delete process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
           } else {
             process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = previousConfigDirMustBe;
+          }
+
+          if (previousOwnerPidMustBe === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_OWNER_PID_MUST_BE;
+          } else {
+            process.env.T3_FAKE_CLAUDE_OWNER_PID_MUST_BE = previousOwnerPidMustBe;
           }
         }),
     );
@@ -424,6 +438,28 @@ it.layer(layerClaudeTextGenerationTest)("ClaudeTextGeneration", (it) => {
           }),
       );
     }),
+  );
+
+  it.effect("marks the spawned Claude CLI with the server pid", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({ structured_output: { title: "Marked" } }),
+        ownerPidMustBe: String(process.pid),
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateThreadTitle({
+            cwd: process.cwd(),
+            message: "thread title",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("claudeAgent"),
+              model: SYNTHETIC_CLAUDE_STANDARD_MODEL,
+            },
+          });
+
+          expect(generated.title).toBe(sanitizeThreadTitle("Marked"));
+        }),
+    ),
   );
 
   it.effect.each([

@@ -25,6 +25,7 @@ import * as ServerConfig from "../config.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as ClaudeAccountsModule from "./ClaudeAccounts.ts";
+import * as ClaudeExternalProcesses from "./ClaudeExternalProcesses.ts";
 import { ClaudeLoginCheck, type ClaudeLoginCheckResult } from "./ClaudeLoginCheck.ts";
 import type { JsonObject } from "./claudeLoginFiles.ts";
 
@@ -33,6 +34,7 @@ const { ClaudeAccountError, ClaudeAccounts } = ClaudeAccountsModule;
 const UNAVAILABLE_MESSAGE =
   "Claude account switching is unavailable on this system. It is supported on Linux only.";
 const STORAGE_NAME = "claude-accounts";
+const SERVER_PID = 4242;
 
 const id = (value: string) => ProviderInstanceId.make(value);
 
@@ -55,6 +57,8 @@ interface HarnessSpec {
   readonly withCodexInstance?: boolean;
   /** Fails `rename` onto `.claude.json`; "rollbackToo" also fails the second rename onto `.credentials.json`. */
   readonly renameFault?: "claudeJson" | "rollbackToo";
+  /** Points the process scan at a path that does not exist. */
+  readonly missingProcRoot?: boolean;
 }
 
 const alice: Login = {
@@ -246,6 +250,9 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
       },
     }),
   );
+  // An empty fake /proc unless a test adds a process to it.
+  const procDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-fake-proc-" });
+  const procRoot = spec.missingProcRoot ? path.join(procDir, "missing") : procDir;
   const serviceFileSystem =
     spec.renameFault === undefined ? fileSystem : yield* renameFaultFileSystem(spec.renameFault);
 
@@ -256,6 +263,7 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
           ServerSecretStore.layer,
           ServerSettingsService.layerTest({ providerInstances }),
           checkLayer,
+          ClaudeExternalProcesses.layerWith({ procRoot }),
         ).pipe(
           Layer.provideMerge(
             ServerConfig.ServerConfig.layerTest(process.cwd(), {
@@ -331,6 +339,20 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
       return decodeStored(new TextDecoder().decode(stored.value)).accounts;
     }),
     storedBytes: secrets.get(STORAGE_NAME),
+    /** Stands in for a Claude program running on a config dir, in the fake /proc. */
+    addClaudeProcess: Effect.fn("test.addClaudeProcess")(function* (
+      pid: number,
+      configDir: string,
+      extraEnviron: ReadonlyArray<string> = [],
+    ) {
+      const pidDir = path.join(procDir, String(pid));
+      yield* fileSystem.makeDirectory(pidDir);
+      yield* fileSystem.writeFileString(path.join(pidDir, "cmdline"), "claude\0");
+      yield* fileSystem.writeFileString(
+        path.join(pidDir, "environ"),
+        [`CLAUDE_CONFIG_DIR=${configDir}`, ...extraEnviron].map((entry) => `${entry}\0`).join(""),
+      );
+    }),
   };
 });
 type Harness = Effect.Success<ReturnType<typeof buildHarness>>;
@@ -348,6 +370,7 @@ const run = <A, E>(
       Effect.provideService(HostProcess.Platform, spec.platform ?? "linux"),
       Effect.provideService(HostProcess.HomeDirectory, home),
       Effect.provideService(HostProcess.Environment, {}),
+      Effect.provideService(HostProcess.ProcessId, SERVER_PID),
     );
   }).pipe(Effect.scoped);
 
@@ -702,11 +725,14 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
   type Line = { readonly level: string; readonly message: ReadonlyArray<unknown> };
   const captureLogs = () => {
     const lines: Array<Line> = [];
-    const layer = Logger.layer([
-      Logger.make(({ logLevel, message }) => {
-        lines.push({ level: logLevel, message: message as ReadonlyArray<unknown> });
-      }),
-    ]);
+    const layer = Logger.layer(
+      [
+        Logger.make(({ logLevel, message }) => {
+          lines.push({ level: logLevel, message: message as ReadonlyArray<unknown> });
+        }),
+      ],
+      { mergeWithExisting: false },
+    );
     const switchLines = (level: string) =>
       lines.flatMap((line) => {
         const annotation = line.message[1] as Record<string, unknown> | undefined;
@@ -1080,6 +1106,188 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
         assert.strictEqual(h.check.calls.length, 1);
         const credentials = yield* h.readJson("claudeAgent", ".credentials.json");
         assert.deepEqual(credentials.claudeAiOauth, p2);
+      }),
+    ),
+  );
+
+  const EXTERNAL_MESSAGE =
+    'Claude programs started outside T3 are using setup "claudeAgent". Close them, then switch again.';
+
+  it.effect("AK-20: a switch is refused while Claude programs outside T3 use the setup", () => {
+    const logs = captureLogs();
+    return run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+        const filesBefore = yield* h.readEverything("claudeAgent");
+        const storedBefore = yield* h.storedBytes;
+
+        const error = yield* refusal(h, switchTo(h), "externalClaudePrograms");
+
+        assert.strictEqual(error.message, EXTERNAL_MESSAGE);
+        assert.deepEqual(yield* h.readEverything("claudeAgent"), filesBefore);
+        assert.deepEqual((yield* h.accounts.list).setups[0]?.active, {
+          email: "alice@example.com",
+          rememberedAs: "Work",
+        });
+        assert.strictEqual(h.check.calls.length, 0);
+        assert.deepEqual(yield* h.storedBytes, storedBefore);
+        assert.deepEqual(logs.switchLines("Info"), [
+          {
+            operation: "switch",
+            outcome: "externalClaudePrograms",
+            instanceId: "claudeAgent",
+            processCount: 1,
+          },
+        ]);
+      }),
+    ).pipe(Effect.provide(logs.layer));
+  });
+
+  it.effect("T3's own Claude programs do not block a switch", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir, [
+          `T3CODE_CLAUDE_OWNER_PID=${SERVER_PID}`,
+        ]);
+        const result = yield* switchTo(h);
+        assert.deepEqual(result.active, { name: "Private", email: "bob@example.com" });
+      }),
+    ),
+  );
+
+  it.effect("a Claude program on another setup does not block a switch", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        yield* h.addClaudeProcess(101, h.setups.claudeWork2!.dir);
+        const result = yield* switchTo(h);
+        assert.deepEqual(result.active, { name: "Private", email: "bob@example.com" });
+      }),
+    ),
+  );
+
+  it.effect("a Claude program on a shared config dir blocks every setup on it", () =>
+    run(
+      {
+        setups: [
+          { id: "claudeAgent", state: alice },
+          { id: "claudeShared2", state: "loggedOut", sharesDirWith: "claudeAgent" },
+          { id: "claudeWork2", state: bob },
+        ],
+      },
+      (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+          const before = yield* h.readEverything("claudeAgent");
+
+          yield* refusal(h, switchTo(h, "Private", "claudeShared2"), "externalClaudePrograms");
+
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+          const setups = (yield* h.accounts.list).setups;
+          for (const instance of ["claudeAgent", "claudeShared2"]) {
+            assert.deepEqual(setups.find((setup) => setup.instanceId === instance)?.active, {
+              email: "alice@example.com",
+              rememberedAs: "Work",
+            });
+          }
+        }),
+    ),
+  );
+
+  it.effect("refuses a Claude program started during the login check, keeping the renewal", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const p2 = yield* h.newOauth("renewed-private");
+        h.check.respond = () =>
+          h.addClaudeProcess(103, h.setups.claudeAgent!.dir).pipe(
+            Effect.as({
+              verdict: "Valid",
+              latestClaudeAiOauth: Option.some(Redacted.make(p2)),
+            } as const),
+            Effect.orDie,
+          );
+        const filesBefore = yield* h.readEverything("claudeAgent");
+        const workBefore = (yield* h.storedAccounts()).find((a) => a.name === "Work");
+
+        yield* refusal(h, switchTo(h), "externalClaudePrograms");
+
+        assert.strictEqual(h.check.calls.length, 1);
+        assert.deepEqual(yield* h.readEverything("claudeAgent"), filesBefore);
+        const stored = yield* h.storedAccounts();
+        assert.deepEqual(stored.find((a) => a.name === "Private")?.claudeAiOauth, p2);
+        assert.deepEqual(
+          stored.find((a) => a.name === "Work"),
+          workBefore,
+        );
+      }),
+    ),
+  );
+
+  it.effect("refuses with processCheckFailed when the process scan fails", () => {
+    const logs = captureLogs();
+    return run(switchSpec({ missingProcRoot: true }), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const before = yield* h.readEverything("claudeAgent");
+
+        const error = yield* refusal(h, switchTo(h), "processCheckFailed");
+
+        assert.strictEqual(
+          error.message,
+          'Could not check whether Claude programs outside T3 are using setup "claudeAgent". Try again.',
+        );
+        assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+        assert.strictEqual(h.check.calls.length, 0);
+        assert.deepEqual(logs.switchLines("Warn"), [
+          {
+            operation: "switch",
+            outcome: "processCheckFailed",
+            instanceId: "claudeAgent",
+            scanFailure: "listFailed",
+          },
+        ]);
+      }),
+    ).pipe(Effect.provide(logs.layer));
+  });
+
+  it.effect("refusals that need no process scan come first", () =>
+    Effect.gen(function* () {
+      yield* run(switchSpec({ platform: "darwin" }), (h) =>
+        Effect.gen(function* () {
+          yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+          yield* refusal(h, switchTo(h), "unavailable");
+        }),
+      );
+      yield* run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+          yield* refusal(h, switchTo(h, "Nobody"), "accountNotFound");
+        }),
+      );
+      yield* run(two(carol, bob), (h) =>
+        Effect.gen(function* () {
+          yield* privateAccount(h);
+          yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+          yield* refusal(h, switchTo(h), "currentNotRemembered");
+        }),
+      );
+    }),
+  );
+
+  it.effect("switching to the already active account succeeds while a program blocks", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+        const before = yield* h.readEverything("claudeAgent");
+        const result = yield* switchTo(h, "Work");
+        assert.deepEqual(result.active, { name: "Work", email: "alice@example.com" });
+        assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
       }),
     ),
   );

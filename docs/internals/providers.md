@@ -49,6 +49,16 @@ client connections and provider-instance rebuilds. Releases are immutable, with 
 selecting the version for new processes. Running processes hold leases on their version. Updates
 and removal must respect those leases instead of replacing executables under a running agent.
 
+Every Claude CLI that T3 spawns builds its environment with `makeClaudeEnvironment`
+([ClaudeHome](../../apps/server/src/provider/Drivers/ClaudeHome.ts)), which marks it with
+`T3CODE_CLAUDE_OWNER_PID`. Terminals use `makeClaudeTerminalEnvironment` and are not marked, because
+a `claude` the user starts there is outside T3. The account switch
+([ClaudeAccounts](../../apps/server/src/provider/ClaudeAccounts.ts)) refuses while unmarked Claude
+programs use the setup's config dir, so a new spawn site that bypasses `makeClaudeEnvironment`
+blocks every switch. The marker is a cooperative tag, not a proof of origin: any process of the
+same user can set it, and that gains it nothing, because the same user can rewrite the login files
+directly. Build no other control on it.
+
 ## Setup must not happen as a health-check side effect
 
 Opening a provider session can start MCP servers, run hooks, or launch a login browser.

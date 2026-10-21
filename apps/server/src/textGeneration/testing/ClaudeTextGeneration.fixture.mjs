@@ -63,6 +63,11 @@ if (configDirMustBe && process.env.CLAUDE_CONFIG_DIR !== configDirMustBe) {
   fail("CLAUDE_CONFIG_DIR was " + (process.env.CLAUDE_CONFIG_DIR ?? ""), 5);
 }
 
+const ownerPidMustBe = process.env.T3_FAKE_CLAUDE_OWNER_PID_MUST_BE;
+if (ownerPidMustBe && process.env.T3CODE_CLAUDE_OWNER_PID !== ownerPidMustBe) {
+  fail("T3CODE_CLAUDE_OWNER_PID was " + (process.env.T3CODE_CLAUDE_OWNER_PID ?? ""), 5);
+}
+
 const stderrText = process.env.T3_FAKE_CLAUDE_STDERR;
 if (stderrText) {
   process.stderr.write(stderrText + "\n");

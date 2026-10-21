@@ -48,16 +48,39 @@ export const resolveClaudeSetupPaths = Effect.fn("resolveClaudeSetupPaths")(func
   return { configDir, accountConfigPath };
 });
 
+/**
+ * Marks a Claude CLI as spawned by this server, so the account switch can tell
+ * T3's own programs from ones the user started. A cooperative tag, not proof of
+ * origin: any process of the same user can set it.
+ */
+export const CLAUDE_OWNER_PID_ENV = "T3CODE_CLAUDE_OWNER_PID";
+
+/** The environment of a Claude CLI that T3 spawns itself, always marked with the owner pid. */
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (
+  config: Pick<ClaudeSettings, "homePath">,
+  baseEnv?: NodeJS.ProcessEnv,
+): Effect.fn.Return<NodeJS.ProcessEnv, never, Path.Path> {
+  const environment = yield* makeClaudeTerminalEnvironment(config, baseEnv);
+  return { ...environment, [CLAUDE_OWNER_PID_ENV]: String(yield* HostProcess.ProcessId) };
+});
+
+/**
+ * The environment for a user's terminal, which is outside T3: never marked, and
+ * an inherited marker is dropped.
+ */
+export const makeClaudeTerminalEnvironment = Effect.fn("makeClaudeTerminalEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   baseEnv?: NodeJS.ProcessEnv,
 ): Effect.fn.Return<NodeJS.ProcessEnv, never, Path.Path> {
   const resolvedBaseEnv = baseEnv ?? process.env;
   const homePath = config.homePath.trim();
-  if (homePath.length === 0) return resolvedBaseEnv;
+  const { [CLAUDE_OWNER_PID_ENV]: inheritedMarker, ...unmarked } = resolvedBaseEnv;
+  if (homePath.length === 0) {
+    return inheritedMarker === undefined ? resolvedBaseEnv : unmarked;
+  }
   const resolvedHomePath = yield* resolveClaudeHomePath(config);
   return {
-    ...resolvedBaseEnv,
+    ...unmarked,
     // Overriding HOME also relocates the macOS login keychain lookup
     // ($HOME/Library/Keychains), so the spawned CLI can't find its stored
     // OAuth credentials and reports "Not logged in". CLAUDE_CONFIG_DIR points

@@ -17,6 +17,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
+import { ClaudeExternalProcesses } from "./ClaudeExternalProcesses.ts";
 import { ClaudeLoginCheck } from "./ClaudeLoginCheck.ts";
 import { resolveClaudeSetupPaths, type ClaudeSetupPaths } from "./Drivers/ClaudeHome.ts";
 import {
@@ -44,6 +45,8 @@ export const ClaudeAccountErrorReason = Schema.Literals([
   "loginCheckFailed",
   "switchFailed",
   "switchRollbackFailed",
+  "externalClaudePrograms",
+  "processCheckFailed",
 ]);
 export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
 
@@ -85,6 +88,10 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
         return `Switching setup "${this.instanceId}" failed. The setup is logged in as before.`;
       case "switchRollbackFailed":
         return `Switching setup "${this.instanceId}" failed and its login files could not be restored. Log in again with \`claude auth login\` for this setup.`;
+      case "externalClaudePrograms":
+        return `Claude programs started outside T3 are using setup "${this.instanceId}". Close them, then switch again.`;
+      case "processCheckFailed":
+        return `Could not check whether Claude programs outside T3 are using setup "${this.instanceId}". Try again.`;
     }
   }
 }
@@ -193,6 +200,7 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const loginCheck = yield* ClaudeLoginCheck;
+  const externalProcesses = yield* ClaudeExternalProcesses;
   const settings = yield* ServerSettingsService;
   const accountsLock = yield* Semaphore.make(1);
 
@@ -402,6 +410,36 @@ export const make = Effect.gen(function* () {
     return [setup.instanceId, ...siblings] as ReadonlyArray<ProviderInstanceId>;
   });
 
+  // One scan covers every affected setup: they share this config dir by construction.
+  const refuseExternalPrograms = Effect.fn("ClaudeAccounts.refuseExternalPrograms")(function* (
+    setup: ClaudeSetup,
+  ) {
+    const { instanceId } = setup;
+    const pids = yield* externalProcesses.findUsing(setup.paths.configDir).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("Claude account switch refused", {
+          operation: "switch",
+          outcome: "processCheckFailed",
+          instanceId,
+          scanFailure: error.reason,
+        }).pipe(
+          Effect.andThen(
+            Effect.fail(new ClaudeAccountError({ reason: "processCheckFailed", instanceId })),
+          ),
+        ),
+      ),
+    );
+    if (pids.length > 0) {
+      yield* Effect.logInfo("Claude account switch refused", {
+        operation: "switch",
+        outcome: "externalClaudePrograms",
+        instanceId,
+        processCount: pids.length,
+      });
+      return yield* new ClaudeAccountError({ reason: "externalClaudePrograms", instanceId });
+    }
+  });
+
   const checkSwitch = Effect.fn("ClaudeAccounts.checkSwitch")(function* (input: {
     readonly instanceId: ProviderInstanceId;
     readonly name: string;
@@ -436,6 +474,7 @@ export const make = Effect.gen(function* () {
         },
       } satisfies AlreadyActive;
     }
+    yield* refuseExternalPrograms(setup);
 
     const checked = yield* loginCheck.check({
       claudeAiOauth: target.claudeAiOauth,
@@ -471,6 +510,8 @@ export const make = Effect.gen(function* () {
   const applySwitch = Effect.fn("ClaudeAccounts.applySwitch")(function* (plan: SwitchPlan) {
     const { setup, target, affectedInstanceIds } = plan;
     const { instanceId } = setup;
+    // A program may have started during the login check, which can take about 29 s.
+    yield* refuseExternalPrograms(setup);
     const switchFailed = () => new ClaudeAccountError({ reason: "switchFailed", instanceId });
     // T3's own sessions may have renewed the login since checkSwitch read it.
     const current = yield* readLogin(setup.paths).pipe(Effect.mapError(switchFailed));
@@ -551,4 +592,5 @@ export const layer: Layer.Layer<
   | FileSystem.FileSystem
   | Path.Path
   | ClaudeLoginCheck
+  | ClaudeExternalProcesses
 > = Layer.effect(ClaudeAccounts, make);
