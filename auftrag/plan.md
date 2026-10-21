@@ -108,3 +108,4 @@ Seats: concurrency, reliability, testability. Stop = interruptThread + waitForTh
 closeInstance for all affected; sessionStopFailed reason; invalidateCaches after success; wired in runtimeLayer.ts layerProduction.
 Left out: probe/text-gen CLIs, turn started in stop→write window, setsid children. Known wording nit: stop-timeout test
 "constant overridden through TestClock" — really TestClock.adjust past 10 s. Next draft turn = ticket-5 → NO ENTRY → closing comment.
+## Ticket-4 fixes (round 2): run.interrupt holdQueue:true via threads.dispatch + queue.resume after; re-enumerate before closeInstance; final check → sessionStopFailed; concurrency test; per-test fresh layer; fork+TestClock timeout test. Residual ms window → failed, left out.
