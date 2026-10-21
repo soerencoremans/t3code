@@ -63,3 +63,10 @@ Backend only: no contracts, no WS RPC, no MCP tool. Service methods are the serv
 - Claude CLI holds tokens in memory and may rewrite `.credentials.json` → stop idle sessions too.
 - `.claude.json` large and concurrently written → read-modify-write one key with atomic rename; external
   program refusal covers concurrent CLIs.
+
+## Ticket-2 drafted (#4), round 1
+Seats: data-safety, integration, testability. Decisions: login check = probeClaudeCapabilities in temp dir
+(CLI renews; usage present → Valid); outside-T3 = env marker T3CODE_CLAUDE_OWNER_PID (not terminals);
+own keep-mode atomic write; whole switch under accountsLock; switch = checkSwitch + applySwitch.
+Ticket-3 notes: insert stop step between checkSwitch and applySwitch; wire ClaudeAccounts.layer +
+ClaudeLoginCheck.layer + ClaudeExternalProcesses.layer in server.ts; invalidateCaches after apply.
