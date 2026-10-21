@@ -109,3 +109,6 @@ closeInstance for all affected; sessionStopFailed reason; invalidateCaches after
 Left out: probe/text-gen CLIs, turn started in stop→write window, setsid children. Known wording nit: stop-timeout test
 "constant overridden through TestClock" — really TestClock.adjust past 10 s. Next draft turn = ticket-5 → NO ENTRY → closing comment.
 ## Ticket-4 fixes (round 2): run.interrupt holdQueue:true via threads.dispatch + queue.resume after; re-enumerate before closeInstance; final check → sessionStopFailed; concurrency test; per-test fresh layer; fork+TestClock timeout test. Residual ms window → failed, left out.
+## Ticket-4 CLOSED (#6, round 2 ruling). Invalidation dropped. Closing comment must list: preparing/starting window, probe/text-gen
+cross-account window (security-1), verify→write window, setsid children, restart leaves queue held (frontend should expose queue.resume).
+Next draft turn (ticket-5): NO ENTRY → closing comment + Gremium.
