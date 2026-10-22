@@ -16,14 +16,28 @@
     "branch": "ticket/6",
     "path": "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-6"
   },
-  "label": null,
+  "label": "Human",
   "conflict": false,
   "counters": {
     "crFails": 0,
     "qaFails": 0,
     "escalations": 0,
-    "countedEvent": null
+    "countedEvent": 33907089700
   },
-  "turns": {},
-  "turn": null
+  "turns": {
+    "developer": 1
+  },
+  "turn": {
+    "role": "developer",
+    "type": "initial",
+    "number": 1,
+    "attempt": 1,
+    "sessionId": "fdb631df-b064-4a75-994f-cb5150c17cec",
+    "startedAt": "2026-10-21T17:01:59.522Z",
+    "lastCommentId": 6319230840,
+    "lastLabelEventId": null,
+    "labelSet": false,
+    "lastOpen": true,
+    "ended": true
+  }
 }
