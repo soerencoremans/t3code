@@ -1,7 +1,11 @@
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { ProviderDriverKind, ProviderReplayTranscript } from "@t3tools/contracts";
+import {
+  CommandId,
+  type ProviderDriverKind,
+  type ProviderReplayTranscript,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -270,6 +274,8 @@ export function layerWithRegistry<Error>(
     readonly runContinuationWorker?: boolean;
     readonly recoverOnStartup?: boolean;
     readonly continueThreadsAfterServerUpdate?: boolean;
+    /** Lets the worker settle `holdQueue: true` interrupts, as the real thread service does. */
+    readonly stopDelegatedTasks?: boolean;
   } = {},
 ): Layer.Layer<
   | Orchestrator.OrchestratorV2
@@ -468,8 +474,34 @@ export function layerWithRegistry<Error>(
   const layerThreadManagementProvided = Layer.unwrap(
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const stopDelegatedTasks: ThreadManagementService.ThreadManagementService["Service"]["stopDelegatedTasks"] =
+        (input) =>
+          orchestrator.getThreadRecords(input.threadId, ["subagents"]).pipe(
+            Effect.flatMap(({ subagents }) =>
+              Effect.forEach(
+                new Set(
+                  subagents.flatMap((task) =>
+                    task.origin === "app_owned" && task.childThreadId !== null
+                      ? [task.childThreadId]
+                      : [],
+                  ),
+                ),
+                (threadId) =>
+                  orchestrator
+                    .dispatch({
+                      type: "thread.stop",
+                      commandId: CommandId.make(`${input.commandId}:stop:${threadId}`),
+                      threadId,
+                      ...(input.reason === undefined ? {} : { reason: input.reason }),
+                    })
+                    .pipe(Effect.andThen(stopDelegatedTasks({ ...input, threadId }))),
+                { discard: true },
+              ),
+            ),
+          );
       return Layer.mock(ThreadManagementService.ThreadManagementService)({
         dispatch: orchestrator.dispatch,
+        ...(options.stopDelegatedTasks === true ? { stopDelegatedTasks } : {}),
         getThreadRecords: orchestrator.getThreadRecords,
         getThreadProjection: orchestrator.getThreadProjection,
         recoverDelegatedTask: orchestrator.recoverDelegatedTask,

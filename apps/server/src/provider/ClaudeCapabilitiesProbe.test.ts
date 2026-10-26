@@ -112,6 +112,7 @@ it.layer(NodeServices.layer)("Claude capability probe SDK boundary", (it) => {
         const query = vi.spyOn(ClaudeSdk, "query").mockImplementation(({ options }) => {
           assert.equal(options?.env?.CLAUDE_CONFIG_DIR, configDir);
           assert.equal(options?.env?.T3_WORKSPACE_PROBE, "owned-instance");
+          assert.equal(options?.env?.T3CODE_CLAUDE_OWNER_PID, String(process.pid));
           return {
             initializationResult: async () => ({
               account: { email: "workspace@example.com" },

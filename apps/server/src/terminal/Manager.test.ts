@@ -1758,7 +1758,7 @@ it.layer(
       expect(events.filter((event) => event.type === "output").map((event) => event.data)).toEqual(
         writes,
       );
-      const snapshot = events.filter((event) => event.type === "snapshot").at(-1)?.snapshot;
+      const snapshot = events.findLast((event) => event.type === "snapshot")?.snapshot;
       expect(snapshot?.history).toBe("aa😀\rEND");
       expect(snapshot?.sequence).toBe(reopened.sequence);
     }),
@@ -3013,6 +3013,36 @@ it.layer(
       });
 
       expect(environment.CLAUDE_CONFIG_DIR).toMatch(/[\\/][.]claude-default$/);
+    }).pipe(
+      Effect.provide(
+        ServerSettings.ServerSettingsService.layerTest({
+          providerInstances: {
+            [ProviderInstanceId.make("claudeAgent")]: {
+              driver: ProviderDriverKind.make("claudeAgent"),
+              config: { homePath: "~/.claude-default" },
+            },
+          },
+        }),
+      ),
+    ),
+  );
+
+  it.effect("keeps the server's Claude owner marker out of a Claude terminal", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const serverSettings = yield* ServerSettings.ServerSettingsService;
+      const resolve = (env: Record<string, string> | undefined) =>
+        TerminalManager.resolveProviderInstanceTerminalEnvironment({
+          serverSettings,
+          path,
+          rawProviderInstanceId: "claudeAgent",
+          env,
+        });
+
+      expect((yield* resolve(undefined)).T3CODE_CLAUDE_OWNER_PID).toBeUndefined();
+      expect(
+        (yield* resolve({ T3CODE_CLAUDE_OWNER_PID: "999" })).T3CODE_CLAUDE_OWNER_PID,
+      ).toBeUndefined();
     }).pipe(
       Effect.provide(
         ServerSettings.ServerSettingsService.layerTest({

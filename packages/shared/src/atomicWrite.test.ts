@@ -348,3 +348,40 @@ it.effect("succeeds when the write lands but its temp directory cannot be remove
     assert.deepStrictEqual(removed, ["/home/settings.json.abc123"]);
   }),
 );
+
+it.layer(NodeServices.layer)("writeFileStringAtomically mode", (it) => {
+  const modeOf = (filePath: string) =>
+    FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) => fs.stat(filePath)),
+      Effect.map((info) => info.mode & 0o777),
+    );
+
+  it.effect("narrows an existing 0o644 target to the requested mode", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-atomic-write-" });
+      const filePath = path.join(root, "secret.json");
+      yield* fs.writeFileString(filePath, "before");
+      yield* fs.chmod(filePath, 0o644);
+
+      yield* writeFileStringAtomically({ filePath, contents: "after", mode: 0o600 });
+
+      assert.strictEqual(yield* modeOf(filePath), 0o600);
+      assert.strictEqual(yield* fs.readFileString(filePath), "after");
+    }),
+  );
+
+  it.effect("creates a missing target with the requested mode", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-atomic-write-" });
+      const filePath = path.join(root, "secret.json");
+
+      yield* writeFileStringAtomically({ filePath, contents: "fresh", mode: 0o600 });
+
+      assert.strictEqual(yield* modeOf(filePath), 0o600);
+    }),
+  );
+});
