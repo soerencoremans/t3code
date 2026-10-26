@@ -27,17 +27,5 @@
   "turns": {
     "developer": 1
   },
-  "turn": {
-    "role": "developer",
-    "type": "initial",
-    "number": 1,
-    "attempt": 1,
-    "sessionId": "fdb631df-b064-4a75-994f-cb5150c17cec",
-    "startedAt": "2026-10-21T17:01:59.522Z",
-    "lastCommentId": 6319230840,
-    "lastLabelEventId": null,
-    "labelSet": false,
-    "lastOpen": true,
-    "ended": true
-  }
+  "turn": null
 }
