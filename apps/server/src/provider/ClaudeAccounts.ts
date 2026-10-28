@@ -50,6 +50,7 @@ import {
   type ClaudeSetupLogin,
   type JsonObject,
 } from "./claudeLoginFiles.ts";
+import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
 
 export {
@@ -176,6 +177,39 @@ const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const isValidName = (name: string) =>
   name.length > 0 && Array.from(name).length <= MAX_NAME_LENGTH && !CONTROL_CHARACTER.test(name);
 
+/**
+ * Re-probes each setup so its published status is the current login's. A failure is only logged:
+ * it must never turn a done switch into a failed one.
+ */
+export const refreshClaudeSetupSnapshots =
+  (instances: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"]) =>
+  (instanceIds: ReadonlyArray<ProviderInstanceId>): Effect.Effect<void> =>
+    Effect.forEach(
+      instanceIds,
+      (instanceId) =>
+        Effect.gen(function* () {
+          const instance = yield* instances.getInstance(instanceId);
+          if (instance === undefined) return;
+          yield* instance.invalidateCaches ?? Effect.void;
+          yield* instance.snapshot.refresh;
+        }).pipe(
+          Effect.catchCause((cause) => {
+            const error = Cause.squash(cause);
+            // No cause text: a probe error can quote a login.
+            return Effect.logWarning(
+              "Claude provider status refresh after an account switch failed",
+              {
+                operation: "switch",
+                outcome: "snapshotRefreshFailed",
+                instanceId,
+                errorTag: error instanceof Error ? error.name : "unknown",
+              },
+            );
+          }),
+        ),
+      { concurrency: "unbounded", discard: true },
+    );
+
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -188,6 +222,8 @@ export const make = Effect.gen(function* () {
   const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const crypto = yield* Crypto.Crypto;
+  const instances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+  const refreshSnapshots = refreshClaudeSetupSnapshots(instances);
   const accountsLock = yield* Semaphore.make(1);
   // Held for a whole switch so a second request is refused instead of queued behind the first.
   const switchPermit = yield* Semaphore.make(1);
@@ -797,7 +833,7 @@ export const make = Effect.gen(function* () {
   ) {
     // Every refusal comes before anything is stopped, so a refused switch leaves turns alone.
     const plan = yield* checkSwitch(input);
-    if (plan._tag === "AlreadyActive") return plan.result;
+    if (plan._tag === "AlreadyActive") return { result: plan.result, applied: false };
     if (!input.stopRunningTurns) {
       yield* refuseRunningTurns(input.instanceId, plan.affectedInstanceIds);
     }
@@ -811,7 +847,7 @@ export const make = Effect.gen(function* () {
         held,
         switchId,
       );
-      return yield* applySwitch(plan).pipe(
+      const result = yield* applySwitch(plan).pipe(
         Effect.tapError((error) =>
           Effect.logInfo("Claude account switch refused after stopping sessions", {
             operation: "switch",
@@ -821,14 +857,26 @@ export const make = Effect.gen(function* () {
           }),
         ),
       );
+      return { result, applied: true };
     }).pipe(Effect.ensuring(resumeHeldQueues(held, switchId)));
   });
 
   const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (
     input: ClaudeAccountSwitchInput,
   ) {
+    // The status re-check holds the switch permit, so no other switch writes the files it
+    // reads, but not the accounts lock, so remember and forget do not wait behind the probe.
     const fiber = yield* switchPermit
-      .withPermitsIfAvailable(1)(accountsLock.withPermits(1)(runSwitch(input)))
+      .withPermitsIfAvailable(1)(
+        accountsLock
+          .withPermits(1)(runSwitch(input))
+          .pipe(
+            Effect.tap(({ result, applied }) =>
+              applied ? refreshSnapshots(result.affectedInstanceIds) : Effect.void,
+            ),
+            Effect.map(({ result }) => result),
+          ),
+      )
       .pipe(Effect.forkIn(scope));
     const outcome = yield* Fiber.join(fiber);
     if (Option.isNone(outcome)) {
@@ -868,4 +916,5 @@ export const layer: Layer.Layer<
   | ProviderSessionManager.ProviderSessionManagerV2
   | ProjectionStore.ProjectionStoreV2
   | Crypto.Crypto
+  | ProviderInstanceRegistry.ProviderInstanceRegistry
 > = Layer.effect(ClaudeAccounts, make);

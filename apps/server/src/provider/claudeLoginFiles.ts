@@ -84,6 +84,26 @@ export const claudeAccountIdentity = (
       });
 };
 
+export interface ClaudeAccountConfigIds {
+  readonly organizationUuid: string | undefined;
+  readonly accountUuid: string | undefined;
+}
+
+// `undefined` means the file could not be read or parsed, so it says nothing about the account.
+export const readClaudeAccountConfigIds = (
+  accountConfigPath: string,
+): Effect.Effect<ClaudeAccountConfigIds | undefined, never, FileSystem.FileSystem> =>
+  readJsonObject(accountConfigPath).pipe(
+    Effect.map((file): ClaudeAccountConfigIds => {
+      const account = Option.isSome(file) ? asObject(file.value.oauthAccount) : undefined;
+      return {
+        organizationUuid: nonEmptyString(account?.organizationUuid)?.trim() || undefined,
+        accountUuid: nonEmptyString(account?.accountUuid),
+      };
+    }),
+    Effect.orElseSucceed(() => undefined),
+  );
+
 export const readClaudeSetupLogin = Effect.fn("claudeLoginFiles.readClaudeSetupLogin")(function* (
   paths: ClaudeSetupPaths,
 ) {

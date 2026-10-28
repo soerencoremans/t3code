@@ -30,6 +30,7 @@ import {
   type ClaudeAccountSwitchInput,
   type ClaudeSwitchResult,
   type ProviderInstanceConfig,
+  type ServerProvider,
 } from "@t3tools/contracts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
@@ -457,8 +458,23 @@ const makeFakeAdapter = (
     }),
 });
 
+/** What the switch asked of each setup's provider status, and how the fake answers. */
+interface SnapshotRefreshes {
+  readonly invalidated: Array<ProviderInstanceId>;
+  readonly refreshed: Array<ProviderInstanceId>;
+  /** Completed when a refresh starts. */
+  started: Deferred.Deferred<void> | undefined;
+  /** Awaited by every refresh before it ends. */
+  hold: Deferred.Deferred<void> | undefined;
+  fail: boolean;
+}
+
 // A hand-written claudeAgent driver: the provider CLI boundary, nothing else.
-const testClaudeDriver = (fake: FakeClaude, scope: Scope.Scope): ProviderDriver<unknown> => ({
+const testClaudeDriver = (
+  fake: FakeClaude,
+  scope: Scope.Scope,
+  snapshots: SnapshotRefreshes,
+): ProviderDriver<unknown> => ({
   driverKind: CLAUDE_DRIVER,
   metadata: { displayName: "Claude (test)" },
   configSchema: Schema.Unknown,
@@ -473,7 +489,19 @@ const testClaudeDriver = (fake: FakeClaude, scope: Scope.Scope): ProviderDriver<
       }),
       displayName: input.displayName,
       enabled: input.enabled,
-      snapshot: {} as ProviderInstance["snapshot"],
+      invalidateCaches: Effect.sync(() => {
+        snapshots.invalidated.push(input.instanceId);
+      }),
+      snapshot: {
+        refresh: Effect.gen(function* () {
+          snapshots.refreshed.push(input.instanceId);
+          if (snapshots.started !== undefined)
+            yield* Deferred.succeed(snapshots.started, undefined);
+          if (snapshots.hold !== undefined) yield* Deferred.await(snapshots.hold);
+          if (snapshots.fail) return yield* Effect.die(new Error("snapshot refresh failed"));
+          return {} as ServerProvider;
+        }),
+      } as unknown as ProviderInstance["snapshot"],
       orchestrationAdapter: makeFakeAdapter(input.instanceId, fake, scope),
       textGeneration: {} as ProviderInstance["textGeneration"],
     } satisfies ProviderInstance),
@@ -575,6 +603,7 @@ const makeAccountsTestLayer = (options: {
   readonly fake: FakeClaude;
   readonly scope: Scope.Scope;
   readonly pty: FakeLoginPty;
+  readonly snapshots: SnapshotRefreshes;
 }) => {
   const layerDatabase = SqlitePersistence.layerMemory;
   const layerSettings = ServerSettingsService.layerTest({
@@ -584,7 +613,7 @@ const makeAccountsTestLayer = (options: {
     Effect.gen(function* () {
       const current = yield* (yield* ServerSettingsService).getSettings.pipe(Effect.orDie);
       return ProviderInstanceRegistry.layer({
-        drivers: [testClaudeDriver(options.fake, options.scope)],
+        drivers: [testClaudeDriver(options.fake, options.scope, options.snapshots)],
         configMap: deriveProviderInstanceConfigMap(current),
       });
     }),
@@ -616,6 +645,7 @@ const makeAccountsTestLayer = (options: {
             options.checkLayer,
             ClaudeExternalProcesses.layerWith({ procRoot: options.procRoot }),
             layerOrchestration,
+            layerInstances,
           ).pipe(
             Layer.provideMerge(layerSettings),
             Layer.provideMerge(
@@ -680,6 +710,13 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
 
   const fake = makeFakeClaude();
   const pty = new FakeLoginPty();
+  const snapshots: SnapshotRefreshes = {
+    invalidated: [],
+    refreshed: [],
+    started: undefined,
+    hold: undefined,
+    fail: false,
+  };
   const scope = yield* Effect.scope;
   const context = yield* Layer.build(
     Layer.fresh(
@@ -691,6 +728,7 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
         fake,
         scope,
         pty,
+        snapshots,
       }),
     ),
   );
@@ -707,6 +745,7 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
     providerSessions: Context.get(context, ProviderSessionManager.ProviderSessionManagerV2),
     sql: Context.get(context, SqlClient.SqlClient),
     fake,
+    snapshots,
     procDir,
     secrets,
     baseDir: config.baseDir,
@@ -1699,6 +1738,103 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
       h.accounts.list,
       (list) => list.setups.find((setup) => setup.instanceId === instance)?.active,
     );
+
+  const sameIds = (actual: ReadonlyArray<ProviderInstanceId>, expected: ReadonlyArray<string>) =>
+    assert.deepEqual(new Set(actual), new Set(expected));
+
+  it.effect("AK-8: re-checks the provider status after the files change and before returning", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const login = yield* privateLogin(h);
+        h.snapshots.started = yield* Deferred.make<void>();
+        h.snapshots.hold = yield* Deferred.make<void>();
+
+        const switching = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
+        yield* Deferred.await(h.snapshots.started);
+
+        yield* assertSetupHolds(h, "claudeAgent", login);
+        assert.strictEqual(
+          (yield* h.readJson("claudeAgent", ".claude.json")).oauthAccount?.emailAddress,
+          "bob@example.com",
+        );
+        assert.isUndefined(switching.pollUnsafe());
+
+        yield* Deferred.succeed(h.snapshots.hold, undefined);
+        const result = yield* Fiber.join(switching);
+
+        assert.strictEqual(result.active.name, "Private");
+        sameIds(h.snapshots.invalidated, result.affectedInstanceIds);
+        sameIds(h.snapshots.refreshed, result.affectedInstanceIds);
+      }),
+    ),
+  );
+
+  it.effect("re-checks no provider status when a switch changes no login files", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        assert.strictEqual((yield* switchTo(h, "Work")).active.name, "Work");
+
+        const thread = yield* createThread(h, "no-refresh");
+        yield* startHeldTurn(h, thread, "long task");
+        yield* refusal(
+          h,
+          h.accounts.switch({
+            instanceId: id("claudeAgent"),
+            name: "Private",
+            stopRunningTurns: false,
+          }),
+          "turnsRunning",
+        );
+
+        yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+        yield* refusal(h, switchTo(h), "externalClaudePrograms");
+
+        assert.deepEqual(h.snapshots.refreshed, []);
+      }),
+    ),
+  );
+
+  it.effect("a failing provider status re-check does not fail a done switch", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        const login = yield* privateLogin(h);
+        h.snapshots.fail = true;
+
+        const result = yield* switchTo(h);
+
+        assert.strictEqual(result.active.name, "Private");
+        yield* assertSetupHolds(h, "claudeAgent", login);
+        assert.strictEqual(
+          (yield* h.readJson("claudeAgent", ".claude.json")).oauthAccount?.emailAddress,
+          "bob@example.com",
+        );
+        sameIds(h.snapshots.refreshed, result.affectedInstanceIds);
+      }),
+    ),
+  );
+
+  it.effect("remember and forget do not wait for the provider status re-check", () =>
+    run(switchSpec(), (h) =>
+      Effect.gen(function* () {
+        yield* rememberBoth(h);
+        h.snapshots.started = yield* Deferred.make<void>();
+        h.snapshots.hold = yield* Deferred.make<void>();
+
+        const switching = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
+        yield* Deferred.await(h.snapshots.started);
+
+        yield* refusal(h, h.accounts.forget({ name: "Nobody" }), "accountNotFound");
+        assert.isUndefined(switching.pollUnsafe());
+        yield* refusal(h, switchTo(h), "switchInProgress");
+
+        yield* Deferred.succeed(h.snapshots.hold, undefined);
+        assert.strictEqual((yield* Fiber.join(switching)).active.name, "Private");
+      }),
+    ),
+  );
 
   it.effect(
     "AK-10, AK-26: after a switch, every thread on the setup works with the new account",
@@ -3130,13 +3266,17 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
               return { verdict: "Valid", latestClaudeAiOauth: Option.none() } as const;
             });
           const login = yield* privateLogin(h);
+          h.snapshots.started = yield* Deferred.make<void>();
           const caller = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
           yield* Deferred.await(entered);
 
           yield* Fiber.interrupt(caller);
           yield* Deferred.succeed(release, undefined);
-          // Waits on the accounts lock, so it answers once the switch has finished.
+          // Waits on the accounts lock, so it answers once the switch has written the files.
           yield* refusal(h, h.accounts.forget({ name: "Nobody" }), "accountNotFound");
+          // The status re-check runs after the accounts lock, still inside the forked switch.
+          yield* Deferred.await(h.snapshots.started);
+          assert.include(h.snapshots.refreshed, id("claudeAgent"));
 
           yield* assertSetupHolds(h, "claudeAgent", login);
           assert.strictEqual(yield* setupEmail(h), "bob@example.com");

@@ -72,7 +72,9 @@ waits for those interrupts in two passes, closes the instance's sessions, and ve
 live before it changes the login files and resumes the held queues. Interrupting first matters:
 releasing a session mid-turn fails the run instead of stopping it. A turn admitted between the last
 check and the file change can keep the old login. `ProviderAuthService.stopSessions` keeps its own
-release-and-fail order for sign-in and sign-out.
+release-and-fail order for sign-in and sign-out. After a switch, T3 re-checks the provider status
+of every affected setup before the switch returns, so the account and usage it shows are the new
+login's.
 
 ## Setup must not happen as a health-check side effect
 
