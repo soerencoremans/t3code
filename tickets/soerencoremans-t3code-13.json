@@ -16,34 +16,34 @@
     "branch": "ticket/13",
     "path": "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-13"
   },
-  "label": "Review Fail",
+  "label": "Implemented",
   "conflict": false,
   "counters": {
     "crFails": 0,
-    "qaFails": 0,
+    "qaFails": 1,
     "escalations": 0,
-    "countedEvent": 34484434774
+    "countedEvent": 34484727351
   },
   "turns": {
-    "developer": 1,
+    "developer": 2,
     "code-reviewer": 1,
     "qa": 1
   },
   "turn": {
-    "role": "qa",
-    "type": "qa",
-    "number": 1,
+    "role": "developer",
+    "type": "findings",
+    "number": 2,
     "attempt": 1,
-    "sessionId": "bf73974c-7b60-44fe-b5dc-06655fe64009",
-    "startedAt": "2026-10-28T14:28:35.816Z",
-    "lastCommentId": 6471690063,
-    "lastLabelEventId": 34484434774,
+    "sessionId": "1ed1b215-7c82-41a5-a0cd-5b34ac55e277",
+    "startedAt": "2026-10-28T14:31:23.587Z",
+    "lastCommentId": 6471767203,
+    "lastLabelEventId": 34484727393,
     "labelSet": true,
     "lastOpen": false,
     "comments": 1,
-    "setLabel": "Review Fail",
+    "setLabel": "Implemented",
     "ended": true
   },
-  "gatedSha": "4fd70f19747896ad810476a2ddfa0065d8e49419",
+  "gatedSha": "0a4ea02d9e5fc2277f89c859fac69ff4c06f38b9",
   "gatedScope": "scoped"
 }
