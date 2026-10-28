@@ -1,0 +1,63 @@
+{
+  "machine": "soeren-System-Product-Name",
+  "machineId": "8e32eb69-b99c-4277-885f-763a027baccb",
+  "item": "soerencoremans-t3code-11",
+  "conversationsShared": false,
+  "conversationsWithheld": null,
+  "turns": [
+    {
+      "session": "f92d205e-39a7-49aa-b11d-05ad0b3df934",
+      "role": "developer",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-11/f92d205e-39a7-49aa-b11d-05ad0b3df934.jsonl",
+      "from": "1",
+      "to": "261",
+      "copy": null
+    },
+    {
+      "session": "f92d205e-39a7-49aa-b11d-05ad0b3df934",
+      "role": "developer",
+      "part": "subagent",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-11/f92d205e-39a7-49aa-b11d-05ad0b3df934/subagents/agent-a84a20dba726a7bbc.jsonl",
+      "from": "1",
+      "to": "54",
+      "copy": null
+    },
+    {
+      "session": "f92d205e-39a7-49aa-b11d-05ad0b3df934",
+      "role": "developer",
+      "part": "subagent",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-11/f92d205e-39a7-49aa-b11d-05ad0b3df934/subagents/agent-ac8784f4e7fb4fbe9.jsonl",
+      "from": "1",
+      "to": "87",
+      "copy": null
+    },
+    {
+      "session": "afab0ae6-d921-4abd-a361-c9397ca28962",
+      "role": "code-reviewer",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-11/afab0ae6-d921-4abd-a361-c9397ca28962.jsonl",
+      "from": "1",
+      "to": "153",
+      "copy": null
+    },
+    {
+      "session": "afab0ae6-d921-4abd-a361-c9397ca28962",
+      "role": "code-reviewer",
+      "part": "subagent",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-11/afab0ae6-d921-4abd-a361-c9397ca28962/subagents/agent-a90051f04381b59d6.jsonl",
+      "from": "1",
+      "to": "47",
+      "copy": null
+    },
+    {
+      "session": "49938574-e208-414c-be93-f8b4dee28e6a",
+      "role": "qa",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-11/49938574-e208-414c-be93-f8b4dee28e6a.jsonl",
+      "from": "1",
+      "to": "101",
+      "copy": null
+    }
+  ]
+}
