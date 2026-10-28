@@ -41,13 +41,13 @@
       ]
     }
   },
-  "label": "Human",
+  "label": "Planned",
   "conflict": false,
   "counters": {
     "item": null,
     "round": 23,
     "coverageFails": 0,
-    "countedEvent": 34472584098
+    "countedEvent": 34473368394
   },
   "tickets": {
     "1": 10,
@@ -64,20 +64,20 @@
     "ak": 1,
     "ak-review": 1,
     "gremium-author": 23,
-    "coverage": 2
+    "coverage": 3
   },
   "turn": {
     "role": "coverage",
     "type": "coverage",
-    "number": 2,
+    "number": 3,
     "attempt": 1,
-    "sessionId": "8c2329f8-25ed-4038-b8b3-eb190ed3e064",
-    "startedAt": "2026-10-28T12:21:49.234Z",
-    "lastCommentId": 6468704080,
-    "lastLabelEventId": 34472503907,
+    "sessionId": "3eb4833f-6410-498e-a659-74364d67ca4c",
+    "startedAt": "2026-10-28T12:31:58.953Z",
+    "lastCommentId": 6468988920,
+    "lastLabelEventId": 34473368427,
     "labelSet": true,
-    "comments": 2,
-    "setLabel": "Human",
+    "comments": 1,
+    "setLabel": "Planned",
     "ended": true
   },
   "sessions": {
