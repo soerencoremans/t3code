@@ -88,3 +88,10 @@ Private. Six tickets, server first, then the three screens.
 - Ticket 4 produces: claudeAccounts.logic.ts (claudeAccountsAvailable, ClaudeAccountRow, ClaudeSetupAccountView, claudeSetupAccountView, claudeAccountErrorMessage), useClaudeAccounts.ts (useClaudeAccountsAvailable, useClaudeSetupAccounts{view,error,refresh}, useClaudeAccountSwitch(env, inst, onSwitched){pendingTarget,error,switchTo}), RememberClaudeAccountDialog(props env, instanceId, email, onClose, onRemembered), ClaudeAccountsSection(env, instanceId).
 - Carry into ticket 6: security-2 (Log in disabled during start, double-submit case), ux-3 (retry on failed login: back to name step with name kept), ux-4 (outside click during login step: decide; prefer no dismiss on outside click while running), AK-15 assertion (Work stays Active), StrictMode case, AddProviderShareConfig.dc.html board 3 cited, WizardPopup size wide for terminal, shared name form optional.
 - Carry into ticket 5: confirm text and Switching text from ModelPickerAccount.dc.html already in useClaudeAccountSwitch; picker's AK-17 moves to ticket 6.
+
+## Ticket 5 drafted (turn 12) = #15. Seats: ui, ux, accessibility. Blocked by #14.
+- ClaudeAccountPickerRow(env, instanceId, onRequestClose?) in apps/web/src/components/chat/, mounted in ModelPickerContent after ModelPickerProviderNotices when selectedEntry.driverKind === "claudeAgent" && environmentId !== null.
+- MODIFIES ticket-4's useClaudeAccounts.ts: pending atom family members keepAlive (picker popup unmounts mid-switch).
+- Names only in menu (emails hidden except notRemembered via RedactedSensitiveText). Manage accounts -> navigate /settings/providers {environmentId, instanceId}.
+- Ticket 6 adds "Add account…" MenuItem above "Manage accounts" in ClaudeAccountPickerRow.tsx (no slot).
+- AK-37 proven by construction (hand-off note). Criteria: AK-1..8, 12, 13, 28, 33, 34, 35, 37.
