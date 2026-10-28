@@ -95,3 +95,4 @@ Private. Six tickets, server first, then the three screens.
 - Names only in menu (emails hidden except notRemembered via RedactedSensitiveText). Manage accounts -> navigate /settings/providers {environmentId, instanceId}.
 - Ticket 6 adds "Add account…" MenuItem above "Manage accounts" in ClaudeAccountPickerRow.tsx (no slot).
 - AK-37 proven by construction (hand-off note). Criteria: AK-1..8, 12, 13, 28, 33, 34, 35, 37.
+- Ruling (turn 14): all 6 blockers apply fix, 11 suggestions taken. #15 updated. Ticket 5 also produces ClaudeAccountSwitchOutcome (switchTo returns it); row is the MenuTrigger (plain button, triggerRef), radio items; ticket 6 adds "Add account…" MenuItem with PlusIcon above Manage accounts.
