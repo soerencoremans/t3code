@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, it } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import {
   CommandId,
   MessageId,
@@ -10,6 +10,14 @@ import {
   ProviderTurnId,
   type RunId,
   ThreadId,
+  WS_METHODS,
+  WsClaudeAccountsForgetRpc,
+  WsClaudeAccountsListRpc,
+  WsClaudeAccountsRememberRpc,
+  type ClaudeAccountForgetInput,
+  type ClaudeAccountList,
+  type ClaudeAccountListInput,
+  type ClaudeAccountRememberInput,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
@@ -19,12 +27,14 @@ import {
   type ProviderInstance,
 } from "@t3tools/provider-core/server/driver";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -40,6 +50,8 @@ import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import { Headers } from "effect/http";
+import { RpcGroup, RpcMessage, RpcServer } from "effect/rpc";
 import * as NodeUtil from "node:util";
 
 import * as ServerConfig from "../config.ts";
@@ -57,6 +69,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as ClaudeAccountsModule from "./ClaudeAccounts.ts";
+import { claudeAccountsRpcHandlers } from "./ClaudeAccountsRpc.ts";
 import * as ClaudeExternalProcesses from "./ClaudeExternalProcesses.ts";
 import { ClaudeLoginCheck, type ClaudeLoginCheckResult } from "./ClaudeLoginCheck.ts";
 import type { JsonObject } from "./claudeLoginFiles.ts";
@@ -65,8 +78,7 @@ import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydra
 
 const { ClaudeAccountError, ClaudeAccounts } = ClaudeAccountsModule;
 
-const UNAVAILABLE_MESSAGE =
-  "Claude account switching is unavailable on this system. It is supported on Linux only.";
+const UNAVAILABLE_MESSAGE = "Switching Claude accounts is only supported when T3 runs on Linux.";
 const STORAGE_NAME = "claude-accounts";
 const SERVER_PID = 4242;
 
@@ -1008,7 +1020,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
       Effect.gen(function* () {
         yield* refusal(h, work(h, "missing"), "setupNotFound");
         const error = yield* refusal(h, work(h, "codex"), "setupNotFound");
-        assert.strictEqual(error.message, 'No Claude setup "codex" is configured.');
+        assert.strictEqual(error.message, "This Claude setup no longer exists.");
       }),
     ),
   );
@@ -2185,19 +2197,170 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
       }),
     ),
   );
+
+  describe("over the WebSocket RPC", () => {
+    const AccountsRpcs = RpcGroup.make(
+      WsClaudeAccountsListRpc,
+      WsClaudeAccountsRememberRpc,
+      WsClaudeAccountsForgetRpc,
+    );
+
+    // Drives the real handlers through the RPC server without a socket. Every answer is checked
+    // for tokens as the JSON a client would receive.
+    const makeRpc = Effect.fn("test.makeRpc")(function* (h: Harness) {
+      const responses = yield* Queue.unbounded<Exit.Exit<unknown, unknown>>();
+      const server = yield* RpcServer.makeNoSerialization(AccountsRpcs, {
+        disableTracing: true,
+        disableFatalDefects: true,
+        onFromServer: (response) =>
+          response._tag === "Exit" ? Queue.offer(responses, response.exit) : Effect.void,
+      }).pipe(Effect.provide(AccountsRpcs.toLayer(claudeAccountsRpcHandlers(h.accounts))));
+      let next = 0;
+      return Effect.fn("test.rpcCall")(function* (
+        tag: (typeof WS_METHODS)[
+          | "claudeAccountsList"
+          | "claudeAccountsRemember"
+          | "claudeAccountsForget"],
+        payload: ClaudeAccountListInput | ClaudeAccountRememberInput | ClaudeAccountForgetInput,
+      ) {
+        yield* server.write(0, {
+          _tag: "Request",
+          id: RpcMessage.RequestId(String(next++)),
+          tag,
+          payload,
+          headers: Headers.empty,
+        });
+        const exit = yield* Queue.take(responses);
+        const answer = Exit.isSuccess(exit) ? exit.value : Cause.squash(exit.cause);
+        assertNoLogin(h, JSON.stringify(answer) ?? "");
+        return { exit, answer };
+      });
+    });
+
+    const succeeded = <A>(result: {
+      readonly exit: Exit.Exit<unknown, unknown>;
+      answer: unknown;
+    }) => {
+      assert.isTrue(Exit.isSuccess(result.exit));
+      return result.answer as A;
+    };
+
+    it.effect("AK-14: remembers the setup's unremembered account and lists it as remembered", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const call = yield* makeRpc(h);
+          const before = succeeded<ClaudeAccountList>(
+            yield* call(WS_METHODS.claudeAccountsList, {}),
+          );
+          assert.strictEqual(before.setups[0]?.active?.rememberedAs, null);
+
+          const remembered = yield* call(WS_METHODS.claudeAccountsRemember, {
+            instanceId: "claudeAgent",
+            name: "Work",
+          });
+          assert.deepEqual(succeeded(remembered), { name: "Work", email: "alice@example.com" });
+
+          const list = succeeded<ClaudeAccountList>(yield* call(WS_METHODS.claudeAccountsList, {}));
+          assert.strictEqual(list.setups[0]?.active?.rememberedAs, "Work");
+        }),
+      ),
+    );
+
+    it.effect("AK-25 / AK-36: lists every remembered account and the one the setup is on", () =>
+      run(two(alice, bob), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          yield* work(h, "claudeWork2", "Private");
+          const call = yield* makeRpc(h);
+          const list = succeeded<ClaudeAccountList>(yield* call(WS_METHODS.claudeAccountsList, {}));
+          assert.deepEqual(list.accounts.map((account) => account.name).toSorted(), [
+            "Private",
+            "Work",
+          ]);
+          assert.strictEqual(list.setups[0]?.active?.rememberedAs, "Work");
+        }),
+      ),
+    );
+
+    it.effect("AK-28: a forgotten account is no longer listed", () =>
+      run(two(alice, bob), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          yield* work(h, "claudeWork2", "Private");
+          const call = yield* makeRpc(h);
+          succeeded(yield* call(WS_METHODS.claudeAccountsForget, { name: "Private" }));
+          const list = succeeded<ClaudeAccountList>(yield* call(WS_METHODS.claudeAccountsList, {}));
+          assert.deepEqual(
+            list.accounts.map((account) => account.name),
+            ["Work"],
+          );
+        }),
+      ),
+    );
+
+    it.effect("AK-30: forgetting the active account leaves the setup's login files untouched", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const call = yield* makeRpc(h);
+          const before = yield* h.readSetupFiles("claudeAgent");
+          succeeded(yield* call(WS_METHODS.claudeAccountsForget, { name: "Work" }));
+          assert.deepEqual(yield* h.readSetupFiles("claudeAgent"), before);
+          const list = succeeded<ClaudeAccountList>(yield* call(WS_METHODS.claudeAccountsList, {}));
+          assert.deepEqual(list.setups[0]?.active, {
+            email: "alice@example.com",
+            rememberedAs: null,
+          });
+        }),
+      ),
+    );
+
+    it.effect("refuses a name in use with nameInUse and no setup ID in the message", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const call = yield* makeRpc(h);
+          const { exit, answer } = yield* call(WS_METHODS.claudeAccountsRemember, {
+            instanceId: "claudeAgent",
+            name: "Work",
+          });
+          assert.isTrue(Exit.isFailure(exit));
+          assert.instanceOf(answer, ClaudeAccountError);
+          const error = answer as ClaudeAccountsModule.ClaudeAccountError;
+          assert.strictEqual(error.reason, "nameInUse");
+          assert.notInclude(error.message, "claudeAgent");
+        }),
+      ),
+    );
+
+    it.effect("refuses listing with unavailable on another system", () =>
+      run({ ...one(alice), platform: "darwin" }, (h) =>
+        Effect.gen(function* () {
+          const call = yield* makeRpc(h);
+          const { exit, answer } = yield* call(WS_METHODS.claudeAccountsList, {});
+          assert.isTrue(Exit.isFailure(exit));
+          assert.instanceOf(answer, ClaudeAccountError);
+          assert.strictEqual(
+            (answer as ClaudeAccountsModule.ClaudeAccountError).reason,
+            "unavailable",
+          );
+        }),
+      ),
+    );
+  });
 });
 
 it("explains each refusal in words that carry no login", () => {
   const message = (reason: ClaudeAccountsModule.ClaudeAccountErrorReason) =>
     new ClaudeAccountError({ reason, instanceId: id("claudeAgent"), name: "Work" }).message;
-  assert.strictEqual(message("setupNotFound"), 'No Claude setup "claudeAgent" is configured.');
+  assert.strictEqual(message("setupNotFound"), "This Claude setup no longer exists.");
   assert.strictEqual(
     message("setupUnreadable"),
-    'Could not read the Claude login of setup "claudeAgent".',
+    "T3 could not read the login of this Claude setup.",
   );
   assert.strictEqual(
     message("notLoggedIn"),
-    'No Claude account is logged in on setup "claudeAgent".',
+    "No Claude account is logged in on this Claude setup.",
   );
   assert.strictEqual(
     message("invalidName"),
