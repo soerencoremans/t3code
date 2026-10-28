@@ -1632,11 +1632,9 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
         yield* rememberBoth(h);
         const before = yield* h.readEverything("claudeAgent");
         const mtimes = () =>
-          Effect.all(
-            [".credentials.json", ".claude.json"].map((file) =>
-              Effect.map(fileSystem.stat(path.join(h.setups.claudeAgent!.dir, file)), (info) =>
-                Option.getOrUndefined(info.mtime)?.getTime(),
-              ),
+          Effect.forEach([".credentials.json", ".claude.json"], (file) =>
+            Effect.map(fileSystem.stat(path.join(h.setups.claudeAgent!.dir, file)), (info) =>
+              Option.getOrUndefined(info.mtime)?.getTime(),
             ),
           );
         const mtimesBefore = yield* mtimes();

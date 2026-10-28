@@ -75,62 +75,58 @@ export const layerWithProbe = (
         FileSystem.FileSystem | Path.Path | ClaudeLoginCheckProbeRequirements
       >();
 
-      const check = Effect.fn("ClaudeLoginCheck.check")(function* (input: CheckInput) {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const tempDir = yield* fileSystem.makeTempDirectoryScoped({
-          prefix: "t3-claude-login-check-",
-        });
-        const accountConfigPath = path.join(tempDir, ".claude.json");
-        yield* writeFileStringAtomically({
-          filePath: path.join(tempDir, ".credentials.json"),
-          contents: encodeJson({ claudeAiOauth: Redacted.value(input.claudeAiOauth) }),
-          mode: 0o600,
-        });
-        yield* writeFileStringAtomically({
-          filePath: accountConfigPath,
-          contents: encodeJson({ oauthAccount: input.oauthAccount }),
-          mode: 0o600,
-        });
+      const check = Effect.fn("ClaudeLoginCheck.check")(
+        function* (input: CheckInput) {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const tempDir = yield* fileSystem.makeTempDirectoryScoped({
+            prefix: "t3-claude-login-check-",
+          });
+          const accountConfigPath = path.join(tempDir, ".claude.json");
+          yield* writeFileStringAtomically({
+            filePath: path.join(tempDir, ".credentials.json"),
+            contents: encodeJson({ claudeAiOauth: Redacted.value(input.claudeAiOauth) }),
+            mode: 0o600,
+          });
+          yield* writeFileStringAtomically({
+            filePath: accountConfigPath,
+            contents: encodeJson({ oauthAccount: input.oauthAccount }),
+            mode: 0o600,
+          });
 
-        const probed = yield* probe(
-          { ...input.settings, homePath: tempDir },
-          input.environment,
-          undefined,
-          true,
-        ).pipe(Effect.result);
-        const latest = yield* readClaudeSetupLogin({
-          configDir: tempDir,
-          accountConfigPath,
-        }).pipe(
-          Effect.map(Option.map((login) => login.claudeAiOauth)),
-          Effect.orElseSucceed(() => Option.none<Redacted.Redacted<JsonObject>>()),
-        );
-        const now = yield* DateTime.now;
-        const verdict = judge({
-          probeSucceeded: Result.isSuccess(probed),
-          hasUsage: Result.isSuccess(probed) && probed.success.usage !== undefined,
-          latest,
-          nowMillis: DateTime.toEpochMillis(now),
-        });
-        yield* Effect.logInfo("Claude login check finished.", { verdict });
-        return { verdict, latestClaudeAiOauth: latest } satisfies ClaudeLoginCheckResult;
-      });
+          const probed = yield* probe(
+            { ...input.settings, homePath: tempDir },
+            input.environment,
+            undefined,
+            true,
+          ).pipe(Effect.result);
+          const latest = yield* readClaudeSetupLogin({
+            configDir: tempDir,
+            accountConfigPath,
+          }).pipe(
+            Effect.map(Option.map((login) => login.claudeAiOauth)),
+            Effect.orElseSucceed(() => Option.none<Redacted.Redacted<JsonObject>>()),
+          );
+          const now = yield* DateTime.now;
+          const verdict = judge({
+            probeSucceeded: Result.isSuccess(probed),
+            hasUsage: Result.isSuccess(probed) && probed.success.usage !== undefined,
+            latest,
+            nowMillis: DateTime.toEpochMillis(now),
+          });
+          yield* Effect.logInfo("Claude login check finished.", { verdict });
+          return { verdict, latestClaudeAiOauth: latest } satisfies ClaudeLoginCheckResult;
+        },
+        Effect.scoped,
+        // The check never fails: a throwaway dir it cannot prepare is an Unknown verdict.
+        Effect.orElseSucceed((): ClaudeLoginCheckResult => ({
+          verdict: "Unknown",
+          latestClaudeAiOauth: Option.none(),
+        })),
+        Effect.provideContext(services),
+      );
 
-      return ClaudeLoginCheck.of({
-        check: (input) =>
-          check(input).pipe(
-            Effect.scoped,
-            // The check never fails: a throwaway dir it cannot prepare is an Unknown verdict.
-            Effect.catch(() =>
-              Effect.succeed<ClaudeLoginCheckResult>({
-                verdict: "Unknown",
-                latestClaudeAiOauth: Option.none(),
-              }),
-            ),
-            Effect.provideContext(services),
-          ),
-      });
+      return ClaudeLoginCheck.of({ check });
     }),
   );
 

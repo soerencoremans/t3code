@@ -103,7 +103,7 @@ export const layerWith = (options: {
         );
         if (argv.length === 0 || !isClaudeProgram(argv, path.basename)) return Option.none();
         const environ = yield* fileSystem.readFileString(path.join(pidDir, "environ")).pipe(
-          Effect.map(Option.some),
+          Effect.asSome,
           Effect.catch((error) =>
             error.reason._tag === "NotFound"
               ? Effect.succeed(Option.none<string>())
