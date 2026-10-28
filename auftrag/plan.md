@@ -15,6 +15,8 @@ Private. Six tickets, server first, then the three screens.
 - `claudeAccounts.switch {instanceId, name, stopRunningTurns}`; new reasons `turnsRunning` (runs active and stopRunningTurns false, nothing stopped) and `switchInProgress` (refuse instead of queueing on accountsLock — use a separate in-flight Ref/semaphore tryAcquire).
 - After success: for every affectedInstanceId, `invalidateCaches` (Claude driver's also resets lastGoodCapabilities) then `providerRegistry.refreshInstance`, so snapshot email + usage are the new account's. Needs ClaudeAccounts → ProviderInstanceRegistry/ProviderRegistry dependency, or do it in the RPC handler module (decide in ticket; prefer handler module to avoid cycle — check runtimeLayer).
 - client-runtime `switchClaudeAccount` command.
+- AMENDED (ticket-1 fixes, pragmatist-1): ticket 2 rewrites the 8 switch-only error texts (currentNotRemembered, needsFreshLogin, loginCheckFailed, switchFailed, switchRollbackFailed, externalClaudePrograms, processCheckFailed, sessionStopFailed) using ticket-1 draft's texts, and updates assertions ClaudeAccounts.integration.test.ts:1374, :2214 under AK-31. Also moves ClaudeSwitchResult if ticket 1 ruling drops it. Switch RPC scope providers:manage, client-guarded, pinned in RpcAuthorization.test.ts.
+- Ticket 1 decided: list is providers:manage (security-1); reason is ForwardCompatibleOptional, new reasons are safe to add.
 - Criteria: AK-2, AK-3, AK-4, AK-5, AK-7, AK-8, AK-9, AK-10, AK-11, AK-26, AK-31, AK-35, AK-37, AK-38, AK-39 (server half).
 
 ### ticket-3 — Add an account beside the setup: login in a throwaway dir
