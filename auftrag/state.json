@@ -41,7 +41,7 @@
       ]
     }
   },
-  "label": "Human",
+  "label": "Clean",
   "conflict": false,
   "counters": {
     "item": null,
@@ -51,20 +51,20 @@
   },
   "tickets": {},
   "turns": {
-    "eval": 1
+    "eval": 2
   },
   "turn": {
     "role": "eval",
-    "type": "initial",
-    "number": 1,
+    "type": "feedback",
+    "number": 2,
     "attempt": 1,
-    "sessionId": "8f77e005-ce14-4244-aa42-89b6dba3dfdb",
-    "startedAt": "2026-10-28T09:01:56.309Z",
-    "lastCommentId": 0,
-    "lastLabelEventId": null,
+    "sessionId": "538e9d26-bb26-438c-8014-2ec7097ae72a",
+    "startedAt": "2026-10-28T10:01:50.171Z",
+    "lastCommentId": 6465900189,
+    "lastLabelEventId": 34460841710,
     "labelSet": true,
     "comments": 1,
-    "setLabel": "Human",
+    "setLabel": "Clean",
     "ended": true
   },
   "sessions": {},
