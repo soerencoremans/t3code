@@ -3,6 +3,7 @@ import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
+  type ClaudeAccountAddState,
   type ClaudeAccountErrorReason,
   type ClaudeAccountList,
   type ServerProvider,
@@ -17,8 +18,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 
-interface QueryView {
-  readonly data: ClaudeAccountList | null;
+interface QueryView<A = ClaudeAccountList> {
+  readonly data: A | null;
   readonly error: string | null;
   readonly failure: unknown;
   readonly isPending: boolean;
@@ -29,7 +30,12 @@ const state = vi.hoisted(() => ({
   os: "linux" as string | undefined,
   granted: true,
   view: null as QueryView | null,
+  addView: null as QueryView<ClaudeAccountAddState> | null,
   list: vi.fn((_target: unknown) => "claude-accounts"),
+  addState: vi.fn((_target: unknown) => "claude-account-add-state"),
+  start: vi.fn(),
+  respond: vi.fn(),
+  cancel: vi.fn(),
   refresh: vi.fn(),
   remember: vi.fn(),
   switch: vi.fn(),
@@ -56,6 +62,10 @@ vi.mock(import("../../state/server"), async (original) => {
         permissionAtom: () => cached(grants, state.granted, () => Atom.make(state.granted)),
       }) as never,
       switchClaudeAccount: state.switch as never,
+      startClaudeAccountAdd: state.start as never,
+      respondClaudeAccountAdd: state.respond as never,
+      cancelClaudeAccountAdd: state.cancel as never,
+      claudeAccountAddState: state.addState as never,
       configValueAtom: (() =>
         cached(configs, state.os, () =>
           Atom.make({ environment: { platform: { os: state.os } } }),
@@ -67,7 +77,7 @@ vi.mock(import("../../state/use-atom-command"), async (original) => ({
   ...(await original()),
   useAtomCommand: ((command: unknown) => command) as never,
 }));
-// The list behaves like a live query: changing `state.view` and calling `publish()`
+// The list and the add state behave like live queries: changing `state.view` and calling `publish()`
 // re-renders every component that reads it.
 const queryListeners = vi.hoisted(() => new Set<() => void>());
 vi.mock(import("../../state/query"), async (original) => {
@@ -78,7 +88,10 @@ vi.mock(import("../../state/query"), async (original) => {
   };
   return {
     ...(await original()),
-    useEnvironmentQuery: (() => useSyncExternalStore(subscribe, () => state.view)) as never,
+    useEnvironmentQuery: ((key: unknown) =>
+      useSyncExternalStore(subscribe, () =>
+        key === "claude-account-add-state" ? state.addView : state.view,
+      )) as never,
   };
 });
 vi.mock(import("../../localApi"), async (original) => ({
@@ -114,6 +127,11 @@ vi.mock(import("@tanstack/react-router"), async (original) => ({
   useNavigate: () => state.navigate,
 }));
 
+// Ghostty does not load headless.
+vi.mock(import("../settings/ProviderAuthTerminal"), () => ({
+  default: ({ output }) => <pre data-testid="terminal">{output}</pre>,
+}));
+
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import { useClaudeAccountSwitch } from "../settings/useClaudeAccounts";
 import { ProviderModelPicker } from "./ProviderModelPicker";
@@ -146,6 +164,21 @@ const publish = () =>
   act(async () => {
     for (const listener of queryListeners) listener();
   });
+
+function publishAdd(data: ClaudeAccountAddState) {
+  state.addView = { data, error: null, failure: null, isPending: false, refresh: () => {} };
+  return publish();
+}
+const running: ClaudeAccountAddState = {
+  attemptId: "a1",
+  instanceId,
+  name: "Private",
+  phase: "running",
+  output: "",
+  outputOffset: 0,
+  account: null,
+  error: null,
+};
 
 const success = (value: unknown = undefined) => ({ _tag: "Success", value });
 const refusal = (reason: ClaudeAccountErrorReason) => ({
@@ -199,6 +232,7 @@ async function render(
     readonly environmentId?: EnvironmentId | null;
     readonly multiModel?: boolean;
     readonly standIn?: boolean;
+    readonly open?: boolean;
   } = {},
 ) {
   await act(async () =>
@@ -222,6 +256,7 @@ async function render(
             ? { selectedModels: [{ instanceId, model: "claude-opus" }], onToggleModel: () => {} }
             : {})}
           onInstanceModelChange={() => {}}
+          {...(options.open === undefined ? {} : { open: options.open })}
         />
         {options.standIn ? <SettingsStandIn /> : null}
       </RegistryContext.Provider>,
@@ -297,6 +332,10 @@ describe("ClaudeAccountPickerRow", () => {
     setList(workActive);
     state.remember.mockReset().mockResolvedValue(success(work));
     state.switch.mockReset().mockResolvedValue(success());
+    state.addView = { data: null, error: null, failure: null, isPending: false, refresh: () => {} };
+    state.start.mockReset().mockResolvedValue(success(running));
+    state.respond.mockReset().mockResolvedValue(success());
+    state.cancel.mockReset().mockResolvedValue(success());
     state.confirm.mockReset().mockResolvedValue(false);
     registry = AtomRegistry.make();
     root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -696,5 +735,77 @@ describe("ClaudeAccountPickerRow", () => {
 
     await expect.element(modelOption()).toBeVisible();
     expect(row()).not.toBeNull();
+  });
+
+  const plainItems = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    );
+  const terminalShown = () => document.querySelector('[data-testid="terminal"]') !== null;
+  async function startAdding() {
+    await openAccountMenu();
+    await click(page.getByRole("menuitem", { name: "Add account…" }));
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
+    await act(() => userEvent.fill(input, "Private"));
+    await click(page.getByRole("button", { name: "Log in…" }));
+    await expect.poll(terminalShown).toBe(true);
+  }
+
+  it("AK-17: Add account… sits above Manage accounts and starts the login for this setup", async () => {
+    await render();
+    await openPicker();
+    await openAccountMenu();
+
+    expect(plainItems()).toEqual(["Add account…", "Manage accounts"]);
+    await click(page.getByRole("menuitem", { name: "Add account…" }));
+    await expect.poll(menuOpen).toBe(false);
+    expect(modelInDom()).toBe(true);
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
+    await act(() => userEvent.fill(input, "Private"));
+    await click(page.getByRole("button", { name: "Log in…" }));
+
+    expect(state.start).toHaveBeenCalledWith({
+      environmentId,
+      input: { instanceId, name: "Private" },
+    });
+    await expect.poll(terminalShown).toBe(true);
+    expect(modelInDom()).toBe(true);
+  });
+
+  it("AK-23: closing the picker during the login stops the attempt once", async () => {
+    await render();
+    await openPicker();
+    await startAdding();
+
+    await render({ open: false });
+
+    await expect.poll(() => state.cancel.mock.calls.length).toBe(1);
+    expect(state.cancel).toHaveBeenCalledWith({ environmentId, input: { attemptId: "a1" } });
+    expect(row()).toBeNull();
+  });
+
+  it("re-reads the account list after an account was added", async () => {
+    await render();
+    await openPicker();
+    await startAdding();
+
+    await publishAdd({ ...running, phase: "succeeded", account: priv });
+
+    await expect.poll(() => document.body.textContent).toContain("Added “Private”.");
+    expect(state.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("a click on the add dialog's backdrop keeps the dialog and the picker open", async () => {
+    await render();
+    await openPicker();
+    await startAdding();
+
+    const viewport = document.querySelector<HTMLElement>('[data-slot="dialog-viewport"]')!;
+    await act(() => userEvent.click(viewport, { position: { x: 4, y: 4 } }));
+    await act(async () => {});
+
+    expect(terminalShown()).toBe(true);
+    expect(modelInDom()).toBe(true);
+    expect(state.cancel).not.toHaveBeenCalled();
   });
 });

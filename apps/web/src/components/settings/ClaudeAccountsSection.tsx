@@ -11,6 +11,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { AddClaudeAccountDialog } from "./AddClaudeAccountDialog";
 import {
   claudeAccountErrorMessage,
   type ClaudeAccountRow,
@@ -99,6 +100,7 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
   );
   const [actionError, setActionError] = useState<string | null>(null);
   const [rememberOpen, setRememberOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const forgetRef = useRef(false);
   const error = switchError ?? actionError ?? listError;
 
@@ -143,6 +145,11 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
         <SettingsRow
           title="Remembered accounts"
           description="Saved logins you can switch to without logging in again."
+          control={
+            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+              Add account…
+            </Button>
+          }
         >
           {view.accounts.length === 0 ? (
             <p className="text-xs text-muted-foreground">No remembered accounts yet.</p>
@@ -193,6 +200,18 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
           email={view.email}
           onClose={() => setRememberOpen(false)}
           onRemembered={refresh}
+        />
+      ) : null}
+      {addOpen ? (
+        <AddClaudeAccountDialog
+          environmentId={environmentId}
+          instanceId={instanceId}
+          // A login can land just as the user cancels, so the list is re-read on every close.
+          onClose={() => {
+            setAddOpen(false);
+            refresh();
+          }}
+          onAdded={() => refresh()}
         />
       ) : null}
     </section>

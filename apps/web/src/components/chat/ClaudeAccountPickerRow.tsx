@@ -1,8 +1,9 @@
 import type { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDownIcon, CircleDashedIcon, SettingsIcon } from "lucide-react";
+import { ChevronDownIcon, CircleDashedIcon, PlusIcon, SettingsIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { AddClaudeAccountDialog } from "../settings/AddClaudeAccountDialog";
 import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
 import { RememberClaudeAccountDialog } from "../settings/RememberClaudeAccountDialog";
 import {
@@ -58,9 +59,12 @@ function ClaudeAccountPickerRowInner({
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [rememberOpen, setRememberOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   // After a remember the trigger replaces "Remember…", so focus has to follow it there.
   const focusTriggerOnMountRef = useRef(false);
+  // The add dialog returns focus here, because the menu item that opened it is gone.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   // A switch can outlive the picker's popup; its outcome then goes to a toast.
   const mountedRef = useRef(false);
   const view = accounts.view;
@@ -74,6 +78,7 @@ function ClaudeAccountPickerRowInner({
   }, []);
 
   const attachTrigger = (element: HTMLButtonElement | null) => {
+    triggerRef.current = element;
     if (element === null || !focusTriggerOnMountRef.current) return;
     focusTriggerOnMountRef.current = false;
     element.focus();
@@ -150,6 +155,10 @@ function ClaudeAccountPickerRowInner({
             </MenuRadioGroup>
           </MenuGroup>
           <MenuSeparator />
+          <MenuItem onClick={() => setAddOpen(true)}>
+            <PlusIcon aria-hidden="true" />
+            Add account…
+          </MenuItem>
           <MenuItem onClick={manageAccounts}>
             <SettingsIcon aria-hidden="true" />
             Manage accounts
@@ -216,6 +225,19 @@ function ClaudeAccountPickerRowInner({
             focusTriggerOnMountRef.current = true;
             accounts.refresh();
           }}
+        />
+      ) : null}
+      {addOpen ? (
+        <AddClaudeAccountDialog
+          environmentId={environmentId}
+          instanceId={instanceId}
+          finalFocus={triggerRef}
+          // A login can land just as the user cancels, so the list is re-read on every close.
+          onClose={() => {
+            setAddOpen(false);
+            accounts.refresh();
+          }}
+          onAdded={() => accounts.refresh()}
         />
       ) : null}
     </div>

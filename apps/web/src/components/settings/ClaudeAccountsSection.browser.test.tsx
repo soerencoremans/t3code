@@ -2,6 +2,7 @@ import {
   ClaudeAccountError,
   EnvironmentId,
   ProviderInstanceId,
+  type ClaudeAccountAddState,
   type ClaudeAccountErrorReason,
   type ClaudeAccountList,
 } from "@t3tools/contracts";
@@ -12,8 +13,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { userEvent } from "vite-plus/test/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-interface QueryView {
-  readonly data: ClaudeAccountList | null;
+interface QueryView<A = ClaudeAccountList> {
+  readonly data: A | null;
   readonly error: string | null;
   readonly failure: unknown;
   readonly isPending: boolean;
@@ -24,7 +25,12 @@ const state = vi.hoisted(() => ({
   os: "linux" as string | undefined,
   granted: true,
   view: null as QueryView | null,
+  addView: null as QueryView<ClaudeAccountAddState> | null,
   list: vi.fn((_target: unknown) => "claude-accounts"),
+  addState: vi.fn((_target: unknown) => "claude-account-add-state"),
+  start: vi.fn(),
+  respond: vi.fn(),
+  cancel: vi.fn(),
   refresh: vi.fn(),
   remember: vi.fn(),
   forget: vi.fn(),
@@ -50,6 +56,10 @@ vi.mock(import("../../state/server"), async (original) => {
         permissionAtom: () => cached(grants, state.granted, () => Atom.make(state.granted)),
       }) as never,
       forgetClaudeAccount: state.forget as never,
+      startClaudeAccountAdd: state.start as never,
+      respondClaudeAccountAdd: state.respond as never,
+      cancelClaudeAccountAdd: state.cancel as never,
+      claudeAccountAddState: state.addState as never,
       switchClaudeAccount: state.switch as never,
       configValueAtom: (() =>
         cached(configs, state.os, () =>
@@ -62,7 +72,7 @@ vi.mock(import("../../state/use-atom-command"), async (original) => ({
   ...(await original()),
   useAtomCommand: ((command: unknown) => command) as never,
 }));
-// The list behaves like a live query: changing `state.view` and calling `publish()`
+// The list and the add state behave like live queries: changing `state.view` and calling `publish()`
 // re-renders every component that reads it.
 const queryListeners = vi.hoisted(() => new Set<() => void>());
 vi.mock(import("../../state/query"), async (original) => {
@@ -73,12 +83,20 @@ vi.mock(import("../../state/query"), async (original) => {
   };
   return {
     ...(await original()),
-    useEnvironmentQuery: (() => useSyncExternalStore(subscribe, () => state.view)) as never,
+    useEnvironmentQuery: ((key: unknown) =>
+      useSyncExternalStore(subscribe, () =>
+        key === "claude-account-add-state" ? state.addView : state.view,
+      )) as never,
   };
 });
 vi.mock(import("../../localApi"), async (original) => ({
   ...(await original()),
   ensureLocalApi: () => ({ dialogs: { confirm: state.confirm } }) as never,
+}));
+
+// Ghostty does not load headless.
+vi.mock(import("./ProviderAuthTerminal"), () => ({
+  default: ({ output }) => <pre data-testid="terminal">{output}</pre>,
 }));
 
 import { ClaudeAccountsSection } from "./ClaudeAccountsSection";
@@ -113,6 +131,21 @@ const publish = () =>
   act(async () => {
     for (const listener of queryListeners) listener();
   });
+
+function publishAdd(data: ClaudeAccountAddState) {
+  state.addView = { data, error: null, failure: null, isPending: false, refresh: () => {} };
+  return publish();
+}
+const running: ClaudeAccountAddState = {
+  attemptId: "a1",
+  instanceId,
+  name: "Private",
+  phase: "running",
+  output: "",
+  outputOffset: 0,
+  account: null,
+  error: null,
+};
 
 const success = (value: unknown = undefined) => ({ _tag: "Success", value });
 const refusal = (reason: ClaudeAccountErrorReason, name?: string) => ({
@@ -190,9 +223,11 @@ describe("ClaudeAccountsSection", () => {
     state.os = "linux";
     state.granted = true;
     setList(workActive);
-    for (const command of [state.remember, state.forget, state.switch]) {
+    state.addView = { data: null, error: null, failure: null, isPending: false, refresh: () => {} };
+    for (const command of [state.remember, state.forget, state.switch, state.cancel]) {
       command.mockReset().mockResolvedValue(success());
     }
+    state.start.mockReset().mockResolvedValue(success(running));
     state.confirm.mockReset().mockResolvedValue(false);
     container = document.createElement("div");
     document.body.append(container);
@@ -471,5 +506,53 @@ describe("ClaudeAccountsSection", () => {
 
     expect(alertText()).toBe(message("setupUnreadable"));
     expect(container.querySelector("ul")).toBeNull();
+  });
+
+  async function startAdding() {
+    await click("Add account…");
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
+    await act(() => userEvent.fill(input, "Private"));
+    await click("Log in…");
+    await expect.poll(() => document.querySelector('[data-testid="terminal"]')).not.toBeNull();
+  }
+
+  it("AK-18: adds an account from the Remembered accounts row and keeps the setup's account", async () => {
+    setList(accounts({ email: work.email, rememberedAs: "Work" }, [work]));
+    await render();
+    await startAdding();
+
+    expect(state.start).toHaveBeenCalledWith({
+      environmentId: remoteEnvironmentId,
+      input: { instanceId, name: "Private" },
+    });
+    await publishAdd({ ...running, phase: "succeeded", account: priv });
+    expect(state.refresh).toHaveBeenCalledTimes(1);
+
+    setList(workActive);
+    await publish();
+    await click("Done");
+    expect(item("Private")).not.toBeNull();
+    expect(item("Work")?.textContent).toContain("Active");
+    expect(item("Private")?.textContent).not.toContain("Active");
+  });
+
+  it("offers Add account… when the account is not remembered or no one is logged in", async () => {
+    setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
+    await render();
+    expect(button("Add account…")).not.toBeNull();
+
+    setList(accounts(null));
+    await publish();
+    expect(button("Add account…")).not.toBeNull();
+  });
+
+  it("re-reads the list when the add dialog is cancelled during the login", async () => {
+    await render();
+    await startAdding();
+
+    await click("Cancel");
+
+    expect(state.refresh).toHaveBeenCalledTimes(1);
+    await expect.poll(() => state.cancel.mock.calls.length).toBe(1);
   });
 });
