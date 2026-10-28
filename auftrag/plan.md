@@ -102,3 +102,8 @@ Private. Six tickets, server first, then the three screens.
 - Cancel: single path = ClaudeAccountAddLogin unmount before end, microtask-deferred (StrictMode safe); dialog cancels attempt if start resolves after close.
 - Picker: Add account… only in remembered menu; dialog inside picker tree, finalFocus=triggerRef.
 - Criteria: AK-15, 16, 17, 18, 22, 23, 32. Next: ticket-7 (fresh display), then ticket-8 (share config, last, test-affected).
+
+## Ticket 7 drafted (turn 17) = #17. Seats: concurrency, reliability, testability. Blocked by #11.
+- refreshClaudeSetupSnapshots(instances)(ids) in claudeSetupSnapshots.ts: invalidateCaches + snapshot.refresh (no ProviderRegistry dep); called in switch after ensuring(resumeHeldQueues), inside permits; logged not failed.
+- Ordering via managedProvider refreshSemaphore; fallback stores accountUuid read before probe (readClaudeAccountUuid in claudeLoginFiles.ts); undefined===undefined keeps :442 test.
+- Next: ticket-8 (share config, last, test-affected gate). Then closing.
