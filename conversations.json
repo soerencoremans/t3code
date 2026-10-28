@@ -1,0 +1,45 @@
+{
+  "machine": "soeren-System-Product-Name",
+  "machineId": "8e32eb69-b99c-4277-885f-763a027baccb",
+  "item": "soerencoremans-t3code-14",
+  "conversationsShared": false,
+  "conversationsWithheld": null,
+  "turns": [
+    {
+      "session": "6323968a-db7e-4c07-befb-ff1cdf707366",
+      "role": "developer",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-14/6323968a-db7e-4c07-befb-ff1cdf707366.jsonl",
+      "from": "1",
+      "to": "351",
+      "copy": null
+    },
+    {
+      "session": "7ad61bb3-89cf-430a-aa2e-6de4592766b1",
+      "role": "code-reviewer",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-14/7ad61bb3-89cf-430a-aa2e-6de4592766b1.jsonl",
+      "from": "1",
+      "to": "111",
+      "copy": null
+    },
+    {
+      "session": "7ad61bb3-89cf-430a-aa2e-6de4592766b1",
+      "role": "code-reviewer",
+      "part": "subagent",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-14/7ad61bb3-89cf-430a-aa2e-6de4592766b1/subagents/agent-a1a1973d11a25a00f.jsonl",
+      "from": "1",
+      "to": "28",
+      "copy": null
+    },
+    {
+      "session": "43211a65-cbf8-4bc0-919e-364792694d16",
+      "role": "qa",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-ticket-14/43211a65-cbf8-4bc0-919e-364792694d16.jsonl",
+      "from": "1",
+      "to": "97",
+      "copy": null
+    }
+  ]
+}
