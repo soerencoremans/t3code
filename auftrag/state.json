@@ -41,13 +41,13 @@
       ]
     }
   },
-  "label": "Gremium",
+  "label": "Human",
   "conflict": false,
   "counters": {
     "item": null,
     "round": 23,
     "coverageFails": 0,
-    "countedEvent": 34461137376
+    "countedEvent": 34469787451
   },
   "tickets": {
     "1": 10,
@@ -63,21 +63,21 @@
     "eval": 2,
     "ak": 1,
     "ak-review": 1,
-    "gremium-author": 23
+    "gremium-author": 23,
+    "coverage": 1
   },
   "turn": {
-    "role": "gremium-author",
-    "type": "gremium-draft",
-    "number": 23,
+    "role": "coverage",
+    "type": "coverage",
+    "number": 1,
     "attempt": 1,
-    "sessionId": "cdc80e3b-28c8-4b9f-b5b1-267467a320c3",
-    "startedAt": "2026-10-28T11:47:37.087Z",
-    "lastCommentId": 6466114309,
-    "lastLabelEventId": 34461138065,
+    "sessionId": "a4f6a4dd-37c4-4cd8-821c-2c525976a81a",
+    "startedAt": "2026-10-28T11:48:48.810Z",
+    "lastCommentId": 6468185788,
+    "lastLabelEventId": 34469787537,
     "labelSet": true,
-    "labelOptional": true,
-    "comments": 1,
-    "setLabel": "Gremium",
+    "comments": 2,
+    "setLabel": "Human",
     "ended": true
   },
   "sessions": {
