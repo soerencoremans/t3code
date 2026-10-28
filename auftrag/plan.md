@@ -17,7 +17,8 @@ Private. Six tickets, server first, then the three screens.
 - client-runtime `switchClaudeAccount` command.
 - AMENDED (ticket-1 fixes, pragmatist-1): ticket 2 rewrites the 8 switch-only error texts (currentNotRemembered, needsFreshLogin, loginCheckFailed, switchFailed, switchRollbackFailed, externalClaudePrograms, processCheckFailed, sessionStopFailed) using ticket-1 draft's texts, and updates assertions ClaudeAccounts.integration.test.ts:1374, :2214 under AK-31. Also moves ClaudeSwitchResult if ticket 1 ruling drops it. Switch RPC scope providers:manage, client-guarded, pinned in RpcAuthorization.test.ts.
 - Ticket 1 decided: list is providers:manage (security-1); reason is ForwardCompatibleOptional, new reasons are safe to add.
-- Criteria: AK-2, AK-3, AK-4, AK-5, AK-7, AK-8, AK-9, AK-10, AK-11, AK-26, AK-31, AK-35, AK-37, AK-38, AK-39 (server half).
+- Criteria: AK-2, AK-3, AK-4, AK-5, AK-7, AK-8, AK-9, AK-10, AK-11, AK-26, AK-31, AK-35, AK-38, AK-39 (server half).
+- AS DRAFTED (turn 4): service input gains stopRunningTurns; turnsRunning gate after refuseExternalPrograms, before login check; switchInProgress via second Semaphore withPermitsIfAvailable (global). Refresh in ClaudeAccountsRpc.ts: claudeAccountsSwitchRpcHandler(accounts, refreshAfterSwitch) + refreshSwitchedSetups(instances, registry). ClaudeDriver fallback also compares accountUuid. AK-37 moved to ticket 5.
 
 ### ticket-3 — Add an account beside the setup: login in a throwaway dir
 - Service `ClaudeAccountLogin` (apps/server/src/provider/ClaudeAccountLogin.ts): start {instanceId, name} validates name first (invalidName/nameInUse), creates `${stateDir}/claude-account-logins/<flowId>` (0700), spawns `claude auth login` in PTY with makeClaudeEnvironment({homePath: dir}, setup env) and setup binaryPath, terminal interaction (keystrokes for pasted code -> remote browser), on exit 0 reads login from dir, remembers via new `ClaudeAccounts.rememberLogin`, deletes dir.
@@ -35,7 +36,7 @@ Private. Six tickets, server first, then the three screens.
 
 ### ticket-5 — Model picker account row
 - Footer in Claude tab of ModelPickerContent: account, "all Claude chats", menu with remembered accounts, Remember… when not remembered, Add account…, Manage accounts; switching state; consumes ticket-4 hooks.
-- Criteria: AK-1, AK-2, AK-3, AK-4, AK-6, AK-7, AK-8, AK-12, AK-13, AK-17, AK-28, AK-33, AK-34, AK-35.
+- Criteria: AK-1, AK-2, AK-3, AK-4, AK-6, AK-7, AK-8, AK-12, AK-13, AK-17, AK-28, AK-33, AK-34, AK-35, AK-37 (moved from ticket 2: the picker row is the only switch entry; the usage-limit message gets none).
 
 ### ticket-6 — Add provider dialog: share config option
 - Checkbox at top of the Identity step (resolve the open point: avoids unused label/id/colour), only for Claude, Linux, an existing Claude setup; ticked -> account name + Setup picker (>1 setups) + Log in step using ClaudeAddAccountLogin; no instance created. Last ticket: test-affected gate.
