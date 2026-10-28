@@ -16,7 +16,7 @@
     "branch": "ticket/16",
     "path": "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-16"
   },
-  "label": null,
+  "label": "Implemented",
   "conflict": false,
   "counters": {
     "crFails": 0,
@@ -24,6 +24,24 @@
     "escalations": 0,
     "countedEvent": null
   },
-  "turns": {},
-  "turn": null
+  "turns": {
+    "developer": 1
+  },
+  "turn": {
+    "role": "developer",
+    "type": "initial",
+    "number": 1,
+    "attempt": 1,
+    "sessionId": "d943a234-6952-4fca-8c57-10d8dacde576",
+    "startedAt": "2026-10-28T15:31:48.816Z",
+    "lastCommentId": 6467729790,
+    "lastLabelEventId": null,
+    "labelSet": true,
+    "lastOpen": false,
+    "comments": 1,
+    "setLabel": "Implemented",
+    "ended": true
+  },
+  "gatedSha": "41510e103b86f445c7b2edd5fe4542dcd93cfe08",
+  "gatedScope": "scoped"
 }
