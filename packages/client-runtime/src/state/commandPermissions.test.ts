@@ -143,6 +143,32 @@ describe("command permissions", () => {
     ),
   );
 
+  it.effect("requires the destination provider management grant to add a Claude account", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const addAccount = createCommandPermissions(runtime, WS_METHODS.claudeAccountsAddStart);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(addAccount.permissionAtom(env))).toBe(false);
+        expect((yield* addAccount.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthProvidersManageScope],
+            permissions: [AuthProvidersManageScope],
+          }),
+        );
+        expect(registry.get(addAccount.permissionAtom(env))).toBe(true);
+        yield* addAccount.authorize(registry, env);
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(addAccount.permissionAtom(other))).toBe(false);
+      }),
+    ),
+  );
+
   it.effect("requires the destination settings grant to check OTLP endpoints", () =>
     Effect.scoped(
       Effect.gen(function* () {

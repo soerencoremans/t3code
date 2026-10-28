@@ -77,6 +77,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.providerInstallRemove]: AuthProvidersManageScope,
   // Lists every remembered account's email, so it needs more than a read scope.
   [WS_METHODS.claudeAccountsList]: AuthProvidersManageScope,
+  // Streams the login terminal, which can echo a pasted login code.
+  [WS_METHODS.claudeAccountsAddSubscribe]: AuthProvidersManageScope,
   [WS_METHODS.serverUpdateServer]: AuthEnvironmentMaintainScope,
   [WS_METHODS.serverUpdateServerWithProgress]: AuthEnvironmentMaintainScope,
   [WS_METHODS.serverCommitDesktopUpdate]: AuthEnvironmentMaintainScope,

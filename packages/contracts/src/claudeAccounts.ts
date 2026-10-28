@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { ForwardCompatibleOptional } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { ProviderAuthTerminalResponse } from "./providerSetup.ts";
 
 export const ClaudeAccountErrorReason = Schema.Literals([
   "unavailable",
@@ -23,6 +24,9 @@ export const ClaudeAccountErrorReason = Schema.Literals([
   "sessionStopFailed",
   "turnsRunning",
   "switchInProgress",
+  "loginFailed",
+  "loginTimedOut",
+  "loginNotFound",
 ]);
 export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
 
@@ -77,6 +81,12 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
         return "Turns are running on this Claude setup. Switching the account stops them.";
       case "switchInProgress":
         return "Another Claude account switch is still running. Wait until it finishes, then try again.";
+      case "loginFailed":
+        return "The Claude login did not finish, so no account was added. Try again.";
+      case "loginTimedOut":
+        return "The Claude login took longer than 5 minutes and was stopped. No account was added. Start again.";
+      case "loginNotFound":
+        return "This Claude login is no longer running. Start adding the account again.";
     }
   }
 }
@@ -129,3 +139,49 @@ export const ClaudeAccountSwitchInput = Schema.Struct({
   stopRunningTurns: Schema.Boolean,
 });
 export type ClaudeAccountSwitchInput = typeof ClaudeAccountSwitchInput.Type;
+
+export const ClaudeAccountAddAttemptId = Schema.String.check(Schema.isMaxLength(64));
+export type ClaudeAccountAddAttemptId = typeof ClaudeAccountAddAttemptId.Type;
+
+export const ClaudeAccountAddStartInput = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  name: ClaudeAccountNameInput,
+});
+export type ClaudeAccountAddStartInput = typeof ClaudeAccountAddStartInput.Type;
+
+// Shares the terminal bounds with provider auth, so a terminal response maps over by dropping `type`.
+export const ClaudeAccountAddRespondInput = Schema.Struct({
+  attemptId: ClaudeAccountAddAttemptId,
+  data: ProviderAuthTerminalResponse.fields.data,
+  size: ProviderAuthTerminalResponse.fields.size,
+});
+export type ClaudeAccountAddRespondInput = typeof ClaudeAccountAddRespondInput.Type;
+
+export const ClaudeAccountAddAttemptInput = Schema.Struct({
+  attemptId: ClaudeAccountAddAttemptId,
+});
+export type ClaudeAccountAddAttemptInput = typeof ClaudeAccountAddAttemptInput.Type;
+
+export const ClaudeAccountAddPhase = Schema.Literals([
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+export type ClaudeAccountAddPhase = typeof ClaudeAccountAddPhase.Type;
+
+export const ClaudeAccountAddState = Schema.Struct({
+  attemptId: ClaudeAccountAddAttemptId,
+  instanceId: ProviderInstanceId,
+  name: Schema.String,
+  phase: ClaudeAccountAddPhase,
+  /** The last 16384 characters of the terminal. */
+  output: Schema.String.check(Schema.isMaxLength(16_384)),
+  /** Every character the terminal ever wrote, as `ProviderAuthTerminal` expects. */
+  outputOffset: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  /** Set only when the phase is `succeeded`. */
+  account: Schema.NullOr(RememberedClaudeAccount),
+  /** Set only when the phase is `failed`. */
+  error: Schema.NullOr(ClaudeAccountError),
+});
+export type ClaudeAccountAddState = typeof ClaudeAccountAddState.Type;

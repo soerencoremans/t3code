@@ -9,6 +9,7 @@ import * as McpAppRequests from "../mcpApps/McpAppRequests.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
+import * as ClaudeAccountLogin from "../provider/ClaudeAccountLogin.ts";
 import * as ClaudeAccounts from "../provider/ClaudeAccounts.ts";
 import * as ClaudeExternalProcesses from "../provider/ClaudeExternalProcesses.ts";
 import * as ClaudeLoginCheck from "../provider/ClaudeLoginCheck.ts";
@@ -338,14 +339,18 @@ const layerProviderRuntimeRecoveryProvided = ProviderRuntimeRecoveryService.laye
   ),
 );
 
-const layerClaudeAccountsProvided = ClaudeAccounts.layer.pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      ClaudeLoginCheck.layer,
-      ClaudeExternalProcesses.layer,
-      layerThreadManagementProvided,
-      layerProviderSessionManagerProvided,
-      ProjectionStore.layer,
+const layerClaudeAccountsProvided = ClaudeAccountLogin.layer.pipe(
+  Layer.provideMerge(
+    ClaudeAccounts.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          ClaudeLoginCheck.layer,
+          ClaudeExternalProcesses.layer,
+          layerThreadManagementProvided,
+          layerProviderSessionManagerProvided,
+          ProjectionStore.layer,
+        ),
+      ),
     ),
   ),
 );

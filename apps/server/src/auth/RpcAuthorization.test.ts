@@ -54,6 +54,14 @@ describe("RPC authorization scopes", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsSwitch)).toBe(
       AuthProvidersManageScope,
     );
+    for (const method of [
+      WS_METHODS.claudeAccountsAddStart,
+      WS_METHODS.claudeAccountsAddRespond,
+      WS_METHODS.claudeAccountsAddCancel,
+      WS_METHODS.claudeAccountsAddSubscribe,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthProvidersManageScope);
+    }
   });
 
   it("authorizes background policy reporting and observation deliberately", () => {

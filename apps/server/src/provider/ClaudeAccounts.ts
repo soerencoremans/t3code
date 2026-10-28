@@ -14,6 +14,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -46,6 +47,7 @@ import {
   sameClaudeAccount,
   writeClaudeSetupLogin,
   type ClaudeAccountIdentity,
+  type ClaudeSetupLogin,
   type JsonObject,
 } from "./claudeLoginFiles.ts";
 import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
@@ -71,8 +73,25 @@ export class ClaudeAccounts extends Context.Service<
     readonly switch: (
       input: ClaudeAccountSwitchInput,
     ) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
+    /** An early answer before a login starts; `rememberLogin` checks the name again under the lock. */
+    readonly prepareAddAccount: (input: {
+      readonly instanceId: ProviderInstanceId;
+      readonly name: string;
+    }) => Effect.Effect<ClaudeAddAccountTarget, ClaudeAccountError>;
+    readonly rememberLogin: (input: {
+      readonly instanceId: ProviderInstanceId;
+      readonly name: string;
+      readonly login: ClaudeSetupLogin;
+    }) => Effect.Effect<RememberedClaudeAccount, ClaudeAccountError>;
   }
 >()("t3/provider/ClaudeAccounts") {}
+
+export interface ClaudeAddAccountTarget {
+  readonly instanceId: ProviderInstanceId;
+  readonly name: string;
+  readonly binaryPath: string;
+  readonly environment: NodeJS.ProcessEnv;
+}
 
 /** How long a switch waits for the setup's T3 turns to stop, under `accountsLock`. */
 export const CLAUDE_SWITCH_STOP_TIMEOUT = Duration.seconds(10);
@@ -265,6 +284,46 @@ export const make = Effect.gen(function* () {
     yield* secrets.set(STORAGE_NAME, new TextEncoder().encode(json));
   }, Effect.mapError(storageError));
 
+  const rememberLogin = Effect.fn("ClaudeAccounts.rememberLogin")(function* (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly name: string;
+    readonly login: ClaudeSetupLogin;
+  }) {
+    yield* requireLinux();
+    const { instanceId, login } = input;
+    const name = input.name.trim();
+    const remembered = yield* accountsLock.withPermits(1)(
+      Effect.gen(function* () {
+        if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
+        const accounts = yield* loadAccounts();
+        if (accounts.some((account) => sameName(account.name, name))) {
+          return yield* new ClaudeAccountError({ reason: "nameInUse", name });
+        }
+        const duplicate = accounts.find((account) =>
+          sameClaudeAccount(account.identity, login.identity),
+        );
+        if (duplicate !== undefined) {
+          return yield* new ClaudeAccountError({
+            reason: "alreadyRemembered",
+            name: duplicate.name,
+          });
+        }
+        yield* saveAccounts([
+          ...accounts,
+          {
+            name,
+            oauthAccount: login.oauthAccount,
+            claudeAiOauth: login.claudeAiOauth,
+            identity: login.identity,
+          },
+        ]);
+        return { name, email: login.identity.email } satisfies RememberedClaudeAccount;
+      }),
+    );
+    yield* Effect.logInfo("Claude account remembered", { operation: "remember", name, instanceId });
+    return remembered;
+  });
+
   const remember = Effect.fn("ClaudeAccounts.remember")(function* (input: {
     readonly instanceId: ProviderInstanceId;
     readonly name: string;
@@ -278,37 +337,28 @@ export const make = Effect.gen(function* () {
     if (Option.isNone(login)) {
       return yield* new ClaudeAccountError({ reason: "notLoggedIn", instanceId });
     }
+    return yield* rememberLogin({ instanceId, name: input.name, login: login.value });
+  });
+
+  const prepareAddAccount = Effect.fn("ClaudeAccounts.prepareAddAccount")(function* (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly name: string;
+  }) {
+    yield* requireLinux();
+    const { instanceId } = input;
+    const setup = yield* resolveSetup(instanceId);
     const name = input.name.trim();
-    const remembered = yield* accountsLock.withPermits(1)(
-      Effect.gen(function* () {
-        if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
-        const accounts = yield* loadAccounts();
-        if (accounts.some((account) => sameName(account.name, name))) {
-          return yield* new ClaudeAccountError({ reason: "nameInUse", name });
-        }
-        const duplicate = accounts.find((account) =>
-          sameClaudeAccount(account.identity, login.value.identity),
-        );
-        if (duplicate !== undefined) {
-          return yield* new ClaudeAccountError({
-            reason: "alreadyRemembered",
-            name: duplicate.name,
-          });
-        }
-        yield* saveAccounts([
-          ...accounts,
-          {
-            name,
-            oauthAccount: login.value.oauthAccount,
-            claudeAiOauth: login.value.claudeAiOauth,
-            identity: login.value.identity,
-          },
-        ]);
-        return { name, email: login.value.identity.email } satisfies RememberedClaudeAccount;
-      }),
-    );
-    yield* Effect.logInfo("Claude account remembered", { operation: "remember", name, instanceId });
-    return remembered;
+    if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
+    const accounts = yield* loadAccounts();
+    if (accounts.some((account) => sameName(account.name, name))) {
+      return yield* new ClaudeAccountError({ reason: "nameInUse", name });
+    }
+    return {
+      instanceId,
+      name,
+      binaryPath: expandHomePath(setup.settings.binaryPath, yield* HostProcess.HomeDirectory),
+      environment: setup.environment,
+    } satisfies ClaudeAddAccountTarget;
   });
 
   const activeAccount = Effect.fn("ClaudeAccounts.activeAccount")(function* (
@@ -795,7 +845,14 @@ export const make = Effect.gen(function* () {
     return outcome.value;
   });
 
-  return ClaudeAccounts.of({ remember, list: list(), forget, switch: switchAccount });
+  return ClaudeAccounts.of({
+    remember,
+    list: list(),
+    forget,
+    switch: switchAccount,
+    prepareAddAccount,
+    rememberLogin,
+  });
 });
 
 export const layer: Layer.Layer<

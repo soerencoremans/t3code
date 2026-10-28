@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  ClaudeAccountAddRespondInput,
+  ClaudeAccountAddState,
   ClaudeAccountError,
   ClaudeAccountErrorReason,
   ClaudeAccountList,
@@ -10,6 +12,7 @@ import {
   ClaudeSwitchResult,
 } from "./claudeAccounts.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { ProviderAuthResponse } from "./providerSetup.ts";
 
 const encodeError = Schema.encodeUnknownSync(ClaudeAccountError);
 const decodeError = Schema.decodeUnknownSync(ClaudeAccountError);
@@ -20,6 +23,10 @@ const decodeSwitchInput = Schema.decodeUnknownSync(ClaudeAccountSwitchInput);
 const decodeSwitchResult = Schema.decodeUnknownSync(ClaudeSwitchResult);
 const encodeSwitchResult = Schema.encodeUnknownSync(ClaudeSwitchResult);
 const roundTripError = (error: ClaudeAccountError) => decodeError(encodeError(error));
+const encodeAddState = Schema.encodeUnknownSync(ClaudeAccountAddState);
+const decodeAddState = Schema.decodeUnknownSync(ClaudeAccountAddState);
+const decodeRespond = Schema.decodeUnknownSync(ClaudeAccountAddRespondInput);
+const decodeAuthResponse = Schema.decodeUnknownSync(ProviderAuthResponse);
 
 describe("ClaudeAccountError", () => {
   it.each(ClaudeAccountErrorReason.literals)(
@@ -116,5 +123,43 @@ describe("Claude account wire schemas", () => {
     expect(decodeSwitchInput(input).stopRunningTurns).toBe(false);
     expect(() => decodeSwitchInput({ instanceId: "claudeAgent", name: "Work" })).toThrow();
     expect(() => decodeSwitchInput({ ...input, name: "a".repeat(257) })).toThrow();
+  });
+});
+
+describe("Claude account add wire schemas", () => {
+  it("R11: covers all 22 reasons, including the three login reasons", () => {
+    expect(ClaudeAccountErrorReason.literals).toHaveLength(22);
+    expect(ClaudeAccountErrorReason.literals).toEqual(
+      expect.arrayContaining(["loginFailed", "loginTimedOut", "loginNotFound"]),
+    );
+  });
+
+  it("round-trips a failed add state, keeping the error's reason and message", () => {
+    const state = {
+      attemptId: "attempt-1",
+      instanceId: ProviderInstanceId.make("claudeAgent"),
+      name: "Private",
+      phase: "failed" as const,
+      output: "",
+      outputOffset: 0,
+      account: null,
+      error: new ClaudeAccountError({ reason: "nameInUse", name: "Private" }),
+    };
+    const decoded = decodeAddState(encodeAddState(state));
+    expect(decoded.error?.reason).toBe("nameInUse");
+    expect(decoded.error?.message).toBe(state.error.message);
+  });
+
+  it("refuses respond data over 4096 characters and a terminal with no columns", () => {
+    expect(decodeRespond({ attemptId: "a", data: "x".repeat(4096) }).data).toHaveLength(4096);
+    expect(() => decodeRespond({ attemptId: "a", data: "x".repeat(4097) })).toThrow();
+    expect(() =>
+      decodeRespond({ attemptId: "a", data: "x", size: { cols: 0, rows: 24 } }),
+    ).toThrow();
+  });
+
+  it("still decodes a terminal provider auth response", () => {
+    const response = { type: "terminal", data: "x", size: { cols: 80, rows: 24 } };
+    expect(decodeAuthResponse(response)).toEqual(response);
   });
 });

@@ -167,8 +167,12 @@ import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderL
 import { latestProviderVersionCacheKeys } from "@t3tools/provider-core/server/maintenanceResolver";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import * as ProviderAuthService from "./provider/ProviderAuthService.ts";
+import * as ClaudeAccountLogin from "./provider/ClaudeAccountLogin.ts";
 import * as ClaudeAccounts from "./provider/ClaudeAccounts.ts";
-import { claudeAccountsRpcHandlers } from "./provider/ClaudeAccountsRpc.ts";
+import {
+  claudeAccountAddRpcHandlers,
+  claudeAccountsRpcHandlers,
+} from "./provider/ClaudeAccountsRpc.ts";
 import { makeProviderInstallation } from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
@@ -1280,6 +1284,8 @@ export const layerWsRpc = (
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const providerAuth = yield* ProviderAuthService.ProviderAuthService;
       const claudeAccounts = yield* ClaudeAccounts.ClaudeAccounts;
+      // Runs in the connection's scope, so a closed socket ends its add-account logins.
+      const claudeAccountAdd = yield* (yield* ClaudeAccountLogin.ClaudeAccountLogin).openConnection;
       const providerInstallation = yield* makeProviderInstallation();
       const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
@@ -1808,6 +1814,7 @@ export const layerWsRpc = (
 
       const handlers = ServerWsRpcGroup.of({
         ...claudeAccountsRpcHandlers(claudeAccounts),
+        ...claudeAccountAddRpcHandlers(claudeAccountAdd),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,

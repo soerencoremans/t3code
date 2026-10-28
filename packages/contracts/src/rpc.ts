@@ -22,6 +22,10 @@ import {
   ChatGptHandoffState,
 } from "./providerSetup.ts";
 import {
+  ClaudeAccountAddAttemptInput,
+  ClaudeAccountAddRespondInput,
+  ClaudeAccountAddStartInput,
+  ClaudeAccountAddState,
   ClaudeAccountError,
   ClaudeAccountForgetInput,
   ClaudeAccountList,
@@ -437,6 +441,10 @@ export const WS_METHODS = {
   claudeAccountsRemember: "claudeAccounts.remember",
   claudeAccountsForget: "claudeAccounts.forget",
   claudeAccountsSwitch: "claudeAccounts.switch",
+  claudeAccountsAddStart: "claudeAccounts.add.start",
+  claudeAccountsAddRespond: "claudeAccounts.add.respond",
+  claudeAccountsAddCancel: "claudeAccounts.add.cancel",
+  claudeAccountsAddSubscribe: "claudeAccounts.add.subscribe",
 
   vcsPull: "vcs.pull",
   vcsRefreshStatus: "vcs.refreshStatus",
@@ -726,6 +734,31 @@ export const WsClaudeAccountsSwitchRpc = Rpc.make(WS_METHODS.claudeAccountsSwitc
   payload: ClaudeAccountSwitchInput,
   success: ClaudeSwitchResult,
   error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddStartRpc = Rpc.make(WS_METHODS.claudeAccountsAddStart, {
+  payload: ClaudeAccountAddStartInput,
+  success: ClaudeAccountAddState,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddRespondRpc = Rpc.make(WS_METHODS.claudeAccountsAddRespond, {
+  payload: ClaudeAccountAddRespondInput,
+  success: Schema.Void,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddCancelRpc = Rpc.make(WS_METHODS.claudeAccountsAddCancel, {
+  payload: ClaudeAccountAddAttemptInput,
+  success: Schema.Void,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddSubscribeRpc = Rpc.make(WS_METHODS.claudeAccountsAddSubscribe, {
+  payload: ClaudeAccountAddAttemptInput,
+  success: ClaudeAccountAddState,
+  error: ClaudeAccountRpcError,
+  stream: true,
 });
 
 const WsProviderAuthSubscribeRpc = Rpc.make(WS_METHODS.providerAuthSubscribe, {
@@ -1946,6 +1979,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsClaudeAccountsRememberRpc,
   WsClaudeAccountsForgetRpc,
   WsClaudeAccountsSwitchRpc,
+  WsClaudeAccountsAddStartRpc,
+  WsClaudeAccountsAddRespondRpc,
+  WsClaudeAccountsAddCancelRpc,
+  WsClaudeAccountsAddSubscribeRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,

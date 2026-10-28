@@ -59,6 +59,13 @@ blocks every switch. The marker is a cooperative tag, not a proof of origin: any
 same user can set it, and that gains it nothing, because the same user can rewrite the login files
 directly. Build no other control on it.
 
+Adding a Claude account ([ClaudeAccountLogin](../../apps/server/src/provider/ClaudeAccountLogin.ts))
+runs `claude auth login` with `CLAUDE_CONFIG_DIR` set to a fresh 0700 folder under
+`<stateDir>/claude-account-logins/`, built through `makeClaudeEnvironment`, so the CLI is marked and
+never touches a setup's own config dir. When the CLI exits, the login is remembered and the folder
+deleted. Cancel, the 5-minute timeout and the owning WebSocket connection closing delete the folder
+too, and the server empties the parent folder at start, because a crash can leave a login behind.
+
 The Claude account switch does not follow the Antigravity order "close admission, then stop":
 Claude has no admission gate. It interrupts the setup's running turns with their queues held,
 waits for those interrupts in two passes, closes the instance's sessions, and verifies that none is

@@ -11,10 +11,18 @@ import {
   type RunId,
   ThreadId,
   WS_METHODS,
+  WsClaudeAccountsAddCancelRpc,
+  WsClaudeAccountsAddRespondRpc,
+  WsClaudeAccountsAddStartRpc,
+  WsClaudeAccountsAddSubscribeRpc,
   WsClaudeAccountsForgetRpc,
   WsClaudeAccountsListRpc,
   WsClaudeAccountsRememberRpc,
   WsClaudeAccountsSwitchRpc,
+  type ClaudeAccountAddAttemptInput,
+  type ClaudeAccountAddRespondInput,
+  type ClaudeAccountAddStartInput,
+  type ClaudeAccountAddState,
   type ClaudeAccountForgetInput,
   type ClaudeAccountList,
   type ClaudeAccountListInput,
@@ -30,6 +38,7 @@ import {
   type ProviderInstance,
 } from "@t3tools/provider-core/server/driver";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -49,7 +58,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -71,8 +80,9 @@ import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderRepl
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
+import * as ClaudeAccountLoginModule from "./ClaudeAccountLogin.ts";
 import * as ClaudeAccountsModule from "./ClaudeAccounts.ts";
-import { claudeAccountsRpcHandlers } from "./ClaudeAccountsRpc.ts";
+import { claudeAccountAddRpcHandlers, claudeAccountsRpcHandlers } from "./ClaudeAccountsRpc.ts";
 import * as ClaudeExternalProcesses from "./ClaudeExternalProcesses.ts";
 import { ClaudeLoginCheck, type ClaudeLoginCheckResult } from "./ClaudeLoginCheck.ts";
 import type { JsonObject } from "./claudeLoginFiles.ts";
@@ -470,6 +480,93 @@ const testClaudeDriver = (fake: FakeClaude, scope: Scope.Scope): ProviderDriver<
 });
 
 // A fresh stack per call: memory SQLite, registry, orchestration and the account service.
+// Stands in for `claude auth login` in its terminal. Modelled on the fakes in terminal/Manager.test.ts.
+class FakeLoginProcess implements PtyAdapter.PtyProcess {
+  readonly pid: number;
+  killed = false;
+  private readonly dataListeners = new Set<(data: string) => void>();
+  private readonly exitListeners = new Set<(event: PtyAdapter.PtyExitEvent) => void>();
+
+  private readonly owner: FakeLoginPty;
+
+  constructor(pid: number, owner: FakeLoginPty) {
+    this.pid = pid;
+    this.owner = owner;
+  }
+
+  write(data: string): void {
+    this.owner.writes.push(data);
+  }
+
+  resize(cols: number, rows: number): void {
+    this.owner.resizeCalls.push({ cols, rows });
+  }
+
+  kill(): void {
+    this.killed = true;
+  }
+
+  onData(callback: (data: string) => void): () => void {
+    this.dataListeners.add(callback);
+    return () => this.dataListeners.delete(callback);
+  }
+
+  onExit(callback: (event: PtyAdapter.PtyExitEvent) => void): () => void {
+    this.exitListeners.add(callback);
+    return () => this.exitListeners.delete(callback);
+  }
+
+  emitData(data: string): void {
+    for (const listener of this.dataListeners) listener(data);
+  }
+
+  emitExit(exitCode: number): void {
+    for (const listener of this.exitListeners) listener({ exitCode, signal: null });
+  }
+}
+
+class FakeLoginPty {
+  readonly spawnInputs: Array<PtyAdapter.PtySpawnInput> = [];
+  readonly processes: Array<FakeLoginProcess> = [];
+  readonly writes: Array<string> = [];
+  readonly resizeCalls: Array<{ readonly cols: number; readonly rows: number }> = [];
+  private failSpawn = false;
+
+  readonly spawn = (
+    input: PtyAdapter.PtySpawnInput,
+  ): Effect.Effect<PtyAdapter.PtyProcess, PtyAdapter.PtySpawnError> => {
+    this.spawnInputs.push(input);
+    if (this.failSpawn) {
+      this.failSpawn = false;
+      return Effect.fail(new PtyAdapter.PtySpawnError({ adapter: "fake", shell: input.shell }));
+    }
+    const process = new FakeLoginProcess(9000 + this.processes.length, this);
+    this.processes.push(process);
+    return Effect.succeed(process);
+  };
+
+  failNextSpawn(): void {
+    this.failSpawn = true;
+  }
+
+  /** Whether the latest terminal was killed. */
+  get killed(): boolean {
+    return this.latest.killed;
+  }
+
+  emitData(text: string): void {
+    this.latest.emitData(text);
+  }
+
+  emitExit(exitCode: number): void {
+    this.latest.emitExit(exitCode);
+  }
+
+  private get latest(): FakeLoginProcess {
+    return this.processes.at(-1)!;
+  }
+}
+
 const makeAccountsTestLayer = (options: {
   readonly providerInstances: Record<string, ProviderInstanceConfig>;
   readonly procRoot: string;
@@ -477,6 +574,7 @@ const makeAccountsTestLayer = (options: {
   readonly fileSystem: FileSystem.FileSystem;
   readonly fake: FakeClaude;
   readonly scope: Scope.Scope;
+  readonly pty: FakeLoginPty;
 }) => {
   const layerDatabase = SqlitePersistence.layerMemory;
   const layerSettings = ServerSettingsService.layerTest({
@@ -509,22 +607,27 @@ const makeAccountsTestLayer = (options: {
     ),
     Layer.provideMerge(CommandReceiptStore.layer.pipe(Layer.provide(layerDatabase))),
   );
-  return ClaudeAccountsModule.layer.pipe(
+  return ClaudeAccountLoginModule.layer.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        ServerSecretStore.layer,
-        options.checkLayer,
-        ClaudeExternalProcesses.layerWith({ procRoot: options.procRoot }),
-        layerOrchestration,
-      ).pipe(
-        Layer.provideMerge(layerSettings),
+      ClaudeAccountsModule.layer.pipe(
         Layer.provideMerge(
-          ServerConfig.ServerConfig.layerTest(process.cwd(), {
-            prefix: "t3-claude-accounts-test-",
-          }),
+          Layer.mergeAll(
+            ServerSecretStore.layer,
+            options.checkLayer,
+            ClaudeExternalProcesses.layerWith({ procRoot: options.procRoot }),
+            layerOrchestration,
+          ).pipe(
+            Layer.provideMerge(layerSettings),
+            Layer.provideMerge(
+              ServerConfig.ServerConfig.layerTest(process.cwd(), {
+                prefix: "t3-claude-accounts-test-",
+              }),
+            ),
+          ),
         ),
       ),
     ),
+    Layer.provide(Layer.succeed(PtyAdapter.PtyAdapter, options.pty)),
     Layer.provide(Layer.succeed(FileSystem.FileSystem, options.fileSystem)),
   );
 };
@@ -576,6 +679,7 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
     spec.renameFault === undefined ? fileSystem : yield* renameFaultFileSystem(spec.renameFault);
 
   const fake = makeFakeClaude();
+  const pty = new FakeLoginPty();
   const scope = yield* Effect.scope;
   const context = yield* Layer.build(
     Layer.fresh(
@@ -586,6 +690,7 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
         fileSystem: serviceFileSystem,
         fake,
         scope,
+        pty,
       }),
     ),
   );
@@ -593,6 +698,10 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
   const secrets = Context.get(context, ServerSecretStore.ServerSecretStore);
   return {
     accounts: Context.get(context, ClaudeAccounts),
+    login: Context.get(context, ClaudeAccountLoginModule.ClaudeAccountLogin),
+    pty,
+    serverConfig: config,
+    stateDir: config.stateDir,
     threads: Context.get(context, ThreadManagementService.ThreadManagementService),
     orchestrator: Context.get(context, Orchestrator.OrchestratorV2),
     providerSessions: Context.get(context, ProviderSessionManager.ProviderSessionManagerV2),
@@ -2199,42 +2308,462 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
     ),
   );
 
+  describe("adding an account beside the setup", () => {
+    const LOGINS_DIR = "claude-account-logins";
+    const { CLAUDE_ACCOUNT_LOGIN_TIMEOUT } = ClaudeAccountLoginModule;
+
+    // Stands in for one WebSocket connection; closing the scope is the socket closing.
+    const openConnection = Effect.fn("test.openConnection")(function* (h: Harness) {
+      const scope = yield* Scope.make();
+      const connection = yield* h.login.openConnection.pipe(
+        Effect.provideService(Scope.Scope, scope),
+      );
+      return { connection, close: Scope.close(scope, Exit.void) };
+    });
+    type Connection = ClaudeAccountLoginModule.ClaudeAccountLoginConnection;
+
+    const startAdd = (connection: Connection, name = "Private") =>
+      connection.start({ instanceId: id("claudeAgent"), name });
+
+    const loginsDir = (h: Harness) =>
+      Path.Path.pipe(Effect.map((path) => path.join(h.stateDir, LOGINS_DIR)));
+    const attemptDir = (h: Harness, index = -1) =>
+      h.pty.spawnInputs.at(index)!.env.CLAUDE_CONFIG_DIR!;
+    const exists = (target: string) =>
+      FileSystem.FileSystem.pipe(Effect.flatMap((fileSystem) => fileSystem.exists(target)));
+
+    // "The login": the CLI writes the new account's files into the attempt folder and exits 0.
+    const writeAttemptLogin = Effect.fn("test.writeAttemptLogin")(function* (
+      h: Harness,
+      login: Login = carol,
+    ) {
+      h.tokens.push(...(yield* writeLoginFiles(attemptDir(h), login)));
+    });
+    const finishLogin = Effect.fn("test.finishLogin")(function* (h: Harness, login: Login = carol) {
+      yield* writeAttemptLogin(h, login);
+      h.pty.emitExit(0);
+    });
+
+    // Every state of an attempt up to and including its first final one.
+    const statesUntilEnd = (connection: Connection, attemptId: string) =>
+      connection.subscribe({ attemptId }).pipe(
+        Stream.takeUntil((state) => state.phase !== "running"),
+        Stream.runCollect,
+      );
+    const finalState = (connection: Connection, attemptId: string) =>
+      statesUntilEnd(connection, attemptId).pipe(Effect.map((states) => states.at(-1)!));
+    const watchStates = (connection: Connection, attemptId: string) =>
+      Effect.forkChild(statesUntilEnd(connection, attemptId), { startImmediately: true });
+
+    const assertStatesHoldNoLogin = (h: Harness, states: ReadonlyArray<ClaudeAccountAddState>) => {
+      for (const state of states) assertNoLogin(h, JSON.stringify(state));
+    };
+
+    it.effect("AK-15: adding an account keeps the setup logged in", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          yield* work(h);
+          const before = yield* h.readEverything("claudeAgent");
+          const { connection } = yield* openConnection(h);
+
+          const started = yield* startAdd(connection);
+          assert.strictEqual(started.phase, "running");
+          const watched = yield* watchStates(connection, started.attemptId);
+
+          const spawn = h.pty.spawnInputs[0]!;
+          assert.strictEqual(spawn.shell, "claude");
+          assert.deepEqual(spawn.args, ["auth", "login"]);
+          const dir = attemptDir(h);
+          assert.strictEqual(path.dirname(dir), yield* loginsDir(h));
+          assert.strictEqual((yield* fileSystem.stat(dir)).mode & 0o777, 0o700);
+          assert.strictEqual(spawn.env.T3CODE_CLAUDE_OWNER_PID, "4242");
+
+          yield* finishLogin(h);
+          const states = yield* Fiber.join(watched);
+          const final = states.at(-1)!;
+          assert.strictEqual(final.phase, "succeeded");
+          assert.deepEqual(final.account, { name: "Private", email: carol.email });
+          assertStatesHoldNoLogin(h, [started, ...states]);
+
+          const list = yield* h.accounts.list;
+          assert.include(
+            list.accounts.map((account) => account.name),
+            "Private",
+          );
+          assert.strictEqual(list.setups[0]?.active?.rememberedAs, "Work");
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+          assert.isFalse(yield* exists(dir));
+        }),
+      ),
+    );
+
+    it.effect("AK-16: the pasted code and the terminal size reach the login terminal", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const before = yield* h.readEverything("claudeAgent");
+          const { connection } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(connection);
+
+          yield* connection.respond({
+            attemptId,
+            data: "pasted-code\r",
+            size: { cols: 100, rows: 30 },
+          });
+          assert.deepEqual(h.pty.writes, ["pasted-code\r"]);
+          assert.deepEqual(h.pty.resizeCalls, [{ cols: 100, rows: 30 }]);
+
+          h.pty.emitData("Paste code here");
+          const shown = yield* connection.subscribe({ attemptId }).pipe(
+            Stream.filter((state) => state.outputOffset > 0),
+            Stream.runHead,
+          );
+          assert.isTrue(Option.isSome(shown));
+          assert.strictEqual(Option.getOrThrow(shown).output, "Paste code here");
+          assert.strictEqual(Option.getOrThrow(shown).outputOffset, "Paste code here".length);
+
+          yield* finishLogin(h);
+          const final = yield* finalState(connection, attemptId);
+          assert.strictEqual(final.phase, "succeeded");
+          assert.deepEqual(final.account, { name: "Private", email: carol.email });
+          assert.strictEqual((yield* h.accounts.list).setups[0]?.active?.rememberedAs, "Work");
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+        }),
+      ),
+    );
+
+    it.effect("AK-22: cancelling the login leaves no login behind", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const stored = yield* h.storedAccounts();
+          const { connection } = yield* openConnection(h);
+          const started = yield* startAdd(connection);
+          const watched = yield* watchStates(connection, started.attemptId);
+          yield* writeAttemptLogin(h);
+          const dir = attemptDir(h);
+
+          yield* connection.cancel({ attemptId: started.attemptId });
+
+          assert.isFalse(yield* exists(dir));
+          assert.isTrue(h.pty.killed);
+          const states = yield* Fiber.join(watched);
+          assert.strictEqual(states.at(-1)!.phase, "cancelled");
+          assertStatesHoldNoLogin(h, [started, ...states]);
+          assert.deepEqual(yield* h.storedAccounts(), stored);
+        }),
+      ),
+    );
+
+    it.effect("AK-23: closing the app without cancelling leaves no login behind", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const stored = yield* h.storedAccounts();
+          const { connection, close } = yield* openConnection(h);
+          yield* startAdd(connection);
+          yield* writeAttemptLogin(h);
+          const dir = attemptDir(h);
+
+          yield* close;
+
+          assert.isFalse(yield* exists(dir));
+          assert.isTrue(h.pty.killed);
+          assert.deepEqual(yield* h.storedAccounts(), stored);
+        }),
+      ),
+    );
+
+    it.effect("AK-23: an abandoned login stops after 5 minutes and leaves no login behind", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const stored = yield* h.storedAccounts();
+          const { connection } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(connection);
+          const dir = attemptDir(h);
+
+          yield* TestClock.adjust(CLAUDE_ACCOUNT_LOGIN_TIMEOUT);
+
+          const final = yield* finalState(connection, attemptId);
+          assert.strictEqual(final.phase, "failed");
+          assert.strictEqual(final.error?.reason, "loginTimedOut");
+          assert.isFalse(yield* exists(dir));
+          assert.deepEqual(yield* h.storedAccounts(), stored);
+        }),
+      ),
+    );
+
+    it.effect("AK-24: a restart deletes every login folder an earlier run left behind", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const leftover = path.join(yield* loginsDir(h), "leftover");
+          yield* fileSystem.makeDirectory(leftover, { recursive: true });
+          h.tokens.push(...(yield* writeLoginFiles(leftover, carol)));
+
+          yield* ClaudeAccountLoginModule.make.pipe(
+            Effect.provideService(ClaudeAccounts, h.accounts),
+            Effect.provideService(ServerConfig.ServerConfig, h.serverConfig),
+            Effect.provideService(PtyAdapter.PtyAdapter, h.pty),
+            Effect.scoped,
+          );
+
+          assert.isFalse(yield* exists(leftover));
+        }),
+      ),
+    );
+
+    it.effect("AK-32: refuses a taken or empty name before any login starts", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const { connection } = yield* openConnection(h);
+          yield* refusal(h, startAdd(connection, "Work"), "nameInUse");
+          yield* refusal(h, startAdd(connection, ""), "invalidName");
+          assert.strictEqual(h.pty.spawnInputs.length, 0);
+        }),
+      ),
+    );
+
+    it.effect("AK-32: a failed login reads in plain words and leaves no login behind", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const stored = yield* h.storedAccounts();
+          const { connection } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(connection);
+          const dir = attemptDir(h);
+
+          h.pty.emitExit(1);
+
+          const final = yield* finalState(connection, attemptId);
+          assert.strictEqual(final.phase, "failed");
+          assert.strictEqual(final.error?.reason, "loginFailed");
+          for (const forbidden of ["claudeAgent", "`", "claude auth"]) {
+            assert.notInclude(final.error!.message, forbidden);
+          }
+          assert.isFalse(yield* exists(dir));
+          assert.deepEqual(yield* h.storedAccounts(), stored);
+        }),
+      ),
+    );
+
+    it.effect("AK-32: a login that exits successfully without an account fails", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const { connection } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(connection);
+          h.pty.emitExit(0);
+          const final = yield* finalState(connection, attemptId);
+          assert.strictEqual(final.phase, "failed");
+          assert.strictEqual(final.error?.reason, "loginFailed");
+        }),
+      ),
+    );
+
+    it.effect("AK-32: an account that is already remembered is refused by its name", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const stored = yield* h.storedAccounts();
+          const { connection } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(connection);
+          const dir = attemptDir(h);
+
+          yield* finishLogin(h, alice);
+
+          const final = yield* finalState(connection, attemptId);
+          assert.strictEqual(final.phase, "failed");
+          assert.strictEqual(final.error?.reason, "alreadyRemembered");
+          assert.strictEqual(final.error?.name, "Work");
+          assert.deepEqual(yield* h.storedAccounts(), stored);
+          assert.isFalse(yield* exists(dir));
+        }),
+      ),
+    );
+
+    it.effect("AK-32: refuses on another platform and makes no login folder there", () =>
+      run({ ...one(alice), platform: "darwin" }, (h) =>
+        Effect.gen(function* () {
+          const { connection } = yield* openConnection(h);
+          yield* refusal(h, startAdd(connection), "unavailable");
+          assert.strictEqual(h.pty.spawnInputs.length, 0);
+          assert.isFalse(yield* exists(yield* loginsDir(h)));
+        }),
+      ),
+    );
+
+    it.effect("AK-32: a terminal that cannot start fails and leaves no folder behind", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          yield* work(h);
+          const stored = yield* h.storedAccounts();
+          const { connection } = yield* openConnection(h);
+          h.pty.failNextSpawn();
+
+          yield* refusal(h, startAdd(connection), "loginFailed");
+
+          assert.deepEqual(yield* fileSystem.readDirectory(yield* loginsDir(h)), []);
+          assert.deepEqual(yield* h.storedAccounts(), stored);
+        }),
+      ),
+    );
+
+    it.effect("only the connection that started a login can see or steer it", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const { connection: owner } = yield* openConnection(h);
+          const { connection: other } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(owner);
+
+          yield* refusal(h, other.respond({ attemptId, data: "x" }), "loginNotFound");
+          yield* refusal(h, other.cancel({ attemptId }), "loginNotFound");
+          yield* refusal(h, Stream.runDrain(other.subscribe({ attemptId })), "loginNotFound");
+
+          const state = yield* owner.subscribe({ attemptId }).pipe(Stream.runHead);
+          assert.strictEqual(Option.getOrThrow(state).phase, "running");
+          assert.isFalse(h.pty.killed);
+        }),
+      ),
+    );
+
+    it.effect("a second start on the same connection cancels the first", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          const { connection } = yield* openConnection(h);
+          const first = yield* startAdd(connection);
+          const firstDir = attemptDir(h, 0);
+
+          const second = yield* startAdd(connection, "Other");
+
+          assert.isFalse(yield* exists(firstDir));
+          assert.isTrue(h.pty.processes[0]!.killed);
+          yield* refusal(
+            h,
+            Stream.runDrain(connection.subscribe({ attemptId: first.attemptId })),
+            "loginNotFound",
+          );
+          assert.strictEqual(second.phase, "running");
+          assert.isFalse(h.pty.processes[1]!.killed);
+        }),
+      ),
+    );
+
+    it.effect("AK-22: a cancel that comes after the login finished reports the truth", () =>
+      run(two(alice, bob), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          yield* work(h, "claudeWork2", "Other");
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          h.check.respond = (input) =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return { verdict: "Valid", latestClaudeAiOauth: Option.some(input.claudeAiOauth) };
+            });
+          const switching = yield* Effect.forkChild(
+            h.accounts.switch({
+              instanceId: id("claudeAgent"),
+              name: "Other",
+              stopRunningTurns: true,
+            }),
+            { startImmediately: true },
+          );
+          yield* Deferred.await(entered);
+
+          const { connection } = yield* openConnection(h);
+          const { attemptId } = yield* startAdd(connection);
+          const watched = yield* watchStates(connection, attemptId);
+          const dir = attemptDir(h);
+          yield* finishLogin(h);
+          const cancelling = yield* Effect.forkChild(connection.cancel({ attemptId }), {
+            startImmediately: true,
+          });
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(cancelling);
+
+          const final = (yield* Fiber.join(watched)).at(-1)!;
+          assert.strictEqual(final.phase, "succeeded");
+          assert.include(
+            (yield* h.accounts.list).accounts.map((account) => account.name),
+            "Private",
+          );
+          assert.isFalse(yield* exists(dir));
+          yield* Fiber.join(switching);
+        }),
+      ),
+    );
+  });
+
   describe("over the WebSocket RPC", () => {
     const AccountsRpcs = RpcGroup.make(
       WsClaudeAccountsListRpc,
       WsClaudeAccountsRememberRpc,
       WsClaudeAccountsForgetRpc,
       WsClaudeAccountsSwitchRpc,
+      WsClaudeAccountsAddStartRpc,
+      WsClaudeAccountsAddRespondRpc,
+      WsClaudeAccountsAddCancelRpc,
+      WsClaudeAccountsAddSubscribeRpc,
     );
 
     // Drives the real handlers through the RPC server without a socket. Every answer is checked
     // for tokens as the JSON a client would receive.
     const makeRpc = Effect.fn("test.makeRpc")(function* (h: Harness) {
       const pending = new Map<string, Deferred.Deferred<Exit.Exit<unknown, unknown>>>();
+      const chunks = new Map<string, Array<unknown>>();
+      const connection = yield* h.login.openConnection;
       const server = yield* RpcServer.makeNoSerialization(AccountsRpcs, {
         disableTracing: true,
         disableFatalDefects: true,
-        onFromServer: (response) =>
-          response._tag === "Exit"
+        disableClientAcks: true,
+        onFromServer: (response) => {
+          if (response._tag === "Chunk") {
+            chunks.get(String(response.requestId))!.push(...response.values);
+            return Effect.void;
+          }
+          return response._tag === "Exit"
             ? Deferred.succeed(pending.get(String(response.requestId))!, response.exit)
-            : Effect.void,
-      }).pipe(Effect.provide(AccountsRpcs.toLayer(claudeAccountsRpcHandlers(h.accounts))));
+            : Effect.void;
+        },
+      }).pipe(
+        Effect.provide(
+          AccountsRpcs.toLayer({
+            ...claudeAccountsRpcHandlers(h.accounts),
+            ...claudeAccountAddRpcHandlers(connection),
+          }),
+        ),
+      );
       let next = 0;
       return Effect.fn("test.rpcCall")(function* (
         tag: (typeof WS_METHODS)[
           | "claudeAccountsList"
           | "claudeAccountsRemember"
           | "claudeAccountsForget"
-          | "claudeAccountsSwitch"],
+          | "claudeAccountsSwitch"
+          | "claudeAccountsAddStart"
+          | "claudeAccountsAddRespond"
+          | "claudeAccountsAddCancel"
+          | "claudeAccountsAddSubscribe"],
         payload:
           | ClaudeAccountListInput
           | ClaudeAccountRememberInput
           | ClaudeAccountForgetInput
-          | ClaudeAccountSwitchInput,
+          | ClaudeAccountSwitchInput
+          | ClaudeAccountAddStartInput
+          | ClaudeAccountAddRespondInput
+          | ClaudeAccountAddAttemptInput,
       ) {
         const requestId = String(next++);
         const response = yield* Deferred.make<Exit.Exit<unknown, unknown>>();
         pending.set(requestId, response);
+        chunks.set(requestId, []);
         yield* server.write(0, {
           _tag: "Request",
           id: RpcMessage.RequestId(requestId),
@@ -2245,7 +2774,9 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
         const exit = yield* Deferred.await(response);
         const answer = Exit.isSuccess(exit) ? exit.value : Cause.squash(exit.cause);
         assertNoLogin(h, JSON.stringify(answer) ?? "");
-        return { exit, answer };
+        const streamed = chunks.get(requestId)!;
+        for (const value of streamed) assertNoLogin(h, JSON.stringify(value));
+        return { exit, answer, streamed };
       });
     });
 
@@ -2256,6 +2787,53 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
       assert.isTrue(Exit.isSuccess(result.exit));
       return result.answer as A;
     };
+
+    it.effect("AK-15: adds an account over the RPC and streams it to succeeded", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const call = yield* makeRpc(h);
+          const started = succeeded<ClaudeAccountAddState>(
+            yield* call(WS_METHODS.claudeAccountsAddStart, {
+              instanceId: "claudeAgent",
+              name: "Private",
+            }),
+          );
+          assert.strictEqual(started.phase, "running");
+          h.tokens.push(
+            ...(yield* writeLoginFiles(h.pty.spawnInputs[0]!.env.CLAUDE_CONFIG_DIR!, carol)),
+          );
+          h.pty.emitExit(0);
+
+          const subscribed = yield* call(WS_METHODS.claudeAccountsAddSubscribe, {
+            attemptId: started.attemptId,
+          });
+          assert.isTrue(Exit.isSuccess(subscribed.exit));
+          const final = subscribed.streamed.at(-1) as ClaudeAccountAddState;
+          assert.strictEqual(final.phase, "succeeded");
+          assert.deepEqual(final.account, { name: "Private", email: carol.email });
+        }),
+      ),
+    );
+
+    it.effect("AK-32: refuses a taken name over the RPC in plain words", () =>
+      run(one(alice), (h) =>
+        Effect.gen(function* () {
+          yield* work(h);
+          const call = yield* makeRpc(h);
+          const result = yield* call(WS_METHODS.claudeAccountsAddStart, {
+            instanceId: "claudeAgent",
+            name: "Work",
+          });
+          assert.isTrue(Exit.isFailure(result.exit));
+          const error = result.answer as ClaudeAccountsModule.ClaudeAccountError;
+          assert.strictEqual(error._tag, "ClaudeAccountError");
+          assert.strictEqual(error.reason, "nameInUse");
+          assert.strictEqual(error.message, 'The name "Work" is already in use.');
+          assert.strictEqual(h.pty.spawnInputs.length, 0);
+        }),
+      ),
+    );
 
     it.effect("AK-14: remembers the setup's unremembered account and lists it as remembered", () =>
       run(one(alice), (h) =>

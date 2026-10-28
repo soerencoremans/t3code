@@ -53,6 +53,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.claudeAccountsRemember]: AuthProvidersManageScope,
   [WS_METHODS.claudeAccountsForget]: AuthProvidersManageScope,
   [WS_METHODS.claudeAccountsSwitch]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsAddStart]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsAddRespond]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsAddCancel]: AuthProvidersManageScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
