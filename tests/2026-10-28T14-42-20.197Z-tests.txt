@@ -1,0 +1,58 @@
+[WARN] Unsupported engine: wanted: {"node":"^24.13.1"} (current: {"node":"v22.23.1","pnpm":"11.10.0"})
+Scope: all 33 workspace projects
+✓ Lockfile passes supply-chain policies (verified 1h ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +3
++++
+Progress: resolved 3, reused 3, downloaded 0, added 3, done
+
+. prepare$ effect-tsgo patch && vp config --no-agent
+. prepare: typescript skipped because its hash matches the replacement.
+. prepare: Done
+Done in 1.2s using pnpm v11.10.0
+
+=== t3: src/auth/RpcAuthorization.test.ts src/provider/ClaudeAccounts.integration.test.ts src/ws.test.ts ===
+~/apps/server$ vp test run src/auth/RpcAuthorization.test.ts src/provider/ClaudeAccounts.integration.test.ts src/ws.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-13/apps/server
+
+
+ Test Files  3 passed (3)
+      Tests  137 passed (137)
+   Start at  15:42:21
+   Duration  12.11s (tests 59%, transform 24%, import 16%, setup 1%)
+
+
+
+=== @t3tools/client-runtime: src/state/commandPermissions.test.ts ===
+~/packages/client-runtime$ vp test run src/state/commandPermissions.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-13/packages/client-runtime
+
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  15:42:34
+   Duration  610ms (transform 56%, import 36%, setup 4%, tests 3%)
+
+
+
+=== @t3tools/contracts: src/claudeAccounts.test.ts ===
+~/packages/contracts$ vp test run --config ../../vite.config.ts --dir . src/claudeAccounts.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-13/packages/contracts
+
+
+ Test Files  1 passed (1)
+      Tests  54 passed (54)
+   Start at  15:42:35
+   Duration  147ms (import 34%, transform 31%, setup 22%, tests 11%, worker 2%)
+
+
+
+All scoped tests passed.
+(node:1002407) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1004235) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
