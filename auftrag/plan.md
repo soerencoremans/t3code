@@ -70,3 +70,7 @@ Private. Six tickets, server first, then the three screens.
 - Ticket 4 hand-off must ask the human for a manual add-account from a browser on another device (AK-16, focus-1).
 - Each of tickets 4, 5, 6 proves AK-23 dialog-close (cancel on unmount) for its own screen (focus-2).
 - Ticket 3 contract: one attempt per connection; claudeAccountAddState has completeWhen; ProviderAuthTerminalResponse exported from providerSetup.ts.
+
+## Ticket 4 drafted (turn 9) = #14. Seats: ui, ux, component-reuse.
+- Produces for 5/6 in apps/web/src/components/settings/: claudeAccounts.logic.ts (claudeAccountsAvailable, claudeSetupAccountView, claudeAccountErrorMessage), useClaudeAccounts.ts (useClaudeAccountsAvailable, useClaudeSetupAccounts, useClaudeAccountSwitch with shared pending atom), RememberClaudeAccountDialog, AddClaudeAccountDialog, ClaudeAccountAddLogin, ClaudeAccountsSection.
+- Ticket 4 criteria incl. AK-4, AK-5, AK-7 (settings), AK-16/36/39 manual checks in hand-off.
