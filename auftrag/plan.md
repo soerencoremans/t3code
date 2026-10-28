@@ -96,3 +96,9 @@ Private. Six tickets, server first, then the three screens.
 - Ticket 6 adds "Add account…" MenuItem above "Manage accounts" in ClaudeAccountPickerRow.tsx (no slot).
 - AK-37 proven by construction (hand-off note). Criteria: AK-1..8, 12, 13, 28, 33, 34, 35, 37.
 - Ruling (turn 14): all 6 blockers apply fix, 11 suggestions taken. #15 updated. Ticket 5 also produces ClaudeAccountSwitchOutcome (switchTo returns it); row is the MenuTrigger (plain button, triggerRef), radio items; ticket 6 adds "Add account…" MenuItem with PlusIcon above Manage accounts.
+
+## Ticket 6 drafted (turn 15) = #16. Seats: ux, ui, reliability. Blocked by #13, #14, #15.
+- Produces for ticket 8: ClaudeAccountAddLogin.tsx (ClaudeAccountAddLogin{environmentId, attemptId, onEnded}, ClaudeAccountAddOutcome succeeded|failed), AddClaudeAccountDialog{environmentId, instanceId, onClose, onAdded, finalFocus?}.
+- Cancel: single path = ClaudeAccountAddLogin unmount before end, microtask-deferred (StrictMode safe); dialog cancels attempt if start resolves after close.
+- Picker: Add account… only in remembered menu; dialog inside picker tree, finalFocus=triggerRef.
+- Criteria: AK-15, 16, 17, 18, 22, 23, 32. Next: ticket-7 (fresh display), then ticket-8 (share config, last, test-affected).
