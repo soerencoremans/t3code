@@ -64,3 +64,9 @@ Private. Six tickets, server first, then the three screens.
 ## Risks
 - `claude auth login` remote-device behaviour unverified.
 - ws.ts handler extraction deviates slightly from "all handlers inline".
+
+## Ticket 3 ruling (turn 8) — carry into later tickets
+- ticket-3 = #13 (#12 orphan duplicate). Blocked by #10, #11.
+- Ticket 4 hand-off must ask the human for a manual add-account from a browser on another device (AK-16, focus-1).
+- Each of tickets 4, 5, 6 proves AK-23 dialog-close (cancel on unmount) for its own screen (focus-2).
+- Ticket 3 contract: one attempt per connection; claudeAccountAddState has completeWhen; ProviderAuthTerminalResponse exported from providerSetup.ts.
