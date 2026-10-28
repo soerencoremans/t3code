@@ -1,0 +1,49 @@
+[WARN] Unsupported engine: wanted: {"node":"^24.13.1"} (current: {"node":"v22.23.1","pnpm":"11.10.0"})
+Scope: all 33 workspace projects
+✓ Lockfile passes supply-chain policies (verified 6m ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +3
++++
+Progress: resolved 3, reused 3, downloaded 0, added 3, done
+
+. prepare$ effect-tsgo patch && vp config --no-agent
+. prepare: typescript skipped because its hash matches the replacement.
+. prepare: Done
+Done in 1.6s using pnpm v11.10.0
+
+=== t3: src/auth/RpcAuthorization.test.ts src/provider/ClaudeAccounts.integration.test.ts src/ws.test.ts ===
+~/apps/server$ vp test run src/auth/RpcAuthorization.test.ts src/provider/ClaudeAccounts.integration.test.ts src/ws.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-10/apps/server
+
+
+ Test Files  3 passed (3)
+      Tests  112 passed (112)
+   Start at  14:10:48
+   Duration  10.95s (tests 52%, transform 28%, import 19%, setup 1%)
+
+  Transform  transforming modules took 3.03s · 28% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+
+=== @t3tools/contracts: src/claudeAccounts.test.ts ===
+~/packages/contracts$ vp test run --config ../../vite.config.ts --dir . src/claudeAccounts.test.ts ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-10/packages/contracts
+
+
+ Test Files  1 passed (1)
+      Tests  30 passed (30)
+   Start at  14:11:00
+   Duration  153ms (import 35%, transform 30%, setup 24%, tests 8%, worker 2%)
+
+
+
+All scoped tests passed.
+(node:362029) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:363585) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
