@@ -16,31 +16,32 @@
     "branch": "ticket/14",
     "path": "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-14"
   },
-  "label": "Code Review",
+  "label": "Review",
   "conflict": false,
   "counters": {
     "crFails": 0,
     "qaFails": 0,
     "escalations": 0,
-    "countedEvent": 34488048107
+    "countedEvent": 34488088166
   },
   "turns": {
     "developer": 1,
-    "code-reviewer": 1
+    "code-reviewer": 1,
+    "qa": 1
   },
   "turn": {
-    "role": "code-reviewer",
-    "type": "review",
+    "role": "qa",
+    "type": "qa",
     "number": 1,
     "attempt": 1,
-    "sessionId": "7ad61bb3-89cf-430a-aa2e-6de4592766b1",
-    "startedAt": "2026-10-28T15:00:52.547Z",
-    "lastCommentId": 6472474535,
-    "lastLabelEventId": 34487775832,
+    "sessionId": "43211a65-cbf8-4bc0-919e-364792694d16",
+    "startedAt": "2026-10-28T15:03:49.228Z",
+    "lastCommentId": 6472560738,
+    "lastLabelEventId": 34488088372,
     "labelSet": true,
     "lastOpen": false,
     "comments": 1,
-    "setLabel": "Code Review",
+    "setLabel": "Review",
     "ended": true
   },
   "gatedSha": "c51941594fb3340fd534cafde3ae201fe3b194be",
