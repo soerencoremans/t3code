@@ -5,6 +5,7 @@ import {
   claudeAccountErrorMessage,
   claudeAccountsAvailable,
   claudeSetupAccountView,
+  claudeShareConfigSetups,
 } from "./claudeAccounts.logic";
 
 const instanceId = ProviderInstanceId.make("claudeAgent");
@@ -79,6 +80,33 @@ describe("claudeSetupAccountView", () => {
         { ...priv, active: false },
       ],
     });
+  });
+});
+
+describe("claudeShareConfigSetups (AK-19, AK-20)", () => {
+  const spare = {
+    instanceId: ProviderInstanceId.make("claudeAgent_spare"),
+    displayName: "Spare",
+    active: null,
+  };
+  const logged = {
+    instanceId,
+    displayName: null,
+    active: { email: "work@example.com", rememberedAs: "Work" },
+  };
+
+  it("returns only the setups with an account logged in, in the list's order", () => {
+    expect(claudeShareConfigSetups({ accounts: [work], setups: [spare, logged] })).toEqual([
+      logged,
+    ]);
+  });
+
+  it("returns nothing when no setup is logged in", () => {
+    expect(claudeShareConfigSetups({ accounts: [work], setups: [spare] })).toEqual([]);
+  });
+
+  it("returns nothing when there are no setups", () => {
+    expect(claudeShareConfigSetups({ accounts: [], setups: [] })).toEqual([]);
   });
 });
 

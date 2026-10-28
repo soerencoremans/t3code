@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import {
   ClaudeAccountError,
   type ClaudeAccountList,
+  type ClaudeSetupAccountState,
   type ProviderInstanceId,
 } from "@t3tools/contracts";
 
@@ -45,6 +46,13 @@ export function claudeSetupAccountView(
   if (active === null) return { kind: "loggedOut", accounts };
   if (active.rememberedAs === null) return { kind: "notRemembered", email: active.email, accounts };
   return { kind: "remembered", name: active.rememberedAs, email: active.email, accounts };
+}
+
+// A setup with nobody logged in does not count: the default Claude slot is always listed.
+export function claudeShareConfigSetups(
+  list: ClaudeAccountList,
+): ReadonlyArray<ClaudeSetupAccountState> {
+  return list.setups.filter((setup) => setup.active !== null);
 }
 
 export const isClaudeAccountError = Schema.is(ClaudeAccountError);

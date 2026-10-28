@@ -4,7 +4,11 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import type {
+  ClaudeSetupAccountState,
+  EnvironmentId,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { useRef, useState } from "react";
 
@@ -16,6 +20,7 @@ import {
   claudeAccountErrorMessage,
   claudeAccountsAvailable,
   claudeSetupAccountView,
+  claudeShareConfigSetups,
   isClaudeAccountError,
   type ClaudeSetupAccountView,
 } from "./claudeAccounts.logic";
@@ -54,6 +59,17 @@ export function useClaudeSetupAccounts(
         : claudeAccountErrorMessage(query.failure),
     refresh: query.refresh,
   };
+}
+
+/** Mount only where `useClaudeAccountsAvailable` is true. `null` while pending or failed. */
+export function useClaudeShareConfigSetups(
+  environmentId: EnvironmentId,
+): ReadonlyArray<ClaudeSetupAccountState> | null {
+  const query = useEnvironmentQuery(
+    serverEnvironment.claudeAccountList({ environmentId, input: {} }),
+  );
+  if (query.data === null || query.failure !== null || query.error !== null) return null;
+  return claudeShareConfigSetups(query.data);
 }
 
 // Shared by the settings card and the model picker, so neither offers a second switch while
