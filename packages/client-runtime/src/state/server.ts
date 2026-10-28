@@ -1035,6 +1035,18 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:provider:auth-logout",
       tag: WS_METHODS.providerAuthLogout,
     }),
+    claudeAccountList: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:claude-accounts:list",
+      tag: WS_METHODS.claudeAccountsList,
+    }),
+    rememberClaudeAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:remember",
+      tag: WS_METHODS.claudeAccountsRemember,
+    }),
+    forgetClaudeAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:forget",
+      tag: WS_METHODS.claudeAccountsForget,
+    }),
     providerInstallState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:provider:install-state",
       tag: WS_METHODS.providerInstallSubscribe,

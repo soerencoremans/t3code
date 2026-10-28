@@ -1,6 +1,10 @@
 import {
+  ClaudeAccountError,
   ClaudeSettings,
   CommandId,
+  RememberedClaudeAccount,
+  type ClaudeAccountList,
+  type ClaudeSetupAccountState,
   ProviderInstanceId,
   type OrchestrationV2Run,
   type ProjectId,
@@ -42,92 +46,13 @@ import {
 } from "./claudeLoginFiles.ts";
 import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
 
-export const ClaudeAccountErrorReason = Schema.Literals([
-  "unavailable",
-  "setupNotFound",
-  "setupUnreadable",
-  "notLoggedIn",
-  "invalidName",
-  "nameInUse",
-  "alreadyRemembered",
-  "accountNotFound",
-  "storage",
-  "currentNotRemembered",
-  "needsFreshLogin",
-  "loginCheckFailed",
-  "switchFailed",
-  "switchRollbackFailed",
-  "externalClaudePrograms",
-  "processCheckFailed",
-  "sessionStopFailed",
-]);
-export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
-
-export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()(
-  "ClaudeAccountError",
-  {
-    reason: ClaudeAccountErrorReason,
-    instanceId: Schema.optional(ProviderInstanceId),
-    name: Schema.optional(Schema.String),
-  },
-) {
-  override get message(): string {
-    switch (this.reason) {
-      case "unavailable":
-        return "Claude account switching is unavailable on this system. It is supported on Linux only.";
-      case "setupNotFound":
-        return `No Claude setup "${this.instanceId}" is configured.`;
-      case "setupUnreadable":
-        return `Could not read the Claude login of setup "${this.instanceId}".`;
-      case "notLoggedIn":
-        return `No Claude account is logged in on setup "${this.instanceId}".`;
-      case "invalidName":
-        return "An account name must be 1 to 64 characters long and contain no control characters.";
-      case "nameInUse":
-        return `The name "${this.name}" is already in use.`;
-      case "alreadyRemembered":
-        return `This account is already remembered as "${this.name}".`;
-      case "accountNotFound":
-        return `No remembered Claude account is named "${this.name}".`;
-      case "storage":
-        return "Could not read or save the remembered Claude accounts.";
-      case "currentNotRemembered":
-        return `The account logged in on setup "${this.instanceId}" is not remembered. Remember it first, then switch.`;
-      case "needsFreshLogin":
-        return `The saved login of "${this.name}" no longer works. Log in to that account again with \`claude auth login\`, then forget "${this.name}" and remember it again.`;
-      case "loginCheckFailed":
-        return `Could not check the saved login of "${this.name}". Try again.`;
-      case "switchFailed":
-        return `Switching setup "${this.instanceId}" failed. The setup is logged in as before.`;
-      case "switchRollbackFailed":
-        return `Switching setup "${this.instanceId}" failed and its login files could not be restored. Log in again with \`claude auth login\` for this setup.`;
-      case "externalClaudePrograms":
-        return `Claude programs started outside T3 are using setup "${this.instanceId}". Close them, then switch again.`;
-      case "processCheckFailed":
-        return `Could not check whether Claude programs outside T3 are using setup "${this.instanceId}". Try again.`;
-      case "sessionStopFailed":
-        return `Could not stop the running turns on setup "${this.instanceId}". The setup is still logged in as before. Try again.`;
-    }
-  }
-}
-
-export const RememberedClaudeAccount = Schema.Struct({ name: Schema.String, email: Schema.String });
-export type RememberedClaudeAccount = typeof RememberedClaudeAccount.Type;
-
-export const ClaudeSetupAccountState = Schema.Struct({
-  instanceId: ProviderInstanceId,
-  displayName: Schema.NullOr(Schema.String),
-  active: Schema.NullOr(
-    Schema.Struct({ email: Schema.String, rememberedAs: Schema.NullOr(Schema.String) }),
-  ),
-});
-export type ClaudeSetupAccountState = typeof ClaudeSetupAccountState.Type;
-
-export const ClaudeAccountList = Schema.Struct({
-  accounts: Schema.Array(RememberedClaudeAccount),
-  setups: Schema.Array(ClaudeSetupAccountState),
-});
-export type ClaudeAccountList = typeof ClaudeAccountList.Type;
+export {
+  ClaudeAccountError,
+  ClaudeAccountErrorReason,
+  ClaudeAccountList,
+  ClaudeSetupAccountState,
+  RememberedClaudeAccount,
+} from "@t3tools/contracts";
 
 export const ClaudeSwitchResult = Schema.Struct({
   instanceId: ProviderInstanceId,

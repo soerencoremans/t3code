@@ -21,6 +21,14 @@ import {
   ChatGptHandoffInput,
   ChatGptHandoffState,
 } from "./providerSetup.ts";
+import {
+  ClaudeAccountError,
+  ClaudeAccountForgetInput,
+  ClaudeAccountList,
+  ClaudeAccountListInput,
+  ClaudeAccountRememberInput,
+  RememberedClaudeAccount,
+} from "./claudeAccounts.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -423,6 +431,9 @@ export const WS_METHODS = {
   providerInstallCancel: "provider.install.cancel",
   providerInstallSubscribe: "provider.install.subscribe",
   providerInstallRemove: "provider.install.remove",
+  claudeAccountsList: "claudeAccounts.list",
+  claudeAccountsRemember: "claudeAccounts.remember",
+  claudeAccountsForget: "claudeAccounts.forget",
 
   vcsPull: "vcs.pull",
   vcsRefreshStatus: "vcs.refreshStatus",
@@ -683,6 +694,29 @@ const WsProviderAuthLogoutRpc = Rpc.make(WS_METHODS.providerAuthLogout, {
   payload: ProviderSetupInput,
   success: ProviderAuthState,
   error: ProviderSetupRpcError,
+});
+
+export const ClaudeAccountRpcError = Schema.Union([
+  ClaudeAccountError,
+  EnvironmentAuthorizationError,
+]);
+
+export const WsClaudeAccountsListRpc = Rpc.make(WS_METHODS.claudeAccountsList, {
+  payload: ClaudeAccountListInput,
+  success: ClaudeAccountList,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsRememberRpc = Rpc.make(WS_METHODS.claudeAccountsRemember, {
+  payload: ClaudeAccountRememberInput,
+  success: RememberedClaudeAccount,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsForgetRpc = Rpc.make(WS_METHODS.claudeAccountsForget, {
+  payload: ClaudeAccountForgetInput,
+  success: Schema.Void,
+  error: ClaudeAccountRpcError,
 });
 
 const WsProviderAuthSubscribeRpc = Rpc.make(WS_METHODS.providerAuthSubscribe, {
@@ -1899,6 +1933,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsProviderInstallCancelRpc,
   WsProviderInstallSubscribeRpc,
   WsProviderInstallRemoveRpc,
+  WsClaudeAccountsListRpc,
+  WsClaudeAccountsRememberRpc,
+  WsClaudeAccountsForgetRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,
