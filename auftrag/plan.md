@@ -107,3 +107,4 @@ Private. Six tickets, server first, then the three screens.
 - refreshClaudeSetupSnapshots(instances)(ids) in claudeSetupSnapshots.ts: invalidateCaches + snapshot.refresh (no ProviderRegistry dep); called in switch after ensuring(resumeHeldQueues), inside permits; logged not failed.
 - Ordering via managedProvider refreshSemaphore; fallback stores accountUuid read before probe (readClaudeAccountUuid in claudeLoginFiles.ts); undefined===undefined keeps :442 test.
 - Next: ticket-8 (share config, last, test-affected gate). Then closing.
+- Ticket 7 ruling (turn 19): #17 updated; refresh under switchPermit only; readClaudeAccountConfigIds; helper exported from ClaudeAccounts.ts. Next: ticket-8.
