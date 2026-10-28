@@ -1309,6 +1309,15 @@
       "from": "1",
       "to": "63",
       "copy": null
+    },
+    {
+      "session": "3eb4833f-6410-498e-a659-74364d67ca4c",
+      "role": "coverage",
+      "part": "main",
+      "file": "~/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-8/3eb4833f-6410-498e-a659-74364d67ca4c.jsonl",
+      "from": "1",
+      "to": "50",
+      "copy": null
     }
   ]
 }

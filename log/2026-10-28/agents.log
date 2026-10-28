@@ -575,3 +575,8 @@
 2026-10-28T12:22:41.288Z usage-limit session=8c2329f8-25ed-4038-b8b3-eb190ed3e064 role=coverage fiveHour=9 d5h=0 sevenDay=2 d7d=0 scoped=2 scopedModel=Fable resetsAt=2026-10-28T13:50:00.184889+00:00
 2026-10-28T12:22:41.291Z turn-calls session=8c2329f8-25ed-4038-b8b3-eb190ed3e064 role=coverage calls=8 tools=7 perCall=0.88 batched=0 maxBatch=1 mix="Bash=7"
 2026-10-28T12:22:50.487Z run-total turns=1 ms=48775 cost=0.3067 in=16 out=3522 cacheW=59104 cacheR=350327 models="claude-sonnet-5-5=0.3067" unaccounted=0
+2026-10-28T12:32:42.851Z turn-end session=3eb4833f-6410-498e-a659-74364d67ca4c role=coverage provider=anthropic model=sonnet exit=0 error=false apiStatus=- terminalReason=completed ms=42088 apiMs=17449 turns=6 denials=0 cost=0.2003 in=10 out=2208 cacheW=39037 cacheR=220339 models="claude-sonnet-5-5=0.2003" basis=first stderr=- text=-
+2026-10-28T12:32:42.856Z turn-transcript session=3eb4833f-6410-498e-a659-74364d67ca4c role=coverage part=main file=/home/soeren/.claude-loop-forge/projects/-home-soeren-shared-fastnd-t3code--loop-forge-worktrees-auftrag-8/3eb4833f-6410-498e-a659-74364d67ca4c.jsonl from=1 to=50
+2026-10-28T12:32:44.010Z usage-limit session=3eb4833f-6410-498e-a659-74364d67ca4c role=coverage fiveHour=9 d5h=0 sevenDay=2 d7d=0 scoped=2 scopedModel=Fable resetsAt=2026-10-28T13:49:59.883114+00:00
+2026-10-28T12:32:44.012Z turn-calls session=3eb4833f-6410-498e-a659-74364d67ca4c role=coverage calls=5 tools=5 perCall=1 batched=1 maxBatch=2 mix="Bash=5"
+2026-10-28T12:32:52.704Z run-total turns=1 ms=42088 cost=0.2003 in=10 out=2208 cacheW=39037 cacheR=220339 models="claude-sonnet-5-5=0.2003" unaccounted=0
