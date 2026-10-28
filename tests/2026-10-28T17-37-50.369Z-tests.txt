@@ -1,0 +1,1241 @@
+Scope: all 33 workspace projects
+✓ Lockfile passes supply-chain policies (verified 4h ago)
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +3
++++
+Progress: resolved 3, reused 3, downloaded 0, added 3, done
+
+. prepare$ effect-tsgo patch && vp config --no-agent
+. prepare: typescript skipped because its hash matches the replacement.
+. prepare: Done
+Done in 1.2s using pnpm v11.10.0
+
+=== typecheck: vp run --concurrency-limit 2 --filter @t3tools/client-runtime --filter @t3tools/contracts --filter @t3tools/desktop --filter @t3tools/marketing --filter @t3tools/mobile --filter @t3tools/provider-acp --filter @t3tools/provider-acp-registry --filter @t3tools/provider-core --filter @t3tools/provider-cursor --filter @t3tools/provider-grok --filter @t3tools/provider-muse --filter @t3tools/provider-opencode --filter @t3tools/provider-pi --filter @t3tools/provider-testing --filter @t3tools/scripts --filter @t3tools/shared --filter @t3tools/source-control-azure-devops --filter @t3tools/source-control-bitbucket --filter @t3tools/source-control-core --filter @t3tools/source-control-forgejo --filter @t3tools/source-control-gitcafe --filter @t3tools/source-control-github --filter @t3tools/source-control-gitlab --filter @t3tools/source-control-testing --filter @t3tools/ssh --filter @t3tools/tailscale --filter @t3tools/web --filter t3 --filter t3code-relay typecheck ===
+~/packages/contracts$ tsc-rs --noEmit ⊘ cache disabled
+src/auth.test.ts(18,19): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/baseSchemas.test.ts(45,19): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+
+~/packages/shared$ tsc-rs --noEmit ⊘ cache disabled
+src/HostProcess.ts(91,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("defaultValue")(function*() { ... })`. effect(effectFnOpportunity)
+src/httpReadiness.ts(121,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onNone")(function*() { ... })`. effect(effectFnOpportunity)
+src/nodeSqliteClient.ts(105,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("checkNodeSqliteCompat")(() => { ... })`. effect(effectFnOpportunity)
+src/nodeSqliteClient.ts(433,31): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/nodeSqliteClient.ts(440,3): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/nodeSqliteClient.ts(441,29): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/nodeSqliteClient.ts(462,13): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/nodeSqliteClient.ts(627,3): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/symlink.ts(28,7): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+
+~/apps/marketing$ astro check ⊘ cache disabled
+~/packages/source-control-core$ tsc-rs --noEmit ⊘ cache disabled
+
+~/packages/tailscale$ tsc-rs --noEmit ⊘ cache disabled
+
+~/packages/ssh$ tsc-rs --noEmit ⊘ cache disabled
+src/auth.ts(51,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SshPasswordPrompt.request")(() => { ... })`. effect(effectFnOpportunity)
+src/command.ts(311,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onNone")(function*() { ... })`. effect(effectFnOpportunity)
+
+~/packages/provider-core$ tsc-rs --noEmit ⊘ cache disabled
+18:37:52 [types] Generated 26ms
+18:37:52 [check] Getting diagnostics for Astro files in /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/apps/marketing...
+src/server/McpProviderSessions.ts(95,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpProviderSessions.read")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/server/McpProviderSessions.ts(96,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpProviderSessions.clear")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/server/McpProviderSessions.ts(110,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpProviderSessions.recordHtmlRender")((threadId, input, reference) => { ... })`. effect(effectFnOpportunity)
+src/server/McpProviderSessions.ts(130,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpProviderSessions.takeHtmlRender")((threadId, input, reported) => { ... })`. effect(effectFnOpportunity)
+src/server/ProviderContinuationRequests.ts(55,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderContinuationRequests.offer")((request) => { ... })`. effect(effectFnOpportunity)
+src/server/ProviderLatestVersions.ts(53,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderLatestVersions.invalidate")((key) => { ... })`. effect(effectFnOpportunity)
+src/server/snapshotProbe.test.ts(179,9): suggestion TS377124: `Effect.provideService` provides this inline single-service layer directly. effect(provideLayerSucceedToProvideService)
+
+~/packages/source-control-testing$ tsc-rs --noEmit ⊘ cache disabled
+
+~/scripts$ tsc-rs --noEmit ⊘ cache disabled
+
+~/packages/source-control-bitbucket$ tsc-rs --noEmit ⊘ cache disabled
+src/server/BitbucketApi.ts(965,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketApi.listPullRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketApi.ts(992,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketApi.getPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketApi.ts(994,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketApi.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketApi.ts(996,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketApi.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketApi.ts(1061,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketApi.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(547,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.getViewer")(() => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(562,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.listPullRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(584,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.getPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(599,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.getRepositoryPermission")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(612,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.getFileRevisions")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(629,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.getDiffStat")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(637,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.getMergeability")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(646,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.listComments")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(656,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.listCommits")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(667,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.listChecks")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(678,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.listReviewerCandidates")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(712,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.setReviewerRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(739,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.runAction")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(756,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.updateChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(774,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.comment")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(785,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.updateComment")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(798,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.submitReview")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(838,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.replyToComment")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketPullRequestApi.ts(852,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BitbucketPullRequestApi.setCommentResolution")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(40,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.listChangeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(68,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(85,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(114,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(130,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(146,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/BitbucketSourceControlProvider.ts(164,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.checkoutChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+
+~/packages/provider-acp$ tsc-rs --noEmit ⊘ cache disabled
+src/server/AcpSessionRuntime.ts(501,7): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/server/AcpSessionRuntime.ts(511,7): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/server/AcpSessionRuntime.ts(527,7): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/server/AcpSessionRuntime.ts(1977,15): suggestion TS377118: `Effect.fromOption` expresses this Option-to-Effect conversion more directly than `Option.match` or an Option tag conditional. effect(optionMatchToFromOption)
+src/server/AcpSessionRuntime.ts(2024,7): suggestion TS377132: `Effect.andThen` expresses this sequencing more directly than `Effect.flatMap` with a zero-parameter callback. effect(flatMapIgnoredParamToAndThen)
+src/server/AcpSessionRuntime.ts(2241,7): suggestion TS377116: `Effect.catchIf` expresses selective recovery more directly than `Effect.catch` with a conditional `Effect.fail` passthrough. effect(catchConditionalRefailToCatchIf)
+src/server/AcpSessionRuntime.ts(2598,15): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/server/adapter.ts(1391,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(1392,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(5389,23): suggestion TS377017: This Effect.gen contains a single return statement. effect(unnecessaryEffectGen)
+src/server/adapter.ts(6083,21): suggestion TS377017: This Effect.gen contains a single return statement. effect(unnecessaryEffectGen)
+src/server/adapter.ts(7119,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("scheduleDeferredFinalize")(function*(context) { ... })`. effect(effectFnOpportunity)
+src/server/clientTerminals.test.ts(263,32): suggestion TS377113: `Effect.forEach` expresses this effectful array mapping more directly than `Effect.all` over `Array#map`. effect(allOfMapToForEach)
+
+~/packages/provider-testing$ tsc-rs --noEmit ⊘ cache disabled
+src/TestProviderHost.ts(59,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderHost.ProviderHost.shouldRunBackgroundWork")(() => { ... })`. effect(effectFnOpportunity)
+src/TestProviderHost.ts(61,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderHost.ProviderHost.credentials")((namespace, bindingId) => { ... })`. effect(effectFnOpportunity)
+
+~/packages/source-control-gitlab$ tsc-rs --noEmit ⊘ cache disabled
+src/server/GitLabCli.ts(459,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.listMergeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabCli.ts(496,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.getMergeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabCli.ts(523,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabCli.ts(545,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabCli.ts(610,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.createMergeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabCli.ts(631,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabCli.ts(652,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabCli.checkoutMergeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1069,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.listMergeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1077,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.listNotes")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1079,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.listReactions")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1117,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.listCommits")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1142,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.getMergeRequestDiff")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1213,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.getProjectMergeCapabilities")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1233,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.listReviewerCandidates")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1251,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.setReviewerRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1304,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.updateMergeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1318,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.commentOnMergeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1328,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.updateNote")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1338,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.listDiscussions")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1389,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.replyToDiscussion")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabPullRequestCli.ts(1399,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitLabPullRequestCli.setDiscussionResolution")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(209,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.readChangeRequestTemplate")((_) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(224,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.listChangeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(252,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(270,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(299,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(316,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(333,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitLabSourceControlProvider.ts(347,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.checkoutChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+
+~/packages/source-control-github$ tsc-rs --noEmit ⊘ cache disabled
+src/server/GitHubCredentials.ts(238,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubCredentials.invalidate")((rawHost) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(969,21): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubApiResponseError")(function*(error) { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(1606,13): suggestion TS377120: `Effect.filterOrFail` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/server/GitHubPullRequestApi.ts(1753,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getViewerLogin")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(1756,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.listPullRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(1885,9): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/server/GitHubPullRequestApi.ts(1924,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.searchPullRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(1998,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getPullRequestPreview")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2011,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getPullRequestStack")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2089,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getPullRequestDiff")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2137,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getReviewThreadComments")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2279,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.listActorAvatars")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2288,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getViewerAccess")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2300,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.listReviewerCandidates")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2312,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.setReviewerRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2325,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.listLabelCandidates")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2337,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.setLabels")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2364,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.runPullRequestAction")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2623,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.commentOnPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2633,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.submitReview")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2650,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.replyToReviewThread")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2655,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getPullRequestFilesViewed")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2683,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.getPullRequestFileStats")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2711,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.setPullRequestFilesViewed")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2732,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.setReviewThreadResolution")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2738,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.setReaction")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2771,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.updatePullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubPullRequestApi.ts(2787,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubPullRequestApi.updateComment")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubSourceControlProvider.ts(894,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.readChangeRequestTemplate")((_) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubSourceControlProvider.ts(905,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.listChangeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubSourceControlProvider.ts(923,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/GitHubSourceControlProvider.ts(1036,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.checkoutChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/gitHubGraphQlClient.ts(118,12): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+
+~/packages/source-control-azure-devops$ tsc-rs --noEmit ⊘ cache disabled
+src/server/AzureDevOpsCli.ts(389,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.listPullRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsCli.ts(429,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.getPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsCli.ts(463,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsCli.ts(479,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsCli.ts(504,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.createPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsCli.ts(524,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsCli.ts(535,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsCli.checkoutPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(488,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.getViewer")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(542,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.listPullRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(555,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.getPullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(586,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.listThreads")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(596,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.listIterations")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(606,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.listIterationChanges")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(633,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.readItemContent")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(656,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.setPullRequestReviewers")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(681,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.runPullRequestAction")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsPullRequestCli.ts(700,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AzureDevOpsPullRequestCli.updatePullRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(81,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.listChangeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(109,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(127,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(156,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(173,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(190,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/server/AzureDevOpsSourceControlProvider.ts(204,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.checkoutChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+
+~/packages/source-control-gitcafe$ tsc-rs --noEmit ⊘ cache disabled
+Result (22 files): 
+- 0 errors
+- 0 warnings
+- 0 hints
+
+
+~/packages/source-control-forgejo$ tsc-rs --noEmit ⊘ cache disabled
+src/server/GitCafeCredentials.ts(170,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitCafeCredentials.get")((host) => { ... })`. effect(effectFnOpportunity)
+src/server/GitCafeCredentials.ts(183,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitCafeCredentials.invalidate")((host) => { ... })`. effect(effectFnOpportunity)
+src/server/GitCafeCredentials.ts(184,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitCafeCredentials.cliEnv")((host) => { ... })`. effect(effectFnOpportunity)
+src/server/GitCafePullRequestProvider.ts(473,13): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/server/GitCafePullRequestProvider.ts(478,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/server/GitCafeSourceControlProvider.ts(201,5): suggestion TS377015: This expression contains chained `pipe` calls that can be simplified to a single `pipe` call. effect(unnecessaryPipeChain)
+
+~/packages/provider-grok$ tsc-rs --noEmit ⊘ cache disabled
+src/server/ForgejoSourceControlProvider.ts(340,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+
+~/packages/provider-pi$ tsc-rs --noEmit ⊘ cache disabled
+src/server/driver.ts(174,7): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/server/xaiAcpExtension.ts(1487,15): suggestion TS377009: The previous Effect does not fail, so this error-handling branch will never run. effect(catchUnfailableEffect)
+src/server/xaiAcpExtension.ts(1487,15): suggestion TS377099: `Effect.ignore` expresses ignored failure more directly than `Effect.catch` returning `Effect.void`. effect(catchToIgnore)
+src/server/xaiAcpExtension.ts(1568,13): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+
+~/packages/provider-muse$ tsc-rs --noEmit ⊘ cache disabled
+src/server/adapter.ts(440,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(441,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(1682,31): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/server/adapter.ts(1685,29): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/server/rpc.ts(334,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onSuccess")(function*() { ... })`. effect(effectFnOpportunity)
+src/server/rpc.ts(342,17): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+
+~/packages/provider-opencode$ tsc-rs --noEmit ⊘ cache disabled
+src/server/adapter.ts(284,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(285,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(388,13): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TimeoutError")(function*(cause) { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(1366,35): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/server/adapter.ts(1366,71): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+
+~/packages/provider-cursor$ tsc-rs --noEmit ⊘ cache disabled
+src/server/OpenCodeServerLedger.ts(147,12): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/server/OpenCodeServerLedger.ts(188,24): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/server/OpenCodeServerLedger.ts(208,9): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/server/OpenCodeServerLedger.ts(228,7): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/server/OpenCodeServerLedger.ts(311,29): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OpenCodeServerLedger.track")(() => { ... })`. effect(effectFnOpportunity)
+src/server/OpenCodeServerOwner.ts(169,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OpenCodeServerOwner.withServer")((use) => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.test.ts(107,39): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/server/adapter.ts(940,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(941,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(1013,33): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/server/adapter.ts(1090,31): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/server/adapter.ts(1586,15): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/server/adapter.ts(1586,34): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/server/adapter.ts(3188,43): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/server/adapter.ts(3348,47): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/server/v2/OpenCode2Client.ts(158,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OpenCode2Client.connect")((_) => { ... })`. effect(effectFnOpportunity)
+src/server/v2/OpenCode2Server.ts(161,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OpenCode2Server.withConnection")((use) => { ... })`. effect(effectFnOpportunity)
+src/server/v2/OpenCode2Server.ts(176,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OpenCode2Server.withConnection")((use) => { ... })`. effect(effectFnOpportunity)
+src/server/v2/adapter.ts(1544,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/server/v2/adapter.ts(1544,58): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/server/v2/adapter.ts(4135,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/server/v2/adapter.ts(4136,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+
+~/packages/provider-acp-registry$ tsc-rs --noEmit ⊘ cache disabled
+src/server/CursorAccountReader.ts(31,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("CursorAccountReader.read")((credentialSource, sinceMs, untilMs) => { ... })`. effect(effectFnOpportunity)
+src/server/CursorSdkCatalog.ts(82,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("CursorSdkCatalog.read")((apiKey) => { ... })`. effect(effectFnOpportunity)
+src/server/accountUsage.ts(360,5): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/server/adapter.ts(904,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/server/adapter.ts(905,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+src/server/credentialStore.ts(55,7): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/server/credentialStore.ts(59,29): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/server/credentialStore.ts(69,7): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/server/credentialStore.ts(82,18): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/server/driver.ts(228,11): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/server/usageLimits.test.ts(74,5): suggestion TS377017: This Effect.gen contains a single return statement. effect(unnecessaryEffectGen)
+
+~/packages/client-runtime$ tsc-rs --noEmit ⊘ cache disabled
+src/server/AcpRegistryRuntimeCoordinator.ts(154,52): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/server/AcpRegistrySupport.ts(1301,9): suggestion TS377116: `Effect.catchIf` expresses selective recovery more directly than `Effect.catch` with a conditional `Effect.fail` passthrough. effect(catchConditionalRefailToCatchIf)
+src/server/auth.ts(146,13): suggestion TS377118: `Effect.fromOption` expresses this Option-to-Effect conversion more directly than `Option.match` or an Option tag conditional. effect(optionMatchToFromOption)
+src/server/driver.ts(640,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("enrichSnapshot")((_) => { ... })`. effect(effectFnOpportunity)
+src/server/driver.ts(650,51): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+
+src/authorization/remote.test.ts(509,25): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/authorization/remote.test.ts(514,17): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/authorization/service.ts(553,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("RemoteEnvironmentAuthorization.authorizeDpop")((input) => { ... })`. effect(effectFnOpportunity)
+src/authorization/service.ts(555,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("RemoteEnvironmentAuthorization.authorizeDpopHttp")((input) => { ... })`. effect(effectFnOpportunity)
+src/connection/githubRoutingPermissions.ts(138,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubRoutingPermissions.get")((entry) => { ... })`. effect(effectFnOpportunity)
+src/connection/githubRoutingPermissions.ts(143,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubRoutingPermissions.set")((entry, permission) => { ... })`. effect(effectFnOpportunity)
+src/connection/githubRoutingPermissions.ts(159,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubRoutingPermissions.forget")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/onboarding.ts(298,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ConnectionOnboarding.registerPairing")((input) => { ... })`. effect(effectFnOpportunity)
+src/connection/onboarding.ts(304,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ConnectionOnboarding.registerSsh")((input) => { ... })`. effect(effectFnOpportunity)
+src/connection/onboarding.ts(309,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ConnectionOnboarding.updateBearer")((input) => { ... })`. effect(effectFnOpportunity)
+src/connection/registry.test.ts(1523,15): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/connection/registry.test.ts(1607,15): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/connection/registry.test.ts(1620,23): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/platform/orchestrationCache.test.ts(190,15): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/state/boundedThreadSnapshotHttp.ts(72,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadSnapshotLoader.ThreadSnapshotLoader.load")((prepared, threadId) => { ... })`. effect(effectFnOpportunity)
+src/state/commandPermissions.ts(56,13): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/state/commandPermissions.ts(62,20): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/state/fileMetadata.test.ts(438,14): suggestion TS377113: `Effect.forEach` expresses this effectful array mapping more directly than `Effect.all` over `Array#map`. effect(allOfMapToForEach)
+src/state/outdatedServerUpdate.ts(44,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("execute")((target, atomRegistry) => { ... })`. effect(effectFnOpportunity)
+src/state/pullRequestDiffHttp.ts(90,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("PullRequestDiffLoader.load")((prepared, input) => { ... })`. effect(effectFnOpportunity)
+src/state/queryPersistence.ts(34,28): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeEffect` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownEffect`. effect(preferTypedSchemaDecoder)
+src/state/queryPersistence.ts(35,9): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/state/server.test.ts(777,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/server.test.ts(779,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/server.test.ts(782,33): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/server.test.ts(784,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/server.ts(679,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("execute")((target, atomRegistry) => { ... })`. effect(effectFnOpportunity)
+src/state/server.ts(1141,11): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/state/shell-sync.test.ts(89,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(91,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(184,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(186,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(189,33): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(191,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(202,68): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(470,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(473,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(476,33): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(478,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(485,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(555,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(561,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(564,33): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(566,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(573,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(694,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(703,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(706,33): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(708,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(715,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(814,26): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(820,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(823,33): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(825,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(832,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(911,26): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(913,27): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(916,33): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(918,28): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shell-sync.test.ts(925,21): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/shellSnapshotHttp.ts(98,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ShellSnapshotLoader.load")((prepared) => { ... })`. effect(effectFnOpportunity)
+src/state/threadHistoryController.ts(47,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadHistoryController.register")((environmentId, threadId, handler) => { ... })`. effect(effectFnOpportunity)
+src/state/threadHistoryController.ts(59,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadHistoryController.unregister")((registration) => { ... })`. effect(effectFnOpportunity)
+src/state/threadHistoryController.ts(74,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadHistoryController.loadEarlier")((environmentId, threadId, throughEntryId) => { ... })`. effect(effectFnOpportunity)
+src/state/threads-sync.test.ts(1305,29): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/state/vcsAction.ts(447,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("execute")((input, registry) => { ... })`. effect(effectFnOpportunity)
+
+~/apps/mobile$ tsc-rs --noEmit ⊘ cache disabled
+~/infra/relay$ tsc-rs --noEmit ⊘ cache disabled
+src/agentActivity/ApnsDeliveryQueue.ts(220,11): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ApnsDeliveryQueueSender.send")((body) => { ... })`. effect(effectFnOpportunity)
+src/agentActivity/FcmDeliveryQueueConsumer.ts(12,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onFailure")(function*(error) { ... })`. effect(effectFnOpportunity)
+src/environments/CloudflareApiPause.ts(64,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("CloudflareApiPause.pauseUntil")((untilMillis) => { ... })`. effect(effectFnOpportunity)
+src/http/Api.ts(198,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onNone")(function*() { ... })`. effect(effectFnOpportunity)
+src/worker.ts(92,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("HttpPlatform.HttpPlatform.fileResponse")(() => { ... })`. effect(effectFnOpportunity)
+src/worker.ts(93,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("HttpPlatform.HttpPlatform.fileWebResponse")(() => { ... })`. effect(effectFnOpportunity)
+src/worker.ts(238,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("HookInbox.HookInbox.hold")((_) => { ... })`. effect(effectFnOpportunity)
+src/worker.ts(240,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("HookInbox.HookInbox.wake")((_) => { ... })`. effect(effectFnOpportunity)
+src/worker.ts(242,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("HookInbox.HookInbox.clear")((_) => { ... })`. effect(effectFnOpportunity)
+src/worker.ts(271,15): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("FcmDeliveryQueueSender.FcmDeliveryQueueSender.send")((body) => { ... })`. effect(effectFnOpportunity)
+
+~/apps/web$ tsc-rs --noEmit ⊘ cache disabled
+src/connection/platform.ts(805,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentOwnedDataCleanup.clear")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/platform.ts(815,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("EnvironmentRpcRequestObserver.observe")((_) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(549,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubRoutingPermissions.get")((entry) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(576,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubRoutingPermissions.set")((entry, permission) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(596,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitHubRoutingPermissions.forget")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(643,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.ConnectionRegistrationStore.register")((registration, routes) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(647,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.ConnectionRegistrationStore.setRoutes")((environmentId, routes) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(651,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.ConnectionRegistrationStore.remove")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(655,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.ConnectionRegistrationStore.setEnabled")((environmentId, enabled) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(732,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.loadShell")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(768,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.loadServerConfig")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(802,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.loadThread")((environmentId, threadId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(851,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.loadVcsRefs")((environmentId, cwd) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(893,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.removeVcsRefs")((environmentId, cwd) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(899,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.clearVcsRefs")((environmentId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(905,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.removeThread")((environmentId, threadId) => { ... })`. effect(effectFnOpportunity)
+src/connection/storage.ts(911,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("Persistence.EnvironmentCacheStore.clear")((environmentId) => { ... })`. effect(effectFnOpportunity)
+
+~/apps/desktop$ tsc-rs --noEmit ⊘ cache disabled
+src/app/DesktopAppActivation.ts(389,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppActivation.complete")((response) => { ... })`. effect(effectFnOpportunity)
+src/app/DesktopClerk.test.ts(383,27): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/app/DesktopObservability.ts(459,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onSome")(function*(logFile) { ... })`. effect(effectFnOpportunity)
+src/app/DesktopObservability.ts(589,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBackendOutputLogFactory.forInstance")((id) => { ... })`. effect(effectFnOpportunity)
+src/app/DesktopWebLinks.test.ts(29,31): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/app/DesktopWebLinks.ts(72,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWebLinks.receive")((url) => { ... })`. effect(effectFnOpportunity)
+src/app/DesktopWebLinks.ts(77,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWebLinks.setRendererReady")((ready) => { ... })`. effect(effectFnOpportunity)
+src/backend/DesktopBackendManager.ts(1062,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onSome")(function*(run) { ... })`. effect(effectFnOpportunity)
+src/backend/DesktopBackendPool.ts(307,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBackendPool.get")((id) => { ... })`. effect(effectFnOpportunity)
+src/backend/DesktopBackendPool.ts(342,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBackendPool.get")((id) => { ... })`. effect(effectFnOpportunity)
+src/backend/DesktopBackendPool.ts(345,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBackendPool.register")(() => { ... })`. effect(effectFnOpportunity)
+src/backend/DesktopBackendPool.ts(346,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBackendPool.unregister")(() => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(145,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.exit")((code) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(149,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.relaunch")((options) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(153,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setPath")((name, path) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(157,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setName")((name) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(161,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setAboutPanelOptions")((options) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(165,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setAppUserModelId")((id) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(170,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setAsDefaultProtocolClient")((protocol, path, args) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(177,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setDesktopName")((desktopName) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(184,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.setDockIcon")((iconPath) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(188,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.appendCommandLineSwitch")((switchName, value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(196,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.onBeforeQuitForUpdate")((listener) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronApp.ts(206,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronApp.removeCommandLineSwitch")((switchName) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronDialog.ts(169,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronDialog.showMessageBox")((options, owner) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronDialog.ts(185,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronDialog.showErrorBox")((title, content) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronMenu.ts(193,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronMenu.setApplicationMenu")((template) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronMenu.ts(207,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronMenu.popupTemplate")((input) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronMenu.ts(225,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronMenu.showContextMenu")((input) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronPowerMonitor.ts(82,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronPowerMonitor.getSystemIdleState")((idleThresholdSeconds) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronSafeStorage.ts(77,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronSafeStorage.encryptString")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronSafeStorage.ts(82,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronSafeStorage.decryptString")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronShell.ts(68,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronShell.openExternal")((rawUrl) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronShell.ts(79,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronShell.openSystemSettings")((pane) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronShell.ts(86,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronShell.copyText")((text) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronTheme.ts(34,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronTheme.setSource")((theme) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronTheme.ts(41,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronTheme.onUpdated")((listener) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(85,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setFeedURL")((options) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(90,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setAutoDownload")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(95,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setAutoInstallOnAppQuit")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(100,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setChannel")((channel) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(105,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setAllowPrerelease")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(111,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setAllowDowngrade")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(116,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setFullChangelog")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(121,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.setDisableDifferentialDownload")((value) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(140,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.quitAndInstall")((_) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronUpdater.ts(154,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronUpdater.on")((eventName, listener) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronWindow.ts(211,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronWindow.create")((options) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronWindow.ts(243,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronWindow.setMain")((window) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronWindow.ts(244,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronWindow.clearMain")((window) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronWindow.ts(254,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronWindow.prepareReveal")((window) => { ... })`. effect(effectFnOpportunity)
+src/electron/ElectronWindow.ts(264,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ElectronWindow.reveal")((window) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(526,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setMainWindowBounds")((bounds, isMaximized) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(538,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setServerExposureMode")((mode) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(542,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setTailscaleServe")((input) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(546,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setUpdateChannel")((channel) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(550,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setWslBackendEnabled")((enabled) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(554,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setWslDistro")((distro) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(560,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setWslOnly")((enabled) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(564,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setLocalEnvironmentEnabled")((enabled) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(599,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setMainWindowBounds")((bounds, isMaximized) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(601,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setServerExposureMode")((mode) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(603,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setTailscaleServe")((input) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(604,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setUpdateChannel")((channel) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(605,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setWslBackendEnabled")((enabled) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(607,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setWslDistro")((distro) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(608,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setWslOnly")((enabled) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopAppSettings.ts(609,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopAppSettings.setLocalEnvironmentEnabled")((enabled) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopClientSettings.ts(197,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopClientSettings.set")((settings) => { ... })`. effect(effectFnOpportunity)
+src/settings/DesktopClientSettings.ts(231,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopClientSettings.set")((settings) => { ... })`. effect(effectFnOpportunity)
+src/snapShot/DesktopSnapShot.ts(1729,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSnapShot.setAnimationDestination")((id, destination) => { ... })`. effect(effectFnOpportunity)
+src/snapShot/DesktopSnapShot.ts(1740,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSnapShot.dismissAnimation")((id) => { ... })`. effect(effectFnOpportunity)
+src/snapShot/DesktopSnapShot.ts(1745,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSnapShot.acknowledge")((id) => { ... })`. effect(effectFnOpportunity)
+src/ssh/DesktopSshEnvironment.ts(136,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSshEnvironment.discoverHosts")((input) => { ... })`. effect(effectFnOpportunity)
+src/ssh/DesktopSshEnvironment.ts(141,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSshEnvironment.resolveHost")((alias) => { ... })`. effect(effectFnOpportunity)
+src/ssh/DesktopSshEnvironment.ts(146,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSshEnvironment.ensureEnvironment")((target, ensureOptions) => { ... })`. effect(effectFnOpportunity)
+src/ssh/DesktopSshEnvironment.ts(154,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopSshEnvironment.disconnectEnvironment")((target) => { ... })`. effect(effectFnOpportunity)
+src/updates/DesktopUpdates.ts(1171,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopUpdates.installPrepared")((expectedVersion) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1101,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.preWarm")(() => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1102,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.windowsToWslPath")((distro, windowsPath) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1104,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.getUserHome")((distro) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1105,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.getDistroIp")((distro) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1106,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.prepareRuntime")((distro, archive) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1113,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.pruneRuntimes")((distro, runtimeId) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1114,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.invalidateRuntime")((distro, runtimeId) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1116,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.probeRuntime")((distro, linuxAppRoot) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1120,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.ensureNodePty")((distro, linuxAppRoot, options) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1187,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.preWarm")((distro) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1192,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.prepareRuntime")((distro, archive) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1196,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.pruneRuntimes")((distro, runtimeId) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1200,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.invalidateRuntime")((distro, runtimeId) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1204,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.probeRuntime")((distro, linuxAppRoot) => { ... })`. effect(effectFnOpportunity)
+src/wsl/DesktopWslEnvironment.ts(1208,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopWslEnvironment.ensureNodePty")((distro, linuxAppRoot, options) => { ... })`. effect(effectFnOpportunity)
+
+~/apps/server$ tsc-rs --noEmit ⊘ cache disabled
+
+scripts/acp-mock-agent.ts(874,16): suggestion TS377015: This expression contains chained `pipe` calls that can be simplified to a single `pipe` call. effect(unnecessaryPipeChain)
+scripts/record-codex-app-server-replay-fixture.ts(1175,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("logger")((event) => { ... })`. effect(effectFnOpportunity)
+scripts/record-grok-acp-replay-fixture.ts(376,38): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/auth/EnvironmentAuth.ts(1338,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("EnvironmentAuth.getDescriptor")(() => { ... })`. effect(effectFnOpportunity)
+src/auth/EnvironmentAuthPolicy.ts(55,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("EnvironmentAuthPolicy.getDescriptor")(() => { ... })`. effect(effectFnOpportunity)
+src/auth/McpOAuth.ts(540,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpHttpServer.McpClientAuthenticator.authenticate")((request) => { ... })`. effect(effectFnOpportunity)
+src/cloud/CliTokenManager.ts(328,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("HttpClientError")(function*(cause) { ... })`. effect(effectFnOpportunity)
+src/cloud/CloudLink.lifecycle.test.ts(162,19): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/cloud/CloudLink.lifecycle.test.ts(293,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/cloud/CloudLink.test.ts(99,17): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/cloud/ManagedEndpointRuntime.ts(791,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("CloudManagedEndpointRuntime.requestRecovery")((config) => { ... })`. effect(effectFnOpportunity)
+src/cloud/http.test.ts(81,67): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/cloud/managedTunnelStartup.test.ts(318,13): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/cloud/selfUpdate.ts(336,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ServerSelfUpdate.commitDesktopUpdate")((requestId, onHandoffAccepted) => { ... })`. effect(effectFnOpportunity)
+src/device/DeviceService.ts(808,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DeviceService.updateTool")((tool) => { ... })`. effect(effectFnOpportunity)
+src/device/DeviceService.ts(823,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DeviceService.easAccount")(() => { ... })`. effect(effectFnOpportunity)
+src/device/EasDeviceHost.ts(868,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DeviceHost.DeviceHost.ensureAgentReady")((onPhase) => { ... })`. effect(effectFnOpportunity)
+src/device/easProjectId.ts(201,7): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/environment/DirectEndpoints.ts(141,31): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DirectEndpoints.resolve")(() => { ... })`. effect(effectFnOpportunity)
+src/environment/RemoteOpenTargets.ts(83,33): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("RemoteOpenTargets.resolveTargets")(() => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(302,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.isRepository")((cwd) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(315,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.hasCommit")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(327,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.hasRefNamed")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(346,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.status")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(352,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.localStatus")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(360,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.remoteStatus")((input, options) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(369,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.pullCurrentBranch")((cwd) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(373,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.runStackedAction")((input, options) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(388,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.preparePullRequestThread")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(399,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.listRefs")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(405,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.createWorktree")((input, options) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(409,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.listLocalBranchNames")((cwd) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(413,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.fetchRemote")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(417,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.remoteExists")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(421,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.remoteBranchExists")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(425,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.resolveRemoteTrackingCommit")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(429,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.resolveWorktreeBaseRemote")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(433,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.fetchWorktreeBaseCommit")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(437,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.removeWorktree")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(441,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.pruneWorktrees")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(445,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.deleteLocalBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(449,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.createRef")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(457,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.switchRef")((input) => { ... })`. effect(effectFnOpportunity)
+src/git/GitWorkflowService.ts(463,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitWorkflowService.renameBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/htmlRender/headlessChrome.ts(274,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("receive")((raw) => { ... })`. effect(effectFnOpportunity)
+src/mcp/AcpMcpStdioBridge.ts(252,7): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/mcp/AcpMcpStdioBridge.ts(292,7): suggestion TS377099: `Effect.ignoreCause` expresses ignored failure more directly than `Effect.catchCause` returning `Effect.void`. effect(catchToIgnore)
+src/mcp/McpDeviceToolkit.test.ts(106,18): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/mcp/McpHttpServer.ts(421,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("previewSnapshotFailure")(<E>(cause) => { ... })`. effect(effectFnOpportunity)
+src/mcp/McpHttpServer.ts(933,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpServer.McpServer.addTool")((options) => { ... })`. effect(effectFnOpportunity)
+src/mcp/McpSessionRegistry.testkit.ts(22,20): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/mcp/McpToolAccess.ts(112,7): suggestion TS377132: `Effect.andThen` expresses this sequencing more directly than `Effect.flatMap` with a zero-parameter callback. effect(flatMapIgnoredParamToAndThen)
+src/mcp/PreviewAutomationBroker.ts(651,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("onNone")(function*() { ... })`. effect(effectFnOpportunity)
+src/mcp/WorktreeMcpService.test.ts(355,3): suggestion TS377017: This Effect.gen contains a single return statement. effect(unnecessaryEffectGen)
+src/mcp/toolkits/pullRequests/handlers.ts(222,27): suggestion TS377015: This expression contains chained `pipe` calls that can be simplified to a single `pipe` call. effect(unnecessaryPipeChain)
+src/mcpApps/McpAppModelContext.ts(95,27): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpAppModelContext.set")(() => { ... })`. effect(effectFnOpportunity)
+src/mcpApps/McpAppModelContext.ts(95,51): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("McpAppModelContext.forThread")(() => { ... })`. effect(effectFnOpportunity)
+src/observability/BrowserTraceCollector.ts(16,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("BrowserTraceCollector.record")((records) => { ... })`. effect(effectFnOpportunity)
+src/observability/EventLoopMonitor.ts(41,49): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/AcpRegistryAdapterV2.test.ts(1980,69): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/orchestration-v2/Adapters/AcpRegistryAdapterV2.test.ts(1988,43): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/Adapters/AcpRegistryAdapterV2.test.ts(1993,43): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/Adapters/AcpRegistryAdapterV2.test.ts(1997,39): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/Adapters/AcpRegistryAdapterV2.testkit.ts(30,32): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts(48,17): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts(183,23): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts(320,23): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts(465,25): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts(661,23): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts(1368,26): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts(1383,26): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts(1792,37): suggestion TS377015: This expression contains chained `pipe` calls that can be simplified to a single `pipe` call. effect(unnecessaryPipeChain)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts(1798,28): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.test.ts(1821,37): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.ts(3882,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Adapters/ClaudeAdapterV2.ts(3883,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Adapters/ClaudeTaskOutputTail.ts(74,17): suggestion TS377121: This Effect first-completion race has exactly one sleep- or delay-based timer arm. `Effect.timeoutOrElse` expresses the timeout and fallback directly. effect(raceFirstWithSleepToTimeout)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(1714,25): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(1721,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.getCapabilities")(() => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(1722,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapter.ProviderAdapterV2.planSelectionTransition")(() => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(3018,19): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(3019,19): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(3041,19): suggestion TS377099: `Effect.ignore` expresses ignored failure more directly than `Effect.catch` returning `Effect.void`. effect(catchToIgnore)
+src/orchestration-v2/Adapters/CodexAdapterV2.ts(7189,26): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/orchestration-v2/Adapters/GrokAdapterV2.testkit.ts(33,38): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/orchestration-v2/Adapters/MuseAdapterV2.testkit.ts(414,38): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/orchestration-v2/CheckpointCaptureService.ts(242,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("CheckpointCaptureServiceV2.execute")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/CheckpointRestoreSafety.test.ts(117,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/CheckpointRestoreSafety.ts(41,13): suggestion TS377116: `Effect.catchIf` expresses selective recovery more directly than `Effect.catch` with a conditional `Effect.fail` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/CheckpointRestoreSafety.ts(83,17): suggestion TS377116: `Effect.catchIf` expresses selective recovery more directly than `Effect.catch` with a conditional `Effect.fail` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/CheckpointRollbackService.test.ts(470,22): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ClaudeAutomaticDelivery.integration.test.ts(142,28): suggestion TS377111: `AbortController` is manually constructed inside Effect code. Use `Effect.abortSignal` for Effect-managed cancellation. effect(abortControllerInEffect)
+src/orchestration-v2/CommandOutputHub.test.ts(169,5): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/orchestration-v2/CommandReceiptStore.ts(164,29): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/CommandReceiptStore.ts(167,21): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/CommandReceiptStore.ts(168,58): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/orchestration-v2/CommandReceiptStore.ts(183,17): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/CommandReceiptStore.ts(192,25): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/orchestration-v2/EffectOutbox.ts(426,17): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectOutbox.ts(427,39): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/orchestration-v2/EffectWorker.test.ts(112,20): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(340,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(407,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(474,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(475,18): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(539,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(540,18): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(600,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(601,18): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(672,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(673,18): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(791,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.test.ts(819,24): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/EffectWorker.ts(101,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestrationEffectExecutorV2.execute")((effect, options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/EffectWorker.ts(183,17): suggestion TS377116: `Effect.catchIf` expresses selective recovery more directly than `Effect.catch` with a conditional `Effect.fail` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/EventStore.ts(110,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("EventStoreV2.append")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/EventStore.ts(120,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("EventStoreV2.appendProjectEvent")((event) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/EventStore.ts(131,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("EventStoreV2.latestSequence")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/FoundationPersistence.test.ts(1987,26): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/FoundationPersistence.test.ts(1992,11): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/FoundationPersistence.test.ts(2042,26): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/FoundationPersistence.test.ts(2044,11): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/FoundationPersistence.test.ts(3044,30): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/FoundationPersistence.test.ts(3261,30): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/OpenCode2OrchestratorV2.live.test.ts(95,20): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/Orchestrator.ts(11501,7): suggestion TS377120: `Effect.filterOrFail` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/orchestration-v2/Orchestrator.ts(11877,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.restartContinuationPending")((run) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11879,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.awaitRestartContinuation")((run) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11882,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.autoArmLimitRecovery")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11910,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.searchThread")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11918,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadHistoryPage")((threadId, cursor, throughEntryId, conversationOnly) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11922,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getTimelinePage")((threadId, options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11926,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getMessageCount")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11930,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getTurnItem")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11938,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadRecords")((threadId, fields, filter) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11942,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadProjection")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11946,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getCheckpointContext")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11950,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadSnapshot")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11954,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadSnapshotWindow")((threadId, options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11958,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getShellSnapshot")((options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11960,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.readShellSnapshot")((options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11967,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadShell")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/Orchestrator.ts(11971,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("OrchestratorV2.getThreadEventSequence")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ProjectSettingsUpgrade.integration.test.ts(160,28): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/orchestration-v2/ProjectStore.ts(266,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProjectStoreV2.getShell")((projectId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ProjectStore.ts(267,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProjectStoreV2.listShells")((options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ProjectionControlReads.test.ts(279,11): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ProviderAdapterRegistry.ts(78,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapterRegistryV2.get")((instanceId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ProviderAdapterRegistry.ts(135,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAdapterRegistryV2.list")(() => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ProviderEventIngestor.ts(93,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderTurnAnalytics.record")((properties) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ProviderEventIngestor.ts(818,15): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/orchestration-v2/ProviderSessionManager.test.ts(1400,19): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ProviderTurnStartService.test.ts(150,13): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ProviderTurnStartService.test.ts(641,13): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ProviderTurnStartService.testkit.ts(14,20): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ProviderTurnStartService.ts(499,15): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/ProviderTurnStartService.ts(1224,7): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/orchestration-v2/PullRequestWatchReactor.ts(476,53): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/orchestration-v2/ResourceCleanupService.ts(49,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ResourceCleanupService.cleanupScheduledTasks")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ResourceCleanupService.ts(58,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ResourceCleanupService.cleanupTerminals")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ResourceCleanupService.ts(66,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ResourceCleanupService.cleanupPreviews")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ResourceCleanupService.ts(74,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ResourceCleanupService.cleanupAttachments")((attachmentIds) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/RunExecutionService.test.ts(1982,16): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/orchestration-v2/RunExecutionService.ts(900,15): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/RuntimePolicy.test.ts(90,9): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/RuntimePolicy.ts(54,3): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("RuntimePolicyV2.resolve")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/RuntimeRequestService.test.ts(75,5): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/RuntimeRequestService.test.ts(139,5): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/RuntimeRequestService.test.ts(206,44): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/RuntimeRequestService.test.ts(217,11): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ThreadLaunchService.test.ts(193,33): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ThreadLaunchService.test.ts(224,32): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ThreadLifecycleService.ts(91,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.archive")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadLifecycleService.ts(97,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.unarchive")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadLifecycleService.ts(103,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.delete")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadLifecycleService.ts(109,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.updateMetadata")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadLifecycleService.ts(118,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.setRuntimeMode")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadLifecycleService.ts(125,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.setInteractionMode")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadLifecycleService.ts(132,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadLifecycleService.setModelSelection")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(688,7): suggestion TS377120: `Effect.filterOrFail` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/orchestration-v2/ThreadManagementService.ts(705,5): suggestion TS377015: This expression contains chained `pipe` calls that can be simplified to a single `pipe` call. effect(unnecessaryPipeChain)
+src/orchestration-v2/ThreadManagementService.ts(716,9): suggestion TS377120: `Effect.filterOrFail` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/orchestration-v2/ThreadManagementService.ts(1129,43): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/orchestration-v2/ThreadManagementService.ts(1140,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadManagementService.searchThread")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(1145,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadManagementService.getThreadHistoryPage")((threadId, cursor, throughEntryId, conversationOnly) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(1151,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadManagementService.getTimelinePage")((threadId, options) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(1155,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadManagementService.getMessageCount")((threadId) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(1159,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadManagementService.getTurnItem")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(1164,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadManagementService.getThreadRecords")((threadId, fields, filter) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadManagementService.ts(1203,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("LegacyV1ThreadImporter.LegacyV1ThreadImporter.ensureTranscript")(() => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/ThreadPullRequestService.test.ts(228,31): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/ThreadPullRequestService.ts(327,17): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/ThreadSettlementService.ts(353,11): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/ThreadSettlementService.ts(516,11): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/ThreadSettlementService.ts(534,7): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/ThreadSettlementService.ts(576,9): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/orchestration-v2/TurnItemPositionStore.ts(106,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TurnItemPositionStoreV2.normalize")((item, runOrdinal) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/http.test.ts(54,23): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeSync` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownSync`. effect(preferTypedSchemaDecoder)
+src/orchestration-v2/http.ts(231,11): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/orchestration-v2/runtimeLayer.test.ts(122,18): suggestion TS377117: `Effect.succeedNone` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/runtimeLayer.test.ts(1080,11): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/orchestration-v2/testkit/CommandOutputRecorder.ts(40,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("CommandOutputHub.CommandOutputHub.append")((input) => { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/testkit/OrchestratorScenario.ts(282,13): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("awaitDispatch")(function*(key) { ... })`. effect(effectFnOpportunity)
+src/orchestration-v2/testkit/ProviderReplayHarness.ts(453,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ThreadTitleRegenerationService.ThreadTitleRegenerationService.execute")(() => { ... })`. effect(effectFnOpportunity)
+src/persistence/PullRequestFilesViewed.ts(91,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("PullRequestFilesViewedRepository.list")((input) => { ... })`. effect(effectFnOpportunity)
+src/persistence/PullRequestFilesViewed.ts(100,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("PullRequestFilesViewedRepository.set")((input) => { ... })`. effect(effectFnOpportunity)
+src/persistence/PullRequestReviewGuides.ts(53,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("PullRequestReviewGuideRepository.get")((key) => { ... })`. effect(effectFnOpportunity)
+src/persistence/PullRequestReviewGuides.ts(62,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("PullRequestReviewGuideRepository.put")((key, guide) => { ... })`. effect(effectFnOpportunity)
+src/persistence/initializeV2Database.ts(45,9): suggestion TS377116: `Effect.catchIf` expresses selective recovery more directly than `Effect.catch` with a conditional `Effect.fail` passthrough. effect(catchConditionalRefailToCatchIf)
+src/preview/DesktopBrowserChannel.ts(75,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.awaitAttached")(() => { ... })`. effect(effectFnOpportunity)
+src/preview/DesktopBrowserChannel.ts(78,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.isAttached")(() => { ... })`. effect(effectFnOpportunity)
+src/preview/DesktopBrowserChannel.ts(79,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.endpoint")(() => { ... })`. effect(effectFnOpportunity)
+src/preview/DesktopBrowserChannel.ts(80,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.pointer")(() => { ... })`. effect(effectFnOpportunity)
+src/preview/DesktopBrowserChannel.ts(194,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.awaitAttached")((key, timeout) => { ... })`. effect(effectFnOpportunity)
+src/preview/DesktopBrowserChannel.ts(216,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.isAttached")((key) => { ... })`. effect(effectFnOpportunity)
+src/preview/DesktopBrowserChannel.ts(218,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopBrowserChannel.pointer")((key, pointer) => { ... })`. effect(effectFnOpportunity)
+src/preview/ServerBrowser.ts(480,23): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(687,9): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(696,25): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(698,30): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(708,17): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(712,13): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1199,11): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1688,17): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1752,21): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1755,58): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/preview/ServerBrowser.ts(1761,38): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1789,19): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1820,21): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1884,13): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1952,15): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(1964,32): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowser.ts(2210,15): suggestion TS377074: `Effect.runPromise` is called inside an Effect with a separate services invocation. In this context, child Effects run with the surrounding services, which can be accessed through `Effect.context` and `Effect.runPromiseWith`. effect(runEffectInsideEffect)
+src/preview/ServerBrowserStream.ts(179,13): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("receive")((chunk) => { ... })`. effect(effectFnOpportunity)
+src/preview/ServerBrowserStream.ts(209,5): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/process/externalLauncher.ts(859,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ExternalLauncher.resolveAvailableEditors")(() => { ... })`. effect(effectFnOpportunity)
+src/process/externalLauncher.ts(860,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ExternalLauncher.resolveFileManagerRevealKind")(() => { ... })`. effect(effectFnOpportunity)
+src/process/externalLauncher.ts(864,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ExternalLauncher.launchBrowser")((target) => { ... })`. effect(effectFnOpportunity)
+src/process/externalLauncher.ts(868,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ExternalLauncher.launchEditor")((input) => { ... })`. effect(effectFnOpportunity)
+src/project/AgentSessionImporter.test.ts(212,15): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/project/ManagedProjectFolders.ts(346,13): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/project/ManagedProjectFolders.ts(348,15): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/project/ProjectCloneTracker.ts(394,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProjectCloneTracker.start")((input, hooks) => { ... })`. effect(effectFnOpportunity)
+src/project/ProjectCloneTracker.ts(395,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProjectCloneTracker.cancel")((projectId) => { ... })`. effect(effectFnOpportunity)
+src/project/ProjectCloneTracker.ts(396,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProjectCloneTracker.retry")((projectId) => { ... })`. effect(effectFnOpportunity)
+src/project/ProjectCloneTracker.ts(397,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProjectCloneTracker.discard")((projectId) => { ... })`. effect(effectFnOpportunity)
+src/project/ProjectSetupScriptRunner.test.ts(76,26): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/provider/ClaudeAccounts.integration.test.ts(1635,11): suggestion TS377113: `Effect.forEach` expresses this effectful array mapping more directly than `Effect.all` over `Array#map`. effect(allOfMapToForEach)
+src/provider/ClaudeExternalProcesses.ts(106,11): suggestion TS377114: `Effect.asSome` expresses wrapping the success value in `Option.some` directly. effect(mapSomeToAsSome)
+src/provider/ClaudeLoginCheck.ts(121,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ClaudeLoginCheck.check")((input) => { ... })`. effect(effectFnOpportunity)
+src/provider/ClaudeLoginCheck.ts(125,13): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/provider/CodexChatGptHandoff.ts(21,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ServerSecretStore.ServerSecretStore.get")((key) => { ... })`. effect(effectFnOpportunity)
+src/provider/CodexChatGptHandoff.ts(22,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ServerSecretStore.ServerSecretStore.set")((key, value) => { ... })`. effect(effectFnOpportunity)
+src/provider/CodexChatGptHandoff.ts(26,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ServerSecretStore.ServerSecretStore.remove")((key) => { ... })`. effect(effectFnOpportunity)
+src/provider/CodexChatGptHandoff.ts(30,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ServerSecretStore.ServerSecretStore.create")(() => { ... })`. effect(effectFnOpportunity)
+src/provider/CodexChatGptHandoff.ts(31,9): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ServerSecretStore.ServerSecretStore.getOrCreateRandom")(() => { ... })`. effect(effectFnOpportunity)
+src/provider/CodexInstallation.ts(205,26): suggestion TS377112: This input is already assignable to the schema's Encoded type. Use `decodeEffect` to preserve compile-time type checking instead of discarding the input type through `decodeUnknownEffect`. effect(preferTypedSchemaDecoder)
+src/provider/CodexProvider.ts(569,11): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/provider/ModelManifest.ts(284,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ModelCatalog.ModelCatalog.current")((driverKind) => { ... })`. effect(effectFnOpportunity)
+src/provider/ProviderAuthService.test.ts(284,24): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/provider/ProviderAuthService.ts(211,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderAuthService.importProfile")((input) => { ... })`. effect(effectFnOpportunity)
+src/provider/ProviderHostLive.ts(39,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("ProviderHost.ProviderHost.credentials")((namespace, bindingId) => { ... })`. effect(effectFnOpportunity)
+src/provider/acp/AcpSessionRuntime.processTree.test.ts(384,13): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/provider/acp/AcpSessionRuntime.processTree.test.ts(408,9): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/provider/acp/AcpSessionRuntime.processTree.test.ts(411,9): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/provider/acp/AcpSessionRuntime.processTree.test.ts(415,11): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/provider/acp/AcpSessionRuntime.processTree.test.ts(557,13): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/provider/acp/AcpSessionRuntime.processTree.test.ts(570,9): suggestion TS377012: This Effect generator contains `try/catch`; in this context, error handling is expressed with Effect APIs such as Effect.try, Effect.tryPromise, Effect.catch, Effect.catchTag). effect(tryCatchInEffectGen)
+src/pullRequest/PullRequestService.ts(2770,7): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/pullRequest/PullRequestService.ts(3155,7): suggestion TS377116: `Effect.catchCauseIf` expresses selective recovery more directly than `Effect.catchCause` with a conditional `Effect.failCause` passthrough. effect(catchConditionalRefailToCatchIf)
+src/pullRequest/PullRequestService.ts(3374,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("PullRequestService.listStats")((input) => { ... })`. effect(effectFnOpportunity)
+src/relay/AgentAwarenessRelay.test.ts(273,9): suggestion TS377117: `Effect.succeedSome` expresses this Option success value directly. effect(preferSucceedSomeOrNone)
+src/relay/AgentAwarenessRelay.ts(822,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AgentAwarenessRelay.requestCatchUp")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(641,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.requestDesktopUpdate")((requestId) => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(647,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.commitDesktopUpdate")((requestId) => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(649,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.cancelDesktopUpdate")((requestId) => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(698,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.setDiagnosticsDemand")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(699,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.requestDesktopUpdate")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(700,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.commitDesktopUpdate")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/DesktopTelemetryReceiver.ts(701,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("DesktopTelemetryReceiver.cancelDesktopUpdate")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/NativeTelemetryClient.ts(1091,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("NativeTelemetryClient.readHistory")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/NativeTelemetryClient.ts(1097,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("NativeTelemetryClient.setExternalProcesses")(() => { ... })`. effect(effectFnOpportunity)
+src/resourceTelemetry/NativeTelemetryClient.ts(1098,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("NativeTelemetryClient.setHostPowerState")(() => { ... })`. effect(effectFnOpportunity)
+src/scheduledTasks/ScheduledTaskService.ts(1015,31): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/secrets/SecretRequests.test.ts(169,30): suggestion TS377113: `Effect.forEach` expresses this effectful array mapping more directly than `Effect.all` over `Array#map`. effect(allOfMapToForEach)
+src/secrets/SecretRequests.test.ts(361,12): suggestion TS377017: This Effect.gen contains a single return statement. effect(unnecessaryEffectGen)
+src/server.ts(479,5): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/serverRuntimeStartup.test.ts(217,25): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/serverSettings.test.ts(559,30): suggestion TS377113: `Effect.forEach` expresses this effectful array mapping more directly than `Effect.all` over `Array#map`. effect(allOfMapToForEach)
+src/sourceControl/SourceControlProviderRegistry.ts(204,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.listChangeRequests")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(209,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(214,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(219,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getRepositoryCloneUrls")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(224,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.createRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(225,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.getDefaultBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(230,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProvider.SourceControlProvider.checkoutChangeRequest")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlProviderRegistry.ts(345,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlProviderRegistry.resolve")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlRepositoryService.ts(501,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlRepositoryService.lookupRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlRepositoryService.ts(503,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlRepositoryService.prepareClone")((input) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlRepositoryService.ts(510,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlRepositoryService.cloneRepository")((input, options) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlRepositoryService.ts(517,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlRepositoryService.discardClone")((destinationPath) => { ... })`. effect(effectFnOpportunity)
+src/sourceControl/SourceControlRepositoryService.ts(521,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("SourceControlRepositoryService.publishRepository")((input) => { ... })`. effect(effectFnOpportunity)
+src/storageCleanup.ts(670,14): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/telemetry/AnalyticsService.ts(113,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AnalyticsService.record")(() => { ... })`. effect(effectFnOpportunity)
+src/telemetry/AnalyticsService.ts(115,7): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("AnalyticsService.recordOwners")(() => { ... })`. effect(effectFnOpportunity)
+src/telemetry/AnalyticsService.ts(329,62): suggestion TS377132: `Effect.andThen` expresses this sequencing more directly than `Effect.flatMap` with a zero-parameter callback. effect(flatMapIgnoredParamToAndThen)
+src/textGeneration/CodexTextGeneration.ts(90,13): suggestion TS377099: `Effect.ignore` expresses ignored failure more directly than `Effect.catch` returning `Effect.void`. effect(catchToIgnore)
+src/textGeneration/TextGeneration.ts(60,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TextGeneration.generateCommitMessage")((input) => { ... })`. effect(effectFnOpportunity)
+src/textGeneration/TextGeneration.ts(64,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TextGeneration.generatePrContent")((input) => { ... })`. effect(effectFnOpportunity)
+src/textGeneration/TextGeneration.ts(68,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TextGeneration.generateBranchName")((input) => { ... })`. effect(effectFnOpportunity)
+src/textGeneration/TextGeneration.ts(72,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TextGeneration.generateReviewGuide")((input) => { ... })`. effect(effectFnOpportunity)
+src/textGeneration/TextGeneration.ts(76,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("TextGeneration.generateThreadTitle")((input) => { ... })`. effect(effectFnOpportunity)
+src/usage/UsageService.ts(172,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("UsageService.readSummary")((input) => { ... })`. effect(effectFnOpportunity)
+src/usage/UsageService.ts(642,9): suggestion TS377015: This expression contains chained `pipe` calls that can be simplified to a single `pipe` call. effect(unnecessaryPipeChain)
+src/vcs/GitVcsDriverCore.ts(3980,9): suggestion TS377120: `Effect.filterOrElse` expresses this conditional validation more directly than `Effect.flatMap` with an identity `Effect.succeed` branch. effect(flatMapConditionalToFilterOrFail)
+src/vcs/GitVcsDriverCore.ts(4468,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.commit")((cwd, subject, body, options) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4470,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.pushCurrentBranch")((cwd, fallbackBranch, options) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4472,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.pullCurrentBranch")((cwd) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4479,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.createWorktree")((input, options) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4481,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.fetchPullRequestBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4485,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.refreshCheckedOutBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4487,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.ensureRemote")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4490,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.fetchRemote")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4505,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.fetchWorktreeBaseCommit")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4507,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.fetchRemoteBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4508,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.fetchRemoteTrackingBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4510,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.setBranchUpstream")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4511,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.removeWorktree")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4512,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.pruneWorktrees")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4513,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.deleteLocalBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4514,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.renameBranch")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4515,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.createRef")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/GitVcsDriverCore.ts(4516,5): suggestion TS377047: This expression can be rewritten in the reusable function form `Effect.fn("GitVcsDriver.GitVcsDriver.switchRef")((input) => { ... })`. effect(effectFnOpportunity)
+src/vcs/VcsStatusBroadcaster.ts(153,5): suggestion TS377014: This generator returns an Effect-able value directly, which produces a nested `Effect<Effect<...>>`. If the intended result is the inner Effect value, `return yield*` represents that form. effect(returnEffectInGen)
+src/workspace/WorkspaceFileSystem.ts(168,15): suggestion TS377095: `Effect.orElseSucceed` expresses the same recovery more directly than `Effect.catch` followed by `Effect.succeed`. effect(catchToOrElseSucceed)
+src/workspace/WorkspaceFileSystem.ts(168,34): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/ws.test.ts(213,45): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/ws.test.ts(562,47): suggestion TS377016: `Effect.void` represents the same outcome as `Effect.succeed(undefined)` or `Effect.succeed(void 0)`. effect(effectSucceedWithVoid)
+src/ws.ts(1371,23): suggestion TS377118: `Effect.fromOption` expresses this Option-to-Effect conversion more directly than `Option.match` or an Option tag conditional. effect(optionMatchToFromOption)
+src/ws.ts(2290,24): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/ws.ts(2299,24): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+src/ws.ts(2307,24): suggestion TS377019: This `yield* Effect.fail(...)` passes a yieldable error value. `yield*` represents that value directly without wrapping it in `Effect.fail`. effect(unnecessaryFailYieldableError)
+
+---
+vp run: 0/29 cache hit (0%). (Run `vp run --last-details` for full details)
+
+=== electron: vp run --filter @t3tools/desktop ensure:electron ===
+~/apps/desktop$ node scripts/ensure-electron-runtime.mjs ⊘ cache disabled
+/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/electron@44.4.5/node_modules/electron/dist/electron
+
+
+=== test: vp run --parallel --concurrency-limit 4 --filter @t3tools/desktop --filter @t3tools/marketing --filter @t3tools/mobile --filter t3code-relay --filter @t3tools/client-runtime --filter @t3tools/contracts --filter @t3tools/provider-acp --filter @t3tools/provider-acp-registry --filter @t3tools/provider-core --filter @t3tools/provider-cursor --filter @t3tools/provider-grok --filter @t3tools/provider-muse --filter @t3tools/provider-opencode --filter @t3tools/provider-pi --filter @t3tools/provider-testing --filter @t3tools/shared --filter @t3tools/source-control-azure-devops --filter @t3tools/source-control-bitbucket --filter @t3tools/source-control-core --filter @t3tools/source-control-forgejo --filter @t3tools/source-control-gitcafe --filter @t3tools/source-control-github --filter @t3tools/source-control-gitlab --filter @t3tools/ssh --filter @t3tools/tailscale --filter @t3tools/scripts test ===
+~/apps/desktop$ vp test run --passWithNoTests ⊘ cache disabled
+~/packages/provider-grok$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+~/packages/provider-cursor$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+~/packages/provider-pi$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-pi
+
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-cursor
+
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-grok
+
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/apps/desktop
+
+
+ Test Files  15 passed (15)
+      Tests  128 passed (128)
+   Start at  18:38:02
+   Duration  2.05s (transform 39%, import 32%, tests 19%, setup 9%)
+
+  Transform  transforming modules took 6.62s · 39% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/source-control-gitlab$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ Test Files  6 passed | 1 skipped (7)
+      Tests  122 passed | 4 skipped (126)
+   Start at  18:38:02
+   Duration  2.09s (transform 60%, import 32%, setup 7%, tests 1%)
+
+  Transform  transforming modules took 5.70s · 60% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/shared$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-gitlab
+
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/shared
+
+
+ Test Files  8 passed (8)
+      Tests  159 passed (159)
+   Start at  18:38:02
+   Duration  3.22s (transform 47%, import 26%, tests 19%, setup 7%)
+
+  Transform  transforming modules took 5.10s · 47% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/apps/mobile$ vp test run --project unit --project react ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/apps/mobile
+
+
+ Test Files  6 passed (6)
+      Tests  172 passed (172)
+   Start at  18:38:04
+   Duration  1.78s (transform 60%, import 32%, setup 4%, tests 4%)
+
+  Transform  transforming modules took 5.76s · 60% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/tailscale$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/tailscale
+
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  18:38:06
+   Duration  675ms (import 33%, transform 30%, setup 21%, tests 15%, worker 2%)
+
+
+~/packages/provider-acp-registry$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-acp-registry
+
+
+ Test Files  122 passed (122)
+      Tests  1663 passed | 2 skipped (1665)
+   Start at  18:38:02
+   Duration  6.52s (transform 55%, import 26%, tests 10%, setup 8%)
+
+     Import  556 modules were evaluated 8125 times · 41.93s total, 26% of tracked time
+             ~389ms faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+
+~/infra/relay$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/infra/relay
+
+
+ Test Files  5 passed (5)
+      Tests  67 passed (67)
+   Start at  18:38:08
+   Duration  4.09s (transform 61%, import 23%, tests 13%, setup 3%)
+
+  Transform  transforming modules took 7.71s · 61% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+ Test Files  99 passed (99)
+      Tests  1842 passed | 2 skipped (1844)
+   Start at  18:38:04
+   Duration  7.77s (transform 56%, import 22%, tests 14%, setup 8%, worker 1%)
+
+  Transform  transforming modules took 69.00s · 56% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/provider-acp$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+~/packages/source-control-github$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-acp
+
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-github
+
+
+ Test Files  36 passed (36)
+      Tests  454 passed (454)
+   Start at  18:38:09
+   Duration  5.78s (import 70%, transform 24%, setup 3%, tests 3%)
+
+
+~/packages/contracts$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/contracts
+
+
+ Test Files  8 passed (8)
+      Tests  111 passed (111)
+   Start at  18:38:12
+   Duration  3.45s (transform 39%, tests 33%, import 18%, setup 9%)
+
+  Transform  transforming modules took 3.63s · 39% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/source-control-gitcafe$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-gitcafe
+
+
+ Test Files  11 passed (11)
+      Tests  394 passed (394)
+   Start at  18:38:12
+   Duration  3.91s (transform 54%, import 25%, tests 16%, setup 4%)
+
+  Transform  transforming modules took 10.59s · 54% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/ssh$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ Test Files  40 passed (40)
+      Tests  736 passed (736)
+   Start at  18:38:15
+   Duration  1.78s (transform 58%, import 23%, setup 12%, tests 6%, worker 1%)
+
+  Transform  transforming modules took 17.51s · 58% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/scripts$ vp test run --config ../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/ssh
+
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/scripts
+
+
+ Test Files  5 passed (5)
+      Tests  79 passed (79)
+   Start at  18:38:16
+   Duration  1.74s (transform 59%, import 32%, setup 5%, tests 3%)
+
+  Transform  transforming modules took 3.70s · 59% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/provider-core$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-core
+
+
+ Test Files  22 passed (22)
+      Tests  238 passed (238)
+   Start at  18:38:18
+   Duration  1.43s (transform 55%, import 31%, setup 12%, tests 1%, worker 1%)
+
+  Transform  transforming modules took 9.34s · 55% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/source-control-core$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-core
+
+
+ Test Files  5 passed (5)
+      Tests  72 passed (72)
+   Start at  18:38:20
+   Duration  563ms (transform 43%, import 34%, setup 19%, tests 3%, worker 1%)
+
+
+~/packages/provider-muse$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-muse
+
+
+ Test Files  26 passed (26)
+      Tests  350 passed (350)
+   Start at  18:38:17
+   Duration  4.19s (tests 44%, transform 30%, import 19%, setup 7%)
+
+  Transform  transforming modules took 9.90s · 30% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+~/packages/source-control-bitbucket$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-bitbucket
+
+
+ Test Files  9 passed (9)
+      Tests  108 passed (108)
+   Start at  18:38:21
+   Duration  761ms (transform 48%, import 37%, tests 8%, setup 7%)
+
+
+~/packages/client-runtime$ vp test run ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/client-runtime
+
+
+ Test Files  4 passed (4)
+      Tests  117 passed (117)
+   Start at  18:38:21
+   Duration  704ms (transform 52%, import 41%, setup 5%, tests 2%)
+
+
+~/packages/provider-testing$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-testing
+
+
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+   Start at  18:38:22
+   Duration  878ms (transform 59%, import 29%, setup 9%, tests 2%, worker 1%)
+
+
+~/packages/provider-opencode$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/provider-opencode
+
+
+ Test Files  141 passed (141)
+      Tests  2259 passed (2259)
+   Start at  18:38:21
+   Duration  7.27s (transform 50%, import 33%, tests 10%, setup 7%)
+
+     Import  528 modules were evaluated 10926 times · 41.13s total, 33% of tracked time
+             ~604ms faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+
+~/packages/source-control-azure-devops$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-azure-devops
+
+
+ Test Files  6 passed (6)
+      Tests  150 passed (150)
+   Start at  18:38:29
+   Duration  757ms (transform 45%, import 33%, tests 15%, setup 6%)
+
+
+~/apps/marketing$ vp test run ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/apps/marketing
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  18:38:30
+   Duration  75ms (transform 57%, import 22%, tests 13%, worker 7%)
+
+
+~/packages/source-control-forgejo$ vp test run --config ../../vite.config.ts --dir . ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/packages/source-control-forgejo
+
+
+ Test Files  1 passed (1)
+      Tests  33 passed (33)
+   Start at  18:38:30
+   Duration  622ms (transform 50%, import 33%, tests 12%, setup 5%)
+
+
+
+ Test Files  5 passed (5)
+      Tests  57 passed (57)
+   Start at  18:38:17
+   Duration  20.37s (tests 92%, import 4%, transform 3%, setup 1%)
+
+
+
+ Test Files  287 passed | 3 skipped (290)
+      Tests  3455 passed | 8 skipped (3463)
+   Start at  18:38:05
+   Duration  33.36s (transform 57%, import 21%, tests 14%, setup 6%, environment 2%)
+
+
+
+ Test Files  16 passed | 2 skipped (18)
+      Tests  228 passed | 2 skipped (230)
+   Start at  18:38:23
+   Duration  28.16s (tests 50%, transform 31%, import 17%, setup 2%)
+
+  Transform  transforming modules took 19.95s · 31% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+---
+vp run: 0/26 cache hit (0%). (Run `vp run --last-details` for full details)
+
+=== test web: vp run --filter @t3tools/web test ===
+~/apps/web$ vp test run --passWithNoTests --project unit --project browser ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/apps/web
+
+
+ Test Files  550 passed (550)
+      Tests  8613 passed (8613)
+   Start at  18:38:52
+   Duration  78.87s (worker 81%, transform 9%, import 7%, tests 3%)
+
+
+
+=== test server: vp run --filter t3 test ===
+~/apps/server$ vp test run ⊘ cache disabled
+
+ RUN  v5.0.1 /home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/apps/server
+
+
+ Test Files  461 passed | 4 skipped (465)
+      Tests  7557 passed | 23 skipped (7580)
+   Start at  18:40:12
+   Duration  595.30s (tests 68%, import 27%, transform 3%, setup 2%)
+
+     Import  1861 modules were evaluated 121188 times · 155.84s total, 27% of tracked time
+             ~153.45s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+
+
+=== Gate summary (against origin/loop/main) ===
+pass  typecheck (10s)
+pass  electron (0s)
+pass  test (50s)
+pass  test web (80s)
+pass  test server (596s)
+Affected packages: @t3tools/client-runtime, @t3tools/contracts, @t3tools/desktop, @t3tools/marketing, @t3tools/mobile, @t3tools/provider-acp, @t3tools/provider-acp-registry, @t3tools/provider-core, @t3tools/provider-cursor, @t3tools/provider-grok, @t3tools/provider-muse, @t3tools/provider-opencode, @t3tools/provider-pi, @t3tools/provider-testing, @t3tools/scripts, @t3tools/shared, @t3tools/source-control-azure-devops, @t3tools/source-control-bitbucket, @t3tools/source-control-core, @t3tools/source-control-forgejo, @t3tools/source-control-gitcafe, @t3tools/source-control-github, @t3tools/source-control-gitlab, @t3tools/source-control-testing, @t3tools/ssh, @t3tools/tailscale, @t3tools/web, t3, t3code-relay
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-glass-effect@58.0.4_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nat_69f0e75be952bc09e6d0686818480270/node_modules/expo-glass-effect/build/index.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-glass-effect@58.0.4_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nat_69f0e75be952bc09e6d0686818480270/node_modules/expo-glass-effect/build/GlassView.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-glass-effect@58.0.4_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nat_69f0e75be952bc09e6d0686818480270/node_modules/expo-glass-effect/build/GlassContainer.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-glass-effect@58.0.4_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nat_69f0e75be952bc09e6d0686818480270/node_modules/expo-glass-effect/build/isLiquidGlassAvailable.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-glass-effect@58.0.4_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nat_69f0e75be952bc09e6d0686818480270/node_modules/expo-glass-effect/build/isGlassEffectAPIAvailable.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-file-system@58.0.9_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nati_67a933692787550f91c53bd2ccbe3024/node_modules/expo-file-system/build/index.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-file-system@58.0.9_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nati_67a933692787550f91c53bd2ccbe3024/node_modules/expo-file-system/build/Paths.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-file-system@58.0.9_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nati_67a933692787550f91c53bd2ccbe3024/node_modules/expo-file-system/build/Directory.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-file-system@58.0.9_expo@58.0.14_react-native@0.88.0_@babel+core@7.29.7_@react-nati_67a933692787550f91c53bd2ccbe3024/node_modules/expo-file-system/build/ExpoFileSystem.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/index.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/ts-declarations/global.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/ts-declarations/EventEmitter.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/ts-declarations/NativeModule.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/ts-declarations/SharedObject.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/ts-declarations/SharedRef.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/sweet/setUpJsLogger.fx.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/errors/CodedError.js" points to missing source files
+Sourcemap for "/home/soeren/shared/fastnd/t3code/.loop-forge/worktrees/ticket-18/node_modules/.pnpm/expo-modules-core@58.0.22_patch_hash=f0b0fd100550ed76e5c25b4d13eb7c9ff62825f8f197c53edf_c9eff78814d72f1a2b343eeddd0f3d24/node_modules/expo-modules-core/build/requireNativeModule.js" points to missing source files
+Plugin "vitest:mocks:interceptor" defines Vite-specific hooks (configureServer) in a plugin returned from applyToEnvironment. These hooks will be ignored.
+(node:2418717) ExperimentalWarning: v8.queryObjects() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  Checking for updates...
+  Switching T3 Code 0.1.0 → 999.0.0
+
+  Using the downloaded release...
+  Installed T3 Code 999.0.0
+
