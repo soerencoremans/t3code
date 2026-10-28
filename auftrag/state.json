@@ -41,7 +41,7 @@
       ]
     }
   },
-  "label": null,
+  "label": "Human",
   "conflict": false,
   "counters": {
     "item": null,
@@ -50,8 +50,23 @@
     "countedEvent": null
   },
   "tickets": {},
-  "turns": {},
-  "turn": null,
+  "turns": {
+    "eval": 1
+  },
+  "turn": {
+    "role": "eval",
+    "type": "initial",
+    "number": 1,
+    "attempt": 1,
+    "sessionId": "8f77e005-ce14-4244-aa42-89b6dba3dfdb",
+    "startedAt": "2026-10-28T09:01:56.309Z",
+    "lastCommentId": 0,
+    "lastLabelEventId": null,
+    "labelSet": true,
+    "comments": 1,
+    "setLabel": "Human",
+    "ended": true
+  },
   "sessions": {},
   "bodySnapshot": "### Repository\n\n~/shared/fastnd/t3code\n\n### Blocked by\n\n_No response_\n\n### Settings\n\n_No response_\n\n### Behavioural requirements\n\n- In the model picker, under the Claude models, the user sees which account is logged in on that Claude setup and that it applies to every chat on that setup.\n- From the model picker the user can switch that setup to another remembered account. If turns are running on the setup, the user first confirms that they will be stopped; otherwise the switch starts at once.\n- While a switch runs, the user sees that it is in progress and cannot start a second one.\n- After a switch, everything that shows the Claude account or its usage shows the new account.\n- A stopped turn is not continued by itself; the user continues the chat with a new message on the new account.\n- When the logged-in account is not remembered yet, the user can remember it under a name of their choice, from the model picker and from the Claude provider settings.\n- The user can add another Claude account to an existing setup without logging that setup out: they log in with the new account in the browser, name it, and T3 remembers it. This works also when the browser runs on a different device than T3.\n- Adding an account can be started from the model picker, from the Claude provider settings, and from the \"Add provider\" dialog through an option \"Share config with my existing Claude setup\". That option appears only when a Claude setup already exists; when it is chosen, no second Claude provider is created.\n- Cancelling or abandoning the adding of an account leaves no login behind.\n- The Claude provider settings list the remembered accounts and show which one is active. From there the user can switch to an account and forget an account, after confirming. Forgetting the active account keeps the setup logged in.\n- When T3 refuses an action, the user sees the reason in plain words.\n- The account controls appear only where account switching is supported (Linux). Elsewhere they do not appear.\n- Everything works from the web app and the desktop app, also when they are connected to T3 remotely. The mobile app is not part of this Auftrag.\n- Not part of this Auftrag: a switch offer when a usage limit is hit, automatic switching, dedicated screens for rare errors, a command palette entry, live updates on other open devices.\n\n### Purpose\n\n- The backend Auftrag #2 made switching possible, but nobody can reach it yet. This Auftrag makes it usable every day.\n- The model picker is where the user already chooses \"which Claude\"; putting the account there keeps the switch one step away when a usage limit stops work.\n- One setup is shared by many chats; saying so in the picker prevents the wrong expectation that the account belongs to one chat.\n- Switching stops running work in other chats, so it must not happen by a misclick. A switch can take several seconds; without visible progress users click twice or think it failed.\n- Showing the old account's usage after a switch would make the user decide on wrong numbers.\n- Switching back requires the current account to be remembered, so remembering must be offered where the user meets that gap.\n- Adding an account by logging in over the current one would lose the current login. Adding it beside the setup keeps both. T3 is often used from another device, so the login must work from there too.\n- Users who want \"a second Claude\" look in the \"Add provider\" dialog; a second provider on the same setup would always show the same account and only confuse them.\n- A left-behind login is a credential lying around.\n- Forget needs a home, and it removes something that only a fresh login brings back, hence the confirmation.\n- The first version should run and be used before extras are added; many gaps are easier to judge once the basics work.\n- This is a personal build; Linux is the only platform in use.\n\n### Mocks\n\nDesign store, authored in artifacts/soerencoremans-t3code/auftrag-8/ in the Loop-Forge repository. SOURCE.md there lists the decisions behind each artboard and two open points.\n\n- `ModelPickerAccount.dc.html`: the account row in the model picker. Closed, menu open, confirm, account not remembered, switching.\n- `AddProviderShareConfig.dc.html`: the \"Share config with my existing Claude setup\" option in the \"Add provider\" dialog. Unticked, ticked, and the login step. The login step is a sketch; how the login is shown may differ.\n- `ClaudeAccountsSettings.dc.html`: the accounts in the Claude provider settings. Normal, account not remembered, forget confirmation.\n\n**The Auftrag wins on scope.** The mocks show the intended look and states, not every detail.\n\n### No technical details\n\n- [X] This Auftrag names no files, libraries, tables or architecture. That is the Gremium's job.\n",
   "bodyBefore": null
