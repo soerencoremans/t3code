@@ -74,3 +74,11 @@ Private. Six tickets, server first, then the three screens.
 ## Ticket 4 drafted (turn 9) = #14. Seats: ui, ux, component-reuse.
 - Produces for 5/6 in apps/web/src/components/settings/: claudeAccounts.logic.ts (claudeAccountsAvailable, claudeSetupAccountView, claudeAccountErrorMessage), useClaudeAccounts.ts (useClaudeAccountsAvailable, useClaudeSetupAccounts, useClaudeAccountSwitch with shared pending atom), RememberClaudeAccountDialog, AddClaudeAccountDialog, ClaudeAccountAddLogin, ClaudeAccountsSection.
 - Ticket 4 criteria incl. AK-4, AK-5, AK-7 (settings), AK-16/36/39 manual checks in hand-off.
+
+## PLAN AMENDMENT (turn 10, ticket-4 fixes, pragmatist-1)
+- ticket-4 (#14): card only — row, list, switch, forget, remember. Exposes `renderAddAccount?` slot prop on ClaudeAccountsSection. Criteria lose AK-16/18/22/23/32.
+- ticket-5: model picker row WITHOUT "Add account…" (drop AK-17). Keeps the rest. Exposes a slot for ticket 6's Add account… menu item.
+- ticket-6 (REDEFINED): add-account flow — AddClaudeAccountDialog with login step inside (no separate ClaudeAccountAddLogin unless ticket 8 needs it -> ticket 8 extracts), wired into settings card (AK-18) and picker (AK-17). AK-15, 16, 17, 18, 22, 23, 32. Cancel on close path (Cancel / onOpenChange(false)), NOT effect cleanup (StrictMode, architect-2); StrictMode browser case. Hand-off: manual AK-16 check from another device. Blocked by 4, 5.
+- ticket-7: unchanged (fresh account display, AK-8, AK-9).
+- ticket-8 (NEW, last, test-affected gate): Add provider share-config option (old ticket-6 content), blocked by 6. AK-19, 20, 21, 33/34 dialog part. Ticket 3's "Add provider dialog (ticket 6)" now means ticket 8 — say so in closing.
+- Ticket-4 suggestions to take at ruling: security-1 (Redacted list emails), ux-2 (set pending atom only once a call that can switch runs: set after confirm/before 2nd call; first call w/ false sets pending too? -> set pending on first call too but clear before confirm), ux-5, ui-2, ui-3, ui-4 partly, component-reuse-1,2,4,5. Declined/moot: security-2, ux-3, ux-4, component-reuse-3,6, pragmatist-2 -> moved to ticket 6; focus-1 -> ticket 6 (AK-15).
