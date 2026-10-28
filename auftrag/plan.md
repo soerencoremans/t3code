@@ -114,3 +114,4 @@ Private. Six tickets, server first, then the three screens.
 - "Setup exists" = list.setups with active !== null (claudeShareConfigSetups); claudeSetupLabel = displayName ?? "Claude". Option hidden while loading/failed.
 - handleSave guarded while sharing. Gate test-affected.
 - After ticket 8 ruling: next draft turn (ticket-9) has NO entry -> closing comment + Gremium. Closing must note: ticket 3's "Add provider dialog (ticket 6)" means ticket 8 (#18); ticket 8 mounts AddClaudeAccountDialog not ClaudeAccountAddLogin.
+- Ticket 8 ruling (turn 22): #18 updated (ui-1 card, IDENTITY_ONLY_WIZARD_STEPS rename, useClaudeShareConfigSetups hook, refresh only on close). Declined ux-2, component-reuse-1. NEXT: closing.
