@@ -47,7 +47,7 @@
     "item": null,
     "round": 23,
     "coverageFails": 0,
-    "countedEvent": 34469935637
+    "countedEvent": 34472503907
   },
   "tickets": {
     "1": 10,
@@ -64,17 +64,17 @@
     "ak": 1,
     "ak-review": 1,
     "gremium-author": 23,
-    "coverage": 1
+    "coverage": 2
   },
   "turn": {
     "role": "coverage",
     "type": "coverage",
-    "number": 1,
+    "number": 2,
     "attempt": 1,
-    "sessionId": "a4f6a4dd-37c4-4cd8-821c-2c525976a81a",
-    "startedAt": "2026-10-28T11:48:48.810Z",
-    "lastCommentId": 6468185788,
-    "lastLabelEventId": 34469787537,
+    "sessionId": "8c2329f8-25ed-4038-b8b3-eb190ed3e064",
+    "startedAt": "2026-10-28T12:21:49.234Z",
+    "lastCommentId": 6468704080,
+    "lastLabelEventId": 34472503907,
     "labelSet": true,
     "comments": 2,
     "setLabel": "Human",
