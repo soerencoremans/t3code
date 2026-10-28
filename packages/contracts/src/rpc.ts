@@ -27,6 +27,8 @@ import {
   ClaudeAccountList,
   ClaudeAccountListInput,
   ClaudeAccountRememberInput,
+  ClaudeAccountSwitchInput,
+  ClaudeSwitchResult,
   RememberedClaudeAccount,
 } from "./claudeAccounts.ts";
 import * as Schema from "effect/Schema";
@@ -434,6 +436,7 @@ export const WS_METHODS = {
   claudeAccountsList: "claudeAccounts.list",
   claudeAccountsRemember: "claudeAccounts.remember",
   claudeAccountsForget: "claudeAccounts.forget",
+  claudeAccountsSwitch: "claudeAccounts.switch",
 
   vcsPull: "vcs.pull",
   vcsRefreshStatus: "vcs.refreshStatus",
@@ -716,6 +719,12 @@ export const WsClaudeAccountsRememberRpc = Rpc.make(WS_METHODS.claudeAccountsRem
 export const WsClaudeAccountsForgetRpc = Rpc.make(WS_METHODS.claudeAccountsForget, {
   payload: ClaudeAccountForgetInput,
   success: Schema.Void,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsSwitchRpc = Rpc.make(WS_METHODS.claudeAccountsSwitch, {
+  payload: ClaudeAccountSwitchInput,
+  success: ClaudeSwitchResult,
   error: ClaudeAccountRpcError,
 });
 
@@ -1936,6 +1945,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsClaudeAccountsListRpc,
   WsClaudeAccountsRememberRpc,
   WsClaudeAccountsForgetRpc,
+  WsClaudeAccountsSwitchRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,

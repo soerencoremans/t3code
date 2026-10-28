@@ -21,6 +21,8 @@ export const ClaudeAccountErrorReason = Schema.Literals([
   "externalClaudePrograms",
   "processCheckFailed",
   "sessionStopFailed",
+  "turnsRunning",
+  "switchInProgress",
 ]);
 export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
 
@@ -56,27 +58,39 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
       case "storage":
         return "Could not read or save the remembered Claude accounts.";
       case "currentNotRemembered":
-        return `The account logged in on setup "${this.instanceId}" is not remembered. Remember it first, then switch.`;
+        return "The account logged in on this Claude setup is not remembered yet. Remember it first, then switch.";
       case "needsFreshLogin":
-        return `The saved login of "${this.name}" no longer works. Log in to that account again with \`claude auth login\`, then forget "${this.name}" and remember it again.`;
+        return `The saved login of "${this.name}" no longer works. Forget "${this.name}", then add the account again.`;
       case "loginCheckFailed":
         return `Could not check the saved login of "${this.name}". Try again.`;
       case "switchFailed":
-        return `Switching setup "${this.instanceId}" failed. The setup is logged in as before.`;
+        return "Switching this Claude setup failed. It is still logged in as before.";
       case "switchRollbackFailed":
-        return `Switching setup "${this.instanceId}" failed and its login files could not be restored. Log in again with \`claude auth login\` for this setup.`;
+        return "Switching this Claude setup failed, and its previous login could not be restored. Log in to Claude again on this setup.";
       case "externalClaudePrograms":
-        return `Claude programs started outside T3 are using setup "${this.instanceId}". Close them, then switch again.`;
+        return "Claude programs started outside T3 are using this Claude setup. Close them, then switch again.";
       case "processCheckFailed":
-        return `Could not check whether Claude programs outside T3 are using setup "${this.instanceId}". Try again.`;
+        return "Could not check whether Claude programs outside T3 are using this Claude setup. Try again.";
       case "sessionStopFailed":
-        return `Could not stop the running turns on setup "${this.instanceId}". The setup is still logged in as before. Try again.`;
+        return "Could not check or stop the running turns on this Claude setup. It is still logged in as before. Try again.";
+      case "turnsRunning":
+        return "Turns are running on this Claude setup. Switching the account stops them.";
+      case "switchInProgress":
+        return "Another Claude account switch is still running. Wait until it finishes, then try again.";
     }
   }
 }
 
 export const RememberedClaudeAccount = Schema.Struct({ name: Schema.String, email: Schema.String });
 export type RememberedClaudeAccount = typeof RememberedClaudeAccount.Type;
+
+export const ClaudeSwitchResult = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  active: RememberedClaudeAccount,
+  /** Every Claude setup on the same config dir, the requested one first. */
+  affectedInstanceIds: Schema.Array(ProviderInstanceId),
+});
+export type ClaudeSwitchResult = typeof ClaudeSwitchResult.Type;
 
 export const ClaudeSetupAccountState = Schema.Struct({
   instanceId: ProviderInstanceId,
@@ -108,3 +122,10 @@ export type ClaudeAccountRememberInput = typeof ClaudeAccountRememberInput.Type;
 
 export const ClaudeAccountForgetInput = Schema.Struct({ name: ClaudeAccountNameInput });
 export type ClaudeAccountForgetInput = typeof ClaudeAccountForgetInput.Type;
+
+export const ClaudeAccountSwitchInput = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  name: ClaudeAccountNameInput,
+  stopRunningTurns: Schema.Boolean,
+});
+export type ClaudeAccountSwitchInput = typeof ClaudeAccountSwitchInput.Type;

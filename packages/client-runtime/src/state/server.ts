@@ -1047,6 +1047,14 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:claude-accounts:forget",
       tag: WS_METHODS.claudeAccountsForget,
     }),
+    switchClaudeAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:switch",
+      tag: WS_METHODS.claudeAccountsSwitch,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
+      },
+    }),
     providerInstallState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:provider:install-state",
       tag: WS_METHODS.providerInstallSubscribe,

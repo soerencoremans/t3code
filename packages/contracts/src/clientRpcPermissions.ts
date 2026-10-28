@@ -52,6 +52,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
   [WS_METHODS.claudeAccountsRemember]: AuthProvidersManageScope,
   [WS_METHODS.claudeAccountsForget]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsSwitch]: AuthProvidersManageScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

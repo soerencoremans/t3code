@@ -6,6 +6,8 @@ import {
   ClaudeAccountErrorReason,
   ClaudeAccountList,
   ClaudeAccountRememberInput,
+  ClaudeAccountSwitchInput,
+  ClaudeSwitchResult,
 } from "./claudeAccounts.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 
@@ -14,22 +16,13 @@ const decodeError = Schema.decodeUnknownSync(ClaudeAccountError);
 const decodeList = Schema.decodeUnknownSync(ClaudeAccountList);
 const encodeList = Schema.encodeUnknownSync(ClaudeAccountList);
 const decodeRememberInput = Schema.decodeUnknownSync(ClaudeAccountRememberInput);
+const decodeSwitchInput = Schema.decodeUnknownSync(ClaudeAccountSwitchInput);
+const decodeSwitchResult = Schema.decodeUnknownSync(ClaudeSwitchResult);
+const encodeSwitchResult = Schema.encodeUnknownSync(ClaudeSwitchResult);
 const roundTripError = (error: ClaudeAccountError) => decodeError(encodeError(error));
 
-const LIST_REMEMBER_FORGET_REASONS = [
-  "unavailable",
-  "setupNotFound",
-  "setupUnreadable",
-  "notLoggedIn",
-  "invalidName",
-  "nameInUse",
-  "alreadyRemembered",
-  "accountNotFound",
-  "storage",
-] as const;
-
 describe("ClaudeAccountError", () => {
-  it.each(LIST_REMEMBER_FORGET_REASONS)(
+  it.each(ClaudeAccountErrorReason.literals)(
     "R11: the %s message is plain language without setup ID or command line",
     (reason) => {
       const { message } = new ClaudeAccountError({
@@ -107,5 +100,21 @@ describe("Claude account wire schemas", () => {
     expect(() =>
       decodeRememberInput({ instanceId: "claudeAgent", name: "a".repeat(257) }),
     ).toThrow();
+  });
+
+  it("round-trips a switch result with two affected setups unchanged", () => {
+    const result = {
+      instanceId: "claudeAgent_work",
+      active: { name: "Work", email: "work@example.com" },
+      affectedInstanceIds: ["claudeAgent_work", "claudeAgent_copy"],
+    };
+    expect(encodeSwitchResult(decodeSwitchResult(result))).toEqual(result);
+  });
+
+  it("refuses a switch without stopRunningTurns or with a name over 256 characters", () => {
+    const input = { instanceId: "claudeAgent", name: "Work", stopRunningTurns: false };
+    expect(decodeSwitchInput(input).stopRunningTurns).toBe(false);
+    expect(() => decodeSwitchInput({ instanceId: "claudeAgent", name: "Work" })).toThrow();
+    expect(() => decodeSwitchInput({ ...input, name: "a".repeat(257) })).toThrow();
   });
 });

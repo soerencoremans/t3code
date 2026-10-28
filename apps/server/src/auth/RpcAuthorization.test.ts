@@ -43,12 +43,15 @@ describe("RPC authorization scopes", () => {
     );
   });
 
-  it("requires provider management to list, remember or forget Claude accounts", () => {
+  it("requires provider management to list, remember, forget or switch Claude accounts", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsList)).toBe(AuthProvidersManageScope);
     expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsRemember)).toBe(
       AuthProvidersManageScope,
     );
     expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsForget)).toBe(
+      AuthProvidersManageScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsSwitch)).toBe(
       AuthProvidersManageScope,
     );
   });

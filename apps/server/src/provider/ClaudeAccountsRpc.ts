@@ -3,6 +3,7 @@ import {
   type ClaudeAccountForgetInput,
   type ClaudeAccountListInput,
   type ClaudeAccountRememberInput,
+  type ClaudeAccountSwitchInput,
 } from "@t3tools/contracts";
 
 import type { ClaudeAccounts } from "./ClaudeAccounts.ts";
@@ -12,4 +13,5 @@ export const claudeAccountsRpcHandlers = (accounts: ClaudeAccounts["Service"]) =
   [WS_METHODS.claudeAccountsRemember]: (input: ClaudeAccountRememberInput) =>
     accounts.remember(input),
   [WS_METHODS.claudeAccountsForget]: (input: ClaudeAccountForgetInput) => accounts.forget(input),
+  [WS_METHODS.claudeAccountsSwitch]: (input: ClaudeAccountSwitchInput) => accounts.switch(input),
 });

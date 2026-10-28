@@ -1,5 +1,7 @@
 import {
   ClaudeAccountError,
+  type ClaudeAccountSwitchInput,
+  type ClaudeSwitchResult,
   ClaudeSettings,
   CommandId,
   RememberedClaudeAccount,
@@ -19,6 +21,7 @@ import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -26,6 +29,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -51,16 +55,9 @@ export {
   ClaudeAccountErrorReason,
   ClaudeAccountList,
   ClaudeSetupAccountState,
+  ClaudeSwitchResult,
   RememberedClaudeAccount,
 } from "@t3tools/contracts";
-
-export const ClaudeSwitchResult = Schema.Struct({
-  instanceId: ProviderInstanceId,
-  active: RememberedClaudeAccount,
-  /** Every Claude setup on the same config dir, the requested one first. */
-  affectedInstanceIds: Schema.Array(ProviderInstanceId),
-});
-export type ClaudeSwitchResult = typeof ClaudeSwitchResult.Type;
 
 export class ClaudeAccounts extends Context.Service<
   ClaudeAccounts,
@@ -71,10 +68,9 @@ export class ClaudeAccounts extends Context.Service<
     }) => Effect.Effect<RememberedClaudeAccount, ClaudeAccountError>;
     readonly list: Effect.Effect<ClaudeAccountList, ClaudeAccountError>;
     readonly forget: (input: { readonly name: string }) => Effect.Effect<void, ClaudeAccountError>;
-    readonly switch: (input: {
-      readonly instanceId: ProviderInstanceId;
-      readonly name: string;
-    }) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
+    readonly switch: (
+      input: ClaudeAccountSwitchInput,
+    ) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
   }
 >()("t3/provider/ClaudeAccounts") {}
 
@@ -174,6 +170,10 @@ export const make = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const crypto = yield* Crypto.Crypto;
   const accountsLock = yield* Semaphore.make(1);
+  // Held for a whole switch so a second request is refused instead of queued behind the first.
+  const switchPermit = yield* Semaphore.make(1);
+  // A switch runs in this scope, not in its caller's fiber, so a caller that goes away cannot cut it in half.
+  const scope = yield* Scope.Scope;
 
   const requireLinux = Effect.fn("ClaudeAccounts.requireLinux")(function* () {
     if ((yield* HostProcess.Platform) !== "linux") {
@@ -411,10 +411,9 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const checkSwitch = Effect.fn("ClaudeAccounts.checkSwitch")(function* (input: {
-    readonly instanceId: ProviderInstanceId;
-    readonly name: string;
-  }) {
+  const checkSwitch = Effect.fn("ClaudeAccounts.checkSwitch")(function* (
+    input: ClaudeAccountSwitchInput,
+  ) {
     const { instanceId } = input;
     yield* requireLinux();
     const setup = yield* resolveSetup(instanceId);
@@ -446,6 +445,7 @@ export const make = Effect.gen(function* () {
       } satisfies AlreadyActive;
     }
     yield* refuseExternalPrograms(setup);
+    if (!input.stopRunningTurns) yield* refuseRunningTurns(instanceId, affectedInstanceIds);
 
     const checked = yield* loginCheck.check({
       claudeAiOauth: target.claudeAiOauth,
@@ -553,6 +553,45 @@ export const make = Effect.gen(function* () {
       return found;
     },
     Effect.mapError(stopStepFailed("enumerate")),
+  );
+
+  const failSessionStop = (requestedId: ProviderInstanceId) => (failure: SessionStopStepError) =>
+    Effect.logWarning("Claude account switch could not stop sessions", {
+      operation: "switch",
+      outcome: "sessionStopFailed",
+      instanceId: requestedId,
+      step: failure.step,
+      errorTag: failure.errorTag,
+    }).pipe(
+      Effect.andThen(
+        Effect.fail(
+          new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
+        ),
+      ),
+    );
+
+  const refuseRunningTurns = Effect.fn("ClaudeAccounts.refuseRunningTurns")(
+    function* (
+      instanceId: ProviderInstanceId,
+      affectedInstanceIds: ReadonlyArray<ProviderInstanceId>,
+    ) {
+      const runs = yield* activeRunsOn(new Set(affectedInstanceIds));
+      if (runs.length > 0) {
+        yield* Effect.logInfo("Claude account switch refused while turns run", {
+          operation: "switch",
+          outcome: "turnsRunning",
+          instanceId,
+          runningTurns: runs.length,
+        });
+        return yield* new ClaudeAccountError({ reason: "turnsRunning", instanceId });
+      }
+    },
+    (effect, instanceId) =>
+      effect.pipe(
+        Effect.catchTags({
+          SessionStopStepError: (failure) => failSessionStop(instanceId)(failure),
+        }),
+      ),
   );
 
   const runEnded = (threadId: ThreadId, runId: OrchestrationV2Run["id"]) =>
@@ -666,20 +705,7 @@ export const make = Effect.gen(function* () {
         orElse: () => Effect.fail(stopStepFailed("timeout")()),
       }),
       Effect.catchTags({
-        SessionStopStepError: (failure) =>
-          Effect.logWarning("Claude account switch could not stop sessions", {
-            operation: "switch",
-            outcome: "sessionStopFailed",
-            instanceId: requestedId,
-            step: failure.step,
-            errorTag: failure.errorTag,
-          }).pipe(
-            Effect.andThen(
-              Effect.fail(
-                new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
-              ),
-            ),
-          ),
+        SessionStopStepError: (failure) => failSessionStop(requestedId)(failure),
       }),
     );
     yield* Effect.logInfo("Claude account switch stopped sessions", {
@@ -716,38 +742,57 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (input: {
-    readonly instanceId: ProviderInstanceId;
-    readonly name: string;
-  }) {
-    return yield* accountsLock.withPermits(1)(
-      Effect.gen(function* () {
-        // Every refusal comes before anything is stopped, so a refused switch leaves turns alone.
-        const plan = yield* checkSwitch(input);
-        if (plan._tag === "AlreadyActive") return plan.result;
-        // Command ids are persisted receipts, so they must stay unique across restarts.
-        const switchId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
-        const held = yield* Ref.make<ReadonlyArray<HeldThread>>([]);
-        return yield* Effect.gen(function* () {
-          const interruptedRuns = yield* stopSetupSessions(
-            plan.affectedInstanceIds,
-            input.instanceId,
-            held,
-            switchId,
-          );
-          return yield* applySwitch(plan).pipe(
-            Effect.tapError((error) =>
-              Effect.logInfo("Claude account switch refused after stopping sessions", {
-                operation: "switch",
-                instanceId: input.instanceId,
-                reason: error.reason,
-                interruptedRuns,
-              }),
-            ),
-          );
-        }).pipe(Effect.ensuring(resumeHeldQueues(held, switchId)));
-      }),
-    );
+  const runSwitch = Effect.fn("ClaudeAccounts.runSwitch")(function* (
+    input: ClaudeAccountSwitchInput,
+  ) {
+    // Every refusal comes before anything is stopped, so a refused switch leaves turns alone.
+    const plan = yield* checkSwitch(input);
+    if (plan._tag === "AlreadyActive") return plan.result;
+    if (!input.stopRunningTurns) {
+      yield* refuseRunningTurns(input.instanceId, plan.affectedInstanceIds);
+    }
+    // Command ids are persisted receipts, so they must stay unique across restarts.
+    const switchId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+    const held = yield* Ref.make<ReadonlyArray<HeldThread>>([]);
+    return yield* Effect.gen(function* () {
+      const interruptedRuns = yield* stopSetupSessions(
+        plan.affectedInstanceIds,
+        input.instanceId,
+        held,
+        switchId,
+      );
+      return yield* applySwitch(plan).pipe(
+        Effect.tapError((error) =>
+          Effect.logInfo("Claude account switch refused after stopping sessions", {
+            operation: "switch",
+            instanceId: input.instanceId,
+            reason: error.reason,
+            interruptedRuns,
+          }),
+        ),
+      );
+    }).pipe(Effect.ensuring(resumeHeldQueues(held, switchId)));
+  });
+
+  const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (
+    input: ClaudeAccountSwitchInput,
+  ) {
+    const fiber = yield* switchPermit
+      .withPermitsIfAvailable(1)(accountsLock.withPermits(1)(runSwitch(input)))
+      .pipe(Effect.forkIn(scope));
+    const outcome = yield* Fiber.join(fiber);
+    if (Option.isNone(outcome)) {
+      yield* Effect.logInfo("Claude account switch refused while another runs", {
+        operation: "switch",
+        outcome: "switchInProgress",
+        instanceId: input.instanceId,
+      });
+      return yield* new ClaudeAccountError({
+        reason: "switchInProgress",
+        instanceId: input.instanceId,
+      });
+    }
+    return outcome.value;
   });
 
   return ClaudeAccounts.of({ remember, list: list(), forget, switch: switchAccount });

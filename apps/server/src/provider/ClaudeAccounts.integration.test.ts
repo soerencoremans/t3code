@@ -14,10 +14,13 @@ import {
   WsClaudeAccountsForgetRpc,
   WsClaudeAccountsListRpc,
   WsClaudeAccountsRememberRpc,
+  WsClaudeAccountsSwitchRpc,
   type ClaudeAccountForgetInput,
   type ClaudeAccountList,
   type ClaudeAccountListInput,
   type ClaudeAccountRememberInput,
+  type ClaudeAccountSwitchInput,
+  type ClaudeSwitchResult,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
@@ -1158,7 +1161,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
 
   const privateAccount = (h: Harness) => work(h, "claudeWork2", "Private");
   const switchTo = (h: Harness, name = "Private", instanceId = "claudeAgent") =>
-    h.accounts.switch({ instanceId: id(instanceId), name });
+    h.accounts.switch({ instanceId: id(instanceId), name, stopRunningTurns: true });
   const switchSpec = (extra: Partial<HarnessSpec> = {}): HarnessSpec => ({
     ...two(alice, bob),
     ...extra,
@@ -1321,7 +1324,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
         const error = yield* refusal(h, switchTo(h), "currentNotRemembered");
         assert.strictEqual(
           error.message,
-          'The account logged in on setup "claudeAgent" is not remembered. Remember it first, then switch.',
+          "The account logged in on this Claude setup is not remembered yet. Remember it first, then switch.",
         );
         assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
         assert.strictEqual(h.check.calls.length, 0);
@@ -1346,7 +1349,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
 
         assert.strictEqual(
           error.message,
-          'Switching setup "claudeAgent" failed. The setup is logged in as before.',
+          "Switching this Claude setup failed. It is still logged in as before.",
         );
         assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
         assert.deepEqual((yield* h.accounts.list).setups[0]?.active, {
@@ -1383,7 +1386,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
 
         assert.strictEqual(
           error.message,
-          'Switching setup "claudeAgent" failed and its login files could not be restored. Log in again with `claude auth login` for this setup.',
+          "Switching this Claude setup failed, and its previous login could not be restored. Log in to Claude again on this setup.",
         );
         const recovery = (yield* h.storedAccounts()).find((a) => a.name === "Work");
         assert.deepEqual(recovery?.claudeAiOauth, renewedWork);
@@ -1526,7 +1529,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
     ),
   );
 
-  it.effect("serialises switches: the second waits, then finds the account already active", () =>
+  it.effect("refuses a second switch while one runs", () =>
     run(switchSpec(), (h) =>
       Effect.gen(function* () {
         yield* rememberBoth(h);
@@ -1546,16 +1549,14 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
 
         const first = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
         yield* Deferred.await(entered);
-        const second = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
+        yield* refusal(h, switchTo(h), "switchInProgress");
         assert.strictEqual(h.check.calls.length, 1);
         assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
 
         yield* Deferred.succeed(release, undefined);
-        const results = [yield* Fiber.join(first), yield* Fiber.join(second)];
+        const result = yield* Fiber.join(first);
 
-        for (const result of results) {
-          assert.deepEqual(result.active, { name: "Private", email: "bob@example.com" });
-        }
+        assert.deepEqual(result.active, { name: "Private", email: "bob@example.com" });
         assert.strictEqual(h.check.calls.length, 1);
         const credentials = yield* h.readJson("claudeAgent", ".credentials.json");
         assert.deepEqual(credentials.claudeAiOauth, p2);
@@ -1905,7 +1906,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
 
         assert.strictEqual(
           error.message,
-          'Could not stop the running turns on setup "claudeAgent". The setup is still logged in as before. Try again.',
+          "Could not check or stop the running turns on this Claude setup. It is still logged in as before. Try again.",
         );
         assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
         const warnings = logs.switchLines("Warn");
@@ -2005,7 +2006,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
   });
 
   const EXTERNAL_MESSAGE =
-    'Claude programs started outside T3 are using setup "claudeAgent". Close them, then switch again.';
+    "Claude programs started outside T3 are using this Claude setup. Close them, then switch again.";
 
   it.effect("AK-20: a switch is refused while Claude programs outside T3 use the setup", () => {
     const logs = captureLogs();
@@ -2132,7 +2133,7 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
 
         assert.strictEqual(
           error.message,
-          'Could not check whether Claude programs outside T3 are using setup "claudeAgent". Try again.',
+          "Could not check whether Claude programs outside T3 are using this Claude setup. Try again.",
         );
         assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
         assert.strictEqual(h.check.calls.length, 0);
@@ -2203,34 +2204,45 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
       WsClaudeAccountsListRpc,
       WsClaudeAccountsRememberRpc,
       WsClaudeAccountsForgetRpc,
+      WsClaudeAccountsSwitchRpc,
     );
 
     // Drives the real handlers through the RPC server without a socket. Every answer is checked
     // for tokens as the JSON a client would receive.
     const makeRpc = Effect.fn("test.makeRpc")(function* (h: Harness) {
-      const responses = yield* Queue.unbounded<Exit.Exit<unknown, unknown>>();
+      const pending = new Map<string, Deferred.Deferred<Exit.Exit<unknown, unknown>>>();
       const server = yield* RpcServer.makeNoSerialization(AccountsRpcs, {
         disableTracing: true,
         disableFatalDefects: true,
         onFromServer: (response) =>
-          response._tag === "Exit" ? Queue.offer(responses, response.exit) : Effect.void,
+          response._tag === "Exit"
+            ? Deferred.succeed(pending.get(String(response.requestId))!, response.exit)
+            : Effect.void,
       }).pipe(Effect.provide(AccountsRpcs.toLayer(claudeAccountsRpcHandlers(h.accounts))));
       let next = 0;
       return Effect.fn("test.rpcCall")(function* (
         tag: (typeof WS_METHODS)[
           | "claudeAccountsList"
           | "claudeAccountsRemember"
-          | "claudeAccountsForget"],
-        payload: ClaudeAccountListInput | ClaudeAccountRememberInput | ClaudeAccountForgetInput,
+          | "claudeAccountsForget"
+          | "claudeAccountsSwitch"],
+        payload:
+          | ClaudeAccountListInput
+          | ClaudeAccountRememberInput
+          | ClaudeAccountForgetInput
+          | ClaudeAccountSwitchInput,
       ) {
+        const requestId = String(next++);
+        const response = yield* Deferred.make<Exit.Exit<unknown, unknown>>();
+        pending.set(requestId, response);
         yield* server.write(0, {
           _tag: "Request",
-          id: RpcMessage.RequestId(String(next++)),
+          id: RpcMessage.RequestId(requestId),
           tag,
           payload,
           headers: Headers.empty,
         });
-        const exit = yield* Queue.take(responses);
+        const exit = yield* Deferred.await(response);
         const answer = Exit.isSuccess(exit) ? exit.value : Cause.squash(exit.cause);
         assertNoLogin(h, JSON.stringify(answer) ?? "");
         return { exit, answer };
@@ -2347,6 +2359,232 @@ it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
         }),
       ),
     );
+
+    type RpcCall = Effect.Success<ReturnType<typeof makeRpc>>;
+    type RpcResult = Effect.Success<ReturnType<RpcCall>>;
+    const switchOver = (
+      call: RpcCall,
+      name: string,
+      stopRunningTurns: boolean,
+      instanceId = "claudeAgent",
+    ) =>
+      call(WS_METHODS.claudeAccountsSwitch, {
+        instanceId: id(instanceId),
+        name,
+        stopRunningTurns,
+      });
+    const failureOf = (result: RpcResult) => {
+      assert.isTrue(Exit.isFailure(result.exit));
+      assert.instanceOf(result.answer, ClaudeAccountError);
+      return result.answer as ClaudeAccountsModule.ClaudeAccountError;
+    };
+    const setupEmail = Effect.fn("test.setupEmail")(function* (h: Harness) {
+      return (yield* h.readJson("claudeAgent", ".claude.json")).oauthAccount?.emailAddress;
+    });
+    // Work active on claudeAgent, Private remembered, a held turn on a claudeAgent thread.
+    const withHeldTurn = Effect.fn("test.withHeldTurn")(function* (h: Harness, name: string) {
+      yield* rememberBoth(h);
+      const thread = yield* createThread(h, name);
+      const { run: held } = yield* startHeldTurn(h, thread, "long task");
+      return { thread, held };
+    });
+    const assertTurnUntouched = Effect.fn("test.assertTurnUntouched")(function* (
+      h: Harness,
+      thread: TestThread,
+      held: { readonly id: RunId },
+    ) {
+      const records = yield* h.threads.getThreadRecords(thread.threadId, ["runs"]);
+      assert.strictEqual(ThreadManagementService.latestActiveRun(records)?.id, held.id);
+      assert.deepEqual(interruptsOn(h, thread), []);
+    });
+
+    it.effect("AK-2, AK-26: switches the setup to the other account when no turn runs", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          const login = yield* privateLogin(h);
+          const call = yield* makeRpc(h);
+
+          const result = succeeded<ClaudeSwitchResult>(yield* switchOver(call, "Private", false));
+
+          assert.deepEqual(result.active, { name: "Private", email: "bob@example.com" });
+          yield* assertSetupHolds(h, "claudeAgent", login);
+          assert.strictEqual(yield* setupEmail(h), "bob@example.com");
+        }),
+      ),
+    );
+
+    it.effect("AK-3, AK-4, AK-38: refuses while a turn runs and leaves everything as it was", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          const { thread, held } = yield* withHeldTurn(h, "ak3");
+          const before = yield* h.readEverything("claudeAgent");
+          const call = yield* makeRpc(h);
+
+          const error = failureOf(yield* switchOver(call, "Private", false));
+
+          assert.strictEqual(error.reason, "turnsRunning");
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+          yield* assertTurnUntouched(h, thread, held);
+          assert.strictEqual(h.check.calls.length, 0);
+        }),
+      ),
+    );
+
+    it.effect("does not stop a turn that starts during the login check without asking", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          h.check.respond = () =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return { verdict: "Valid", latestClaudeAiOauth: Option.none() } as const;
+            });
+          const before = yield* h.readEverything("claudeAgent");
+          const call = yield* makeRpc(h);
+          const switching = yield* Effect.forkChild(switchOver(call, "Private", false), {
+            startImmediately: true,
+          });
+          yield* Deferred.await(entered);
+          const thread = yield* createThread(h, "late-turn");
+          const { run: held } = yield* startHeldTurn(h, thread, "long task");
+
+          yield* Deferred.succeed(release, undefined);
+          const error = failureOf(yield* Fiber.join(switching));
+
+          assert.strictEqual(error.reason, "turnsRunning");
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+          yield* assertTurnUntouched(h, thread, held);
+        }),
+      ),
+    );
+
+    it.effect("AK-5, AK-10, AK-11: after the refusal, the confirmed switch stops the turn", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          const { thread, held } = yield* withHeldTurn(h, "ak5");
+          const call = yield* makeRpc(h);
+          assert.strictEqual(
+            failureOf(yield* switchOver(call, "Private", false)).reason,
+            "turnsRunning",
+          );
+
+          const result = succeeded<ClaudeSwitchResult>(yield* switchOver(call, "Private", true));
+          const mark = h.fake.opens.length;
+
+          assert.strictEqual(result.active.name, "Private");
+          assert.strictEqual(yield* runStatus(h, thread, held.id), "interrupted");
+          assert.strictEqual(yield* setupEmail(h), "bob@example.com");
+          assert.deepEqual(opensAfter(h, mark, thread), []);
+          yield* completeTurn(h, thread, "continue");
+          const opens = opensAfter(h, mark, thread);
+          assert.strictEqual(opens.length, 1);
+          assert.strictEqual(opens[0]?.instanceId, "claudeAgent");
+          assert.strictEqual(yield* setupEmail(h), "bob@example.com");
+        }),
+      ),
+    );
+
+    it.effect("switching to the active account is a safe retry that never asks", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          const { thread, held } = yield* withHeldTurn(h, "retry");
+          const before = yield* h.readEverything("claudeAgent");
+          const call = yield* makeRpc(h);
+
+          const result = succeeded<ClaudeSwitchResult>(yield* switchOver(call, "Work", false));
+
+          assert.strictEqual(result.active.name, "Work");
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+          assert.strictEqual(yield* runStatus(h, thread, held.id), "running");
+        }),
+      ),
+    );
+
+    it.effect("AK-7: a second switch is refused at once while the first waits in the check", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          h.check.respond = () =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return { verdict: "Valid", latestClaudeAiOauth: Option.none() } as const;
+            });
+          const login = yield* privateLogin(h);
+          const call = yield* makeRpc(h);
+          const first = yield* Effect.forkChild(switchOver(call, "Private", false), {
+            startImmediately: true,
+          });
+          yield* Deferred.await(entered);
+
+          const second = failureOf(yield* switchOver(call, "Private", false));
+
+          assert.strictEqual(second.reason, "switchInProgress");
+          assert.strictEqual(h.check.calls.length, 1);
+          yield* Deferred.succeed(release, undefined);
+          const result = succeeded<ClaudeSwitchResult>(yield* Fiber.join(first));
+          assert.strictEqual(result.active.name, "Private");
+          yield* assertSetupHolds(h, "claudeAgent", login);
+          assert.strictEqual(yield* setupEmail(h), "bob@example.com");
+        }),
+      ),
+    );
+
+    it.effect("a caller that goes away does not cut a switch in half", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          const thread = yield* createThread(h, "gone");
+          yield* startHeldTurn(h, thread, "long task");
+          const queued = yield* send(h, thread, "next", "queue");
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          h.check.respond = () =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return { verdict: "Valid", latestClaudeAiOauth: Option.none() } as const;
+            });
+          const login = yield* privateLogin(h);
+          const caller = yield* Effect.forkChild(switchTo(h), { startImmediately: true });
+          yield* Deferred.await(entered);
+
+          yield* Fiber.interrupt(caller);
+          yield* Deferred.succeed(release, undefined);
+          // Waits on the accounts lock, so it answers once the switch has finished.
+          yield* refusal(h, h.accounts.forget({ name: "Nobody" }), "accountNotFound");
+
+          yield* assertSetupHolds(h, "claudeAgent", login);
+          assert.strictEqual(yield* setupEmail(h), "bob@example.com");
+          assert.strictEqual((yield* waitForRun(h, thread, queued.id)).status, "completed");
+        }),
+      ),
+    );
+
+    it.effect("AK-31: names no setup and no command when outside Claude programs block it", () =>
+      run(switchSpec(), (h) =>
+        Effect.gen(function* () {
+          yield* rememberBoth(h);
+          yield* h.addClaudeProcess(101, h.setups.claudeAgent!.dir);
+          const before = yield* h.readEverything("claudeAgent");
+          const call = yield* makeRpc(h);
+
+          const error = failureOf(yield* switchOver(call, "Private", true));
+
+          assert.strictEqual(error.reason, "externalClaudePrograms");
+          for (const forbidden of ["claudeAgent", "`", "claude auth"]) {
+            assert.notInclude(error.message, forbidden);
+          }
+          assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
+        }),
+      ),
+    );
   });
 });
 
@@ -2370,10 +2608,10 @@ it("explains each refusal in words that carry no login", () => {
   assert.strictEqual(message("storage"), "Could not read or save the remembered Claude accounts.");
   assert.strictEqual(
     message("sessionStopFailed"),
-    'Could not stop the running turns on setup "claudeAgent". The setup is still logged in as before. Try again.',
+    "Could not check or stop the running turns on this Claude setup. It is still logged in as before. Try again.",
   );
   assert.strictEqual(
     message("needsFreshLogin"),
-    'The saved login of "Work" no longer works. Log in to that account again with `claude auth login`, then forget "Work" and remember it again.',
+    'The saved login of "Work" no longer works. Forget "Work", then add the account again.',
   );
 });

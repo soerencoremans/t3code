@@ -53,6 +53,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.claudeAccountsList]: "provider",
   [WS_METHODS.claudeAccountsRemember]: "provider",
   [WS_METHODS.claudeAccountsForget]: "provider",
+  [WS_METHODS.claudeAccountsSwitch]: "provider",
   [WS_METHODS.serverUpdateServer]: "server",
   [WS_METHODS.serverUpdateServerWithProgress]: "server",
   [WS_METHODS.serverCommitDesktopUpdate]: "server",
