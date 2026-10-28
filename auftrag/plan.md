@@ -108,3 +108,9 @@ Private. Six tickets, server first, then the three screens.
 - Ordering via managedProvider refreshSemaphore; fallback stores accountUuid read before probe (readClaudeAccountUuid in claudeLoginFiles.ts); undefined===undefined keeps :442 test.
 - Next: ticket-8 (share config, last, test-affected gate). Then closing.
 - Ticket 7 ruling (turn 19): #17 updated; refresh under switchPermit only; readClaudeAccountConfigIds; helper exported from ClaudeAccounts.ts. Next: ticket-8.
+
+## Ticket 8 drafted (turn 20) = #18. Seats: ui, ux, component-reuse. Blocked by #14, #16. LAST ticket.
+- Checkbox at top of Identity step; ticked hides identity rows, steps = ["Provider","Identity"], footer "Add account…" swaps wizard for AddClaudeAccountDialog (Codex-swap precedent) via ClaudeShareConfigAddAccount (refresh on add/close). Deviation from ticket 6's "mounts ClaudeAccountAddLogin" stated in Decisions.
+- "Setup exists" = list.setups with active !== null (claudeShareConfigSetups); claudeSetupLabel = displayName ?? "Claude". Option hidden while loading/failed.
+- handleSave guarded while sharing. Gate test-affected.
+- After ticket 8 ruling: next draft turn (ticket-9) has NO entry -> closing comment + Gremium. Closing must note: ticket 3's "Add provider dialog (ticket 6)" means ticket 8 (#18); ticket 8 mounts AddClaudeAccountDialog not ClaudeAccountAddLogin.
