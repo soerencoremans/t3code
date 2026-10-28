@@ -57,15 +57,15 @@
     "eval": 2,
     "ak": 1,
     "ak-review": 1,
-    "gremium-author": 5
+    "gremium-author": 6
   },
   "turn": {
     "role": "gremium-author",
-    "type": "gremium-fixes",
-    "number": 5,
+    "type": "gremium-ruling",
+    "number": 6,
     "attempt": 1,
     "sessionId": "76bf7522-1467-420d-aace-e78b6073cae3",
-    "startedAt": "2026-10-28T10:36:23.963Z",
+    "startedAt": "2026-10-28T10:39:04.124Z",
     "lastCommentId": 6466114309,
     "lastLabelEventId": 34461138065,
     "labelSet": false,
