@@ -44,8 +44,8 @@
   "label": "Criteria Review",
   "conflict": false,
   "counters": {
-    "item": null,
-    "round": 0,
+    "item": "ticket-7",
+    "round": 2,
     "coverageFails": 0,
     "countedEvent": 34461137376
   },
@@ -62,15 +62,15 @@
     "eval": 2,
     "ak": 1,
     "ak-review": 1,
-    "gremium-author": 17
+    "gremium-author": 18
   },
   "turn": {
     "role": "gremium-author",
-    "type": "gremium-draft",
-    "number": 17,
+    "type": "gremium-fixes",
+    "number": 18,
     "attempt": 1,
     "sessionId": "684d82ea-f7a3-44c8-8bd9-64c76654b523",
-    "startedAt": "2026-10-28T11:24:58.620Z",
+    "startedAt": "2026-10-28T11:34:23.509Z",
     "lastCommentId": 6466114309,
     "lastLabelEventId": 34461138065,
     "labelSet": false,
