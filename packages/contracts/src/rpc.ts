@@ -21,6 +21,20 @@ import {
   ChatGptHandoffInput,
   ChatGptHandoffState,
 } from "./providerSetup.ts";
+import {
+  ClaudeAccountAddAttemptInput,
+  ClaudeAccountAddRespondInput,
+  ClaudeAccountAddStartInput,
+  ClaudeAccountAddState,
+  ClaudeAccountError,
+  ClaudeAccountForgetInput,
+  ClaudeAccountList,
+  ClaudeAccountListInput,
+  ClaudeAccountRememberInput,
+  ClaudeAccountSwitchInput,
+  ClaudeSwitchResult,
+  RememberedClaudeAccount,
+} from "./claudeAccounts.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -423,6 +437,14 @@ export const WS_METHODS = {
   providerInstallCancel: "provider.install.cancel",
   providerInstallSubscribe: "provider.install.subscribe",
   providerInstallRemove: "provider.install.remove",
+  claudeAccountsList: "claudeAccounts.list",
+  claudeAccountsRemember: "claudeAccounts.remember",
+  claudeAccountsForget: "claudeAccounts.forget",
+  claudeAccountsSwitch: "claudeAccounts.switch",
+  claudeAccountsAddStart: "claudeAccounts.add.start",
+  claudeAccountsAddRespond: "claudeAccounts.add.respond",
+  claudeAccountsAddCancel: "claudeAccounts.add.cancel",
+  claudeAccountsAddSubscribe: "claudeAccounts.add.subscribe",
 
   vcsPull: "vcs.pull",
   vcsRefreshStatus: "vcs.refreshStatus",
@@ -683,6 +705,60 @@ const WsProviderAuthLogoutRpc = Rpc.make(WS_METHODS.providerAuthLogout, {
   payload: ProviderSetupInput,
   success: ProviderAuthState,
   error: ProviderSetupRpcError,
+});
+
+export const ClaudeAccountRpcError = Schema.Union([
+  ClaudeAccountError,
+  EnvironmentAuthorizationError,
+]);
+
+export const WsClaudeAccountsListRpc = Rpc.make(WS_METHODS.claudeAccountsList, {
+  payload: ClaudeAccountListInput,
+  success: ClaudeAccountList,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsRememberRpc = Rpc.make(WS_METHODS.claudeAccountsRemember, {
+  payload: ClaudeAccountRememberInput,
+  success: RememberedClaudeAccount,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsForgetRpc = Rpc.make(WS_METHODS.claudeAccountsForget, {
+  payload: ClaudeAccountForgetInput,
+  success: Schema.Void,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsSwitchRpc = Rpc.make(WS_METHODS.claudeAccountsSwitch, {
+  payload: ClaudeAccountSwitchInput,
+  success: ClaudeSwitchResult,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddStartRpc = Rpc.make(WS_METHODS.claudeAccountsAddStart, {
+  payload: ClaudeAccountAddStartInput,
+  success: ClaudeAccountAddState,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddRespondRpc = Rpc.make(WS_METHODS.claudeAccountsAddRespond, {
+  payload: ClaudeAccountAddRespondInput,
+  success: Schema.Void,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddCancelRpc = Rpc.make(WS_METHODS.claudeAccountsAddCancel, {
+  payload: ClaudeAccountAddAttemptInput,
+  success: Schema.Void,
+  error: ClaudeAccountRpcError,
+});
+
+export const WsClaudeAccountsAddSubscribeRpc = Rpc.make(WS_METHODS.claudeAccountsAddSubscribe, {
+  payload: ClaudeAccountAddAttemptInput,
+  success: ClaudeAccountAddState,
+  error: ClaudeAccountRpcError,
+  stream: true,
 });
 
 const WsProviderAuthSubscribeRpc = Rpc.make(WS_METHODS.providerAuthSubscribe, {
@@ -1879,7 +1955,21 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
   { error: EnvironmentAuthorizationError },
 ) {}
 
-export const WsRpcGroup = RpcGroup.make(
+// Effect types every handler against the whole group, so the cost of one `toLayer` grows with
+// the square of its size. The server builds each part's handlers on its own to stay under
+// TypeScript's instantiation limit; clients use the merged `WsRpcGroup`.
+export const WsClaudeAccountsRpcGroup = RpcGroup.make(
+  WsClaudeAccountsListRpc,
+  WsClaudeAccountsRememberRpc,
+  WsClaudeAccountsForgetRpc,
+  WsClaudeAccountsSwitchRpc,
+  WsClaudeAccountsAddStartRpc,
+  WsClaudeAccountsAddRespondRpc,
+  WsClaudeAccountsAddCancelRpc,
+  WsClaudeAccountsAddSubscribeRpc,
+).middleware(RpcScopeAuthorization);
+
+export const WsCoreRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -2079,3 +2169,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
 ).middleware(RpcScopeAuthorization);
+
+export const WsRpcGroup = WsCoreRpcGroup.merge(WsClaudeAccountsRpcGroup);

@@ -59,13 +59,22 @@ blocks every switch. The marker is a cooperative tag, not a proof of origin: any
 same user can set it, and that gains it nothing, because the same user can rewrite the login files
 directly. Build no other control on it.
 
+Adding a Claude account ([ClaudeAccountLogin](../../apps/server/src/provider/ClaudeAccountLogin.ts))
+runs `claude auth login` with `CLAUDE_CONFIG_DIR` set to a fresh 0700 folder under
+`<stateDir>/claude-account-logins/`, built through `makeClaudeEnvironment`, so the CLI is marked and
+never touches a setup's own config dir. When the CLI exits, the login is remembered and the folder
+deleted. Cancel, the 5-minute timeout and the owning WebSocket connection closing delete the folder
+too, and the server empties the parent folder at start, because a crash can leave a login behind.
+
 The Claude account switch does not follow the Antigravity order "close admission, then stop":
 Claude has no admission gate. It interrupts the setup's running turns with their queues held,
 waits for those interrupts in two passes, closes the instance's sessions, and verifies that none is
 live before it changes the login files and resumes the held queues. Interrupting first matters:
 releasing a session mid-turn fails the run instead of stopping it. A turn admitted between the last
 check and the file change can keep the old login. `ProviderAuthService.stopSessions` keeps its own
-release-and-fail order for sign-in and sign-out.
+release-and-fail order for sign-in and sign-out. After a switch, T3 re-checks the provider status
+of every affected setup before the switch returns, so the account and usage it shows are the new
+login's.
 
 ## Setup must not happen as a health-check side effect
 

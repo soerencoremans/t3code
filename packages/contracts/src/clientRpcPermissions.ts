@@ -4,6 +4,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
+  AuthProvidersManageScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   type AuthEnvironmentScope,
@@ -49,6 +50,12 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
+  [WS_METHODS.claudeAccountsRemember]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsForget]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsSwitch]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsAddStart]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsAddRespond]: AuthProvidersManageScope,
+  [WS_METHODS.claudeAccountsAddCancel]: AuthProvidersManageScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

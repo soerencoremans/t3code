@@ -12,6 +12,7 @@ import {
   ProviderDriverKind,
   type ProviderInstanceConfigMap,
   ProviderInstanceId,
+  type ServerProvider,
 } from "@t3tools/contracts";
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -19,7 +20,9 @@ import type { GrokSettings } from "@t3tools/provider-grok/settings";
 import type { CursorSettings } from "@t3tools/provider-cursor/settings";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -41,6 +44,7 @@ import * as ModelManifest from "./ModelManifest.ts";
 import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
 import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
 import * as ResetCreditCoordinator from "./resetCreditCoordinator.ts";
+import { refreshClaudeSetupSnapshots } from "./ClaudeAccounts.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import { makeProviderInstanceRegistry } from "./ProviderInstanceRegistry.ts";
 import * as ProviderOrchestrationAdapterInfrastructure from "./ProviderOrchestrationAdapterInfrastructure.ts";
@@ -573,6 +577,172 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
       expect(probeCount).toBeGreaterThan(sameAccountFailureProbeCount);
     }).pipe(Effect.provide(layerTest)),
   );
+
+  describe("after a Claude account switch within one organization", () => {
+    type ClaudeTestAccount = "work" | "private";
+    const CLAUDE_TEST_ACCOUNTS = {
+      work: { accountUuid: "acct-work", email: "work@example.com", utilization: 90 },
+      private: { accountUuid: "acct-private", email: "private@example.com", utilization: 5 },
+    } as const;
+    type ClaudeProbeResult = Awaited<
+      ReturnType<ReturnType<typeof ClaudeSdk.query>["initializationResult"]>
+    >;
+    const probeAnswer = (name: ClaudeTestAccount) =>
+      ({
+        commands: [],
+        account: {
+          email: CLAUDE_TEST_ACCOUNTS[name].email,
+          subscriptionType: "pro",
+          tokenSource: "oauth",
+        },
+      }) as unknown as ClaudeProbeResult;
+
+    // `answer` gets the 1-based probe number and the account the spy currently answers for.
+    const switchFixture = (
+      answer: (probe: number, current: ClaudeTestAccount) => Promise<ClaudeProbeResult>,
+    ) =>
+      Effect.gen(function* () {
+        const fixtures = yield* makeTildeProviderFixtures();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const accountConfigPath = path.join(fixtures.claudeHomePath, ".claude.json");
+        const login = (name: ClaudeTestAccount) =>
+          fs.writeFileString(
+            accountConfigPath,
+            JSON.stringify({
+              oauthAccount: {
+                organizationUuid: "org-a",
+                accountUuid: CLAUDE_TEST_ACCOUNTS[name].accountUuid,
+                emailAddress: CLAUDE_TEST_ACCOUNTS[name].email,
+              },
+            }),
+          );
+        yield* login("work");
+        const spy = { current: "work" as ClaudeTestAccount, probeCount: 0 };
+        const query = vi.spyOn(ClaudeSdk, "query").mockImplementation(
+          () =>
+            ({
+              initializationResult: () => answer(++spy.probeCount, spy.current),
+              usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => ({
+                rate_limits_available: true,
+                rate_limits: {
+                  five_hour: {
+                    utilization: CLAUDE_TEST_ACCOUNTS[spy.current].utilization,
+                    resets_at: "2026-07-18T14:39:00Z",
+                  },
+                },
+              }),
+            }) as ReturnType<typeof ClaudeSdk.query>,
+        );
+        yield* Effect.addFinalizer(() => Effect.sync(() => query.mockRestore()));
+
+        const claudeId = ProviderInstanceId.make("claude_account_switch");
+        const { registry } = yield* makeProviderInstanceRegistry<ClaudeDriverEnv>({
+          drivers: [ClaudeDriver],
+          configMap: {
+            [claudeId]: {
+              driver: ProviderDriverKind.make("claudeAgent"),
+              enabled: true,
+              config: makeClaudeConfig({
+                enabled: true,
+                binaryPath: fixtures.claudeBinaryPath,
+                homePath: fixtures.claudeHomePath,
+              }),
+            },
+          },
+        });
+        const claude = yield* registry.getInstance(claudeId);
+        if (claude === undefined) return yield* Effect.die("the Claude instance was not built");
+        return {
+          claude,
+          spy,
+          login,
+          refreshAfterSwitch: refreshClaudeSetupSnapshots(registry)([claudeId]),
+        };
+      });
+
+    const fiveHourUsedPercent = (snapshot: ServerProvider) =>
+      snapshot.usageLimits?.windows.find((window) => window.id === "five_hour")?.usedPercent;
+
+    it.effect("publishes the new account and its usage (AK-8, AK-9)", () =>
+      Effect.gen(function* () {
+        if (yield* HostProcess.isWindows) return;
+        const { claude, spy, login, refreshAfterSwitch } = yield* switchFixture((_, current) =>
+          Promise.resolve(probeAnswer(current)),
+        );
+
+        const before = yield* claude.snapshot.refresh;
+        expect(before.auth).toMatchObject({ email: "work@example.com" });
+        expect(fiveHourUsedPercent(before)).toBe(90);
+
+        yield* TestClock.adjust("1 second");
+        yield* login("private");
+        spy.current = "private";
+        yield* refreshAfterSwitch;
+
+        const after = yield* claude.snapshot.getSnapshot;
+        expect(after.auth.email).toBe("private@example.com");
+        expect(fiveHourUsedPercent(after)).toBe(5);
+        expect(JSON.stringify(after)).not.toContain("work@example.com");
+      }).pipe(Effect.provide(layerTest)),
+    );
+
+    it.effect("does not fall back to the old account when the probe fails (AK-8, AK-9)", () =>
+      Effect.gen(function* () {
+        if (yield* HostProcess.isWindows) return;
+        let failProbe = false;
+        const { claude, login, refreshAfterSwitch } = yield* switchFixture((_, current) =>
+          failProbe
+            ? Promise.reject(new Error("initialization failed"))
+            : Promise.resolve(probeAnswer(current)),
+        );
+
+        const before = yield* claude.snapshot.refresh;
+        expect(before.auth).toMatchObject({ email: "work@example.com" });
+
+        yield* TestClock.adjust("1 second");
+        yield* login("private");
+        failProbe = true;
+        yield* refreshAfterSwitch;
+
+        const after = yield* claude.snapshot.getSnapshot;
+        expect(after.auth.status).toBe("unknown");
+        expect(after.usageLimits).toBeUndefined();
+        expect(JSON.stringify(after)).not.toContain("work@example.com");
+      }).pipe(Effect.provide(layerTest)),
+    );
+
+    it.effect(
+      "a probe that straddles the switch neither publishes last nor poisons the fallback",
+      () =>
+        Effect.gen(function* () {
+          if (yield* HostProcess.isWindows) return;
+          const heldProbeStarted = yield* Deferred.make<void>();
+          let releaseHeldProbe: (result: ClaudeProbeResult) => void = () => undefined;
+          const { claude, spy, login, refreshAfterSwitch } = yield* switchFixture((probe) => {
+            if (probe > 1) return Promise.reject(new Error("initialization failed"));
+            Deferred.doneUnsafe(heldProbeStarted, Effect.void);
+            return new Promise((resolve) => {
+              releaseHeldProbe = resolve;
+            });
+          });
+
+          // The background refresh is the one every instance forks when it is built: a second,
+          // forked here, would only queue behind it and probe once more.
+          yield* Deferred.await(heldProbeStarted);
+          yield* login("private");
+          const switchRefresh = yield* refreshAfterSwitch.pipe(Effect.forkChild);
+          releaseHeldProbe(probeAnswer("work"));
+          yield* Fiber.join(switchRefresh);
+
+          expect(spy.probeCount).toBe(2);
+          const after = yield* claude.snapshot.getSnapshot;
+          expect(after.auth.status).toBe("unknown");
+          expect(after.usageLimits).toBeUndefined();
+          expect(JSON.stringify(after)).not.toContain("work@example.com");
+        }).pipe(Effect.provide(layerTest)),
+    );
+  });
 
   const redeemClaudeReset = (claim: { result: string; usageFailsAfterClaim: boolean }) =>
     Effect.gen(function* () {

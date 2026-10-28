@@ -1035,6 +1035,48 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:provider:auth-logout",
       tag: WS_METHODS.providerAuthLogout,
     }),
+    claudeAccountList: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:claude-accounts:list",
+      tag: WS_METHODS.claudeAccountsList,
+    }),
+    rememberClaudeAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:remember",
+      tag: WS_METHODS.claudeAccountsRemember,
+    }),
+    forgetClaudeAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:forget",
+      tag: WS_METHODS.claudeAccountsForget,
+    }),
+    switchClaudeAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:switch",
+      tag: WS_METHODS.claudeAccountsSwitch,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
+      },
+    }),
+    startClaudeAccountAdd: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:add-start",
+      tag: WS_METHODS.claudeAccountsAddStart,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
+      },
+    }),
+    respondClaudeAccountAdd: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:add-respond",
+      tag: WS_METHODS.claudeAccountsAddRespond,
+    }),
+    cancelClaudeAccountAdd: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:claude-accounts:add-cancel",
+      tag: WS_METHODS.claudeAccountsAddCancel,
+    }),
+    claudeAccountAddState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:claude-accounts:add-state",
+      tag: WS_METHODS.claudeAccountsAddSubscribe,
+      idleTtlMs: 0,
+      completeWhen: (state) => state.phase !== "running",
+    }),
     providerInstallState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:provider:install-state",
       tag: WS_METHODS.providerInstallSubscribe,

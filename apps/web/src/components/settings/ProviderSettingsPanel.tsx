@@ -101,6 +101,7 @@ import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { UsageProviderSettings } from "./UsageProviderSettings";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
+import { ClaudeAccountsSection } from "./ClaudeAccountsSection";
 import { CodexSetupSection, CodexManagedRuntimeFields } from "./CodexSetupSection";
 import { readCodexSetupMode } from "./CodexSetupSection.logic";
 import { providerClients } from "./providerDriverMeta";
@@ -1372,6 +1373,12 @@ function ProviderInstanceRow({
                 },
               })
             }
+          />
+        ) : mode === "editor" && !readOnly && driver === "claudeAgent" ? (
+          <ClaudeAccountsSection
+            key={`${environmentId}:${instanceId}`}
+            environmentId={environmentId}
+            instanceId={instanceId}
           />
         ) : mode === "editor" &&
           !readOnly &&

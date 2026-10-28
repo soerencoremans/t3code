@@ -26,6 +26,7 @@ import { claudeUsageReader } from "./claudeUsage.ts";
 import { makeClaudeScopedLimitNames } from "../claudeUsageLimits.ts";
 import * as ClaudeResetCredits from "../claudeResetCredits.ts";
 import * as ResetCreditCoordinator from "../resetCreditCoordinator.ts";
+import { readClaudeAccountConfigIds, type ClaudeAccountConfigIds } from "../claudeLoginFiles.ts";
 import {
   checkClaudeProviderStatus,
   makePendingClaudeProvider,
@@ -198,37 +199,43 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
     // Per-instance capabilities cache: keyed on binary + resolved HOME so
     // account-specific probes never share auth metadata across instances.
     // A transient miss may reuse the last account once, but its usage windows keep their age.
-    const lastGoodCapabilities = yield* Ref.make<ClaudeCapabilitiesProbe | undefined>(undefined);
+    // The account is read before the probe: one that finishes after a switch belongs to the old login.
+    const lastGoodCapabilities = yield* Ref.make<
+      | {
+          readonly capabilities: ClaudeCapabilitiesProbe;
+          readonly ids: ClaudeAccountConfigIds | undefined;
+        }
+      | undefined
+    >(undefined);
     const capabilitiesProbeCache = yield* Cache.makeWith(
       () =>
-        probeClaudeCapabilities(effectiveConfig, processEnv, stateDir).pipe(
-          Effect.flatMap((capabilities) =>
-            ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
-              Effect.map((workspaceId) => ({
-                _tag: "fresh" as const,
-                capabilities:
-                  workspaceId === undefined ? capabilities : { ...capabilities, workspaceId },
-              })),
-            ),
-          ),
-          Effect.tap(({ capabilities }) => Ref.set(lastGoodCapabilities, capabilities)),
+        Effect.gen(function* () {
+          const ids = yield* readClaudeAccountConfigIds(accountConfigPath);
+          return yield* probeClaudeCapabilities(effectiveConfig, processEnv, stateDir).pipe(
+            Effect.map((probed) => {
+              const workspaceId = ids?.organizationUuid;
+              const capabilities = workspaceId === undefined ? probed : { ...probed, workspaceId };
+              return { _tag: "fresh" as const, capabilities };
+            }),
+            Effect.tap(({ capabilities }) => Ref.set(lastGoodCapabilities, { capabilities, ids })),
+          );
+        }).pipe(
           Effect.catch((error) =>
-            Ref.getAndSet(lastGoodCapabilities, undefined).pipe(
-              Effect.flatMap((capabilities) =>
-                capabilities === undefined
-                  ? Effect.fail(error)
-                  : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
-                      Effect.flatMap((workspaceId) =>
-                        workspaceId === capabilities.workspaceId
-                          ? Effect.succeed({
-                              _tag: "fallback" as const,
-                              capabilities: withoutUsage(capabilities),
-                            })
-                          : Effect.fail(error),
-                      ),
-                    ),
-              ),
-            ),
+            Effect.gen(function* () {
+              const stored = yield* Ref.getAndSet(lastGoodCapabilities, undefined);
+              if (stored === undefined) return yield* error;
+              const current = yield* readClaudeAccountConfigIds(accountConfigPath);
+              const sameAccount =
+                stored.ids !== undefined &&
+                current !== undefined &&
+                current.organizationUuid === stored.ids.organizationUuid &&
+                current.accountUuid === stored.ids.accountUuid;
+              if (!sameAccount) return yield* error;
+              return {
+                _tag: "fallback" as const,
+                capabilities: withoutUsage(stored.capabilities),
+              };
+            }),
           ),
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),

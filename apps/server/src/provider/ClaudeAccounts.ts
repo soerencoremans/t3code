@@ -1,6 +1,12 @@
 import {
+  ClaudeAccountError,
+  type ClaudeAccountSwitchInput,
+  type ClaudeSwitchResult,
   ClaudeSettings,
   CommandId,
+  RememberedClaudeAccount,
+  type ClaudeAccountList,
+  type ClaudeSetupAccountState,
   ProviderInstanceId,
   type OrchestrationV2Run,
   type ProjectId,
@@ -8,6 +14,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -15,6 +22,7 @@ import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -22,6 +30,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -38,104 +47,20 @@ import {
   sameClaudeAccount,
   writeClaudeSetupLogin,
   type ClaudeAccountIdentity,
+  type ClaudeSetupLogin,
   type JsonObject,
 } from "./claudeLoginFiles.ts";
+import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
 
-export const ClaudeAccountErrorReason = Schema.Literals([
-  "unavailable",
-  "setupNotFound",
-  "setupUnreadable",
-  "notLoggedIn",
-  "invalidName",
-  "nameInUse",
-  "alreadyRemembered",
-  "accountNotFound",
-  "storage",
-  "currentNotRemembered",
-  "needsFreshLogin",
-  "loginCheckFailed",
-  "switchFailed",
-  "switchRollbackFailed",
-  "externalClaudePrograms",
-  "processCheckFailed",
-  "sessionStopFailed",
-]);
-export type ClaudeAccountErrorReason = typeof ClaudeAccountErrorReason.Type;
-
-export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()(
-  "ClaudeAccountError",
-  {
-    reason: ClaudeAccountErrorReason,
-    instanceId: Schema.optional(ProviderInstanceId),
-    name: Schema.optional(Schema.String),
-  },
-) {
-  override get message(): string {
-    switch (this.reason) {
-      case "unavailable":
-        return "Claude account switching is unavailable on this system. It is supported on Linux only.";
-      case "setupNotFound":
-        return `No Claude setup "${this.instanceId}" is configured.`;
-      case "setupUnreadable":
-        return `Could not read the Claude login of setup "${this.instanceId}".`;
-      case "notLoggedIn":
-        return `No Claude account is logged in on setup "${this.instanceId}".`;
-      case "invalidName":
-        return "An account name must be 1 to 64 characters long and contain no control characters.";
-      case "nameInUse":
-        return `The name "${this.name}" is already in use.`;
-      case "alreadyRemembered":
-        return `This account is already remembered as "${this.name}".`;
-      case "accountNotFound":
-        return `No remembered Claude account is named "${this.name}".`;
-      case "storage":
-        return "Could not read or save the remembered Claude accounts.";
-      case "currentNotRemembered":
-        return `The account logged in on setup "${this.instanceId}" is not remembered. Remember it first, then switch.`;
-      case "needsFreshLogin":
-        return `The saved login of "${this.name}" no longer works. Log in to that account again with \`claude auth login\`, then forget "${this.name}" and remember it again.`;
-      case "loginCheckFailed":
-        return `Could not check the saved login of "${this.name}". Try again.`;
-      case "switchFailed":
-        return `Switching setup "${this.instanceId}" failed. The setup is logged in as before.`;
-      case "switchRollbackFailed":
-        return `Switching setup "${this.instanceId}" failed and its login files could not be restored. Log in again with \`claude auth login\` for this setup.`;
-      case "externalClaudePrograms":
-        return `Claude programs started outside T3 are using setup "${this.instanceId}". Close them, then switch again.`;
-      case "processCheckFailed":
-        return `Could not check whether Claude programs outside T3 are using setup "${this.instanceId}". Try again.`;
-      case "sessionStopFailed":
-        return `Could not stop the running turns on setup "${this.instanceId}". The setup is still logged in as before. Try again.`;
-    }
-  }
-}
-
-export const RememberedClaudeAccount = Schema.Struct({ name: Schema.String, email: Schema.String });
-export type RememberedClaudeAccount = typeof RememberedClaudeAccount.Type;
-
-export const ClaudeSetupAccountState = Schema.Struct({
-  instanceId: ProviderInstanceId,
-  displayName: Schema.NullOr(Schema.String),
-  active: Schema.NullOr(
-    Schema.Struct({ email: Schema.String, rememberedAs: Schema.NullOr(Schema.String) }),
-  ),
-});
-export type ClaudeSetupAccountState = typeof ClaudeSetupAccountState.Type;
-
-export const ClaudeAccountList = Schema.Struct({
-  accounts: Schema.Array(RememberedClaudeAccount),
-  setups: Schema.Array(ClaudeSetupAccountState),
-});
-export type ClaudeAccountList = typeof ClaudeAccountList.Type;
-
-export const ClaudeSwitchResult = Schema.Struct({
-  instanceId: ProviderInstanceId,
-  active: RememberedClaudeAccount,
-  /** Every Claude setup on the same config dir, the requested one first. */
-  affectedInstanceIds: Schema.Array(ProviderInstanceId),
-});
-export type ClaudeSwitchResult = typeof ClaudeSwitchResult.Type;
+export {
+  ClaudeAccountError,
+  ClaudeAccountErrorReason,
+  ClaudeAccountList,
+  ClaudeSetupAccountState,
+  ClaudeSwitchResult,
+  RememberedClaudeAccount,
+} from "@t3tools/contracts";
 
 export class ClaudeAccounts extends Context.Service<
   ClaudeAccounts,
@@ -146,12 +71,28 @@ export class ClaudeAccounts extends Context.Service<
     }) => Effect.Effect<RememberedClaudeAccount, ClaudeAccountError>;
     readonly list: Effect.Effect<ClaudeAccountList, ClaudeAccountError>;
     readonly forget: (input: { readonly name: string }) => Effect.Effect<void, ClaudeAccountError>;
-    readonly switch: (input: {
+    readonly switch: (
+      input: ClaudeAccountSwitchInput,
+    ) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
+    /** An early answer before a login starts; `rememberLogin` checks the name again under the lock. */
+    readonly prepareAddAccount: (input: {
       readonly instanceId: ProviderInstanceId;
       readonly name: string;
-    }) => Effect.Effect<ClaudeSwitchResult, ClaudeAccountError>;
+    }) => Effect.Effect<ClaudeAddAccountTarget, ClaudeAccountError>;
+    readonly rememberLogin: (input: {
+      readonly instanceId: ProviderInstanceId;
+      readonly name: string;
+      readonly login: ClaudeSetupLogin;
+    }) => Effect.Effect<RememberedClaudeAccount, ClaudeAccountError>;
   }
 >()("t3/provider/ClaudeAccounts") {}
+
+export interface ClaudeAddAccountTarget {
+  readonly instanceId: ProviderInstanceId;
+  readonly name: string;
+  readonly binaryPath: string;
+  readonly environment: NodeJS.ProcessEnv;
+}
 
 /** How long a switch waits for the setup's T3 turns to stop, under `accountsLock`. */
 export const CLAUDE_SWITCH_STOP_TIMEOUT = Duration.seconds(10);
@@ -236,6 +177,39 @@ const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const isValidName = (name: string) =>
   name.length > 0 && Array.from(name).length <= MAX_NAME_LENGTH && !CONTROL_CHARACTER.test(name);
 
+/**
+ * Re-probes each setup so its published status is the current login's. A failure is only logged:
+ * it must never turn a done switch into a failed one.
+ */
+export const refreshClaudeSetupSnapshots =
+  (instances: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"]) =>
+  (instanceIds: ReadonlyArray<ProviderInstanceId>): Effect.Effect<void> =>
+    Effect.forEach(
+      instanceIds,
+      (instanceId) =>
+        Effect.gen(function* () {
+          const instance = yield* instances.getInstance(instanceId);
+          if (instance === undefined) return;
+          yield* instance.invalidateCaches ?? Effect.void;
+          yield* instance.snapshot.refresh;
+        }).pipe(
+          Effect.catchCause((cause) => {
+            const error = Cause.squash(cause);
+            // No cause text: a probe error can quote a login.
+            return Effect.logWarning(
+              "Claude provider status refresh after an account switch failed",
+              {
+                operation: "switch",
+                outcome: "snapshotRefreshFailed",
+                instanceId,
+                errorTag: error instanceof Error ? error.name : "unknown",
+              },
+            );
+          }),
+        ),
+      { concurrency: "unbounded", discard: true },
+    );
+
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -248,7 +222,13 @@ export const make = Effect.gen(function* () {
   const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const crypto = yield* Crypto.Crypto;
+  const instances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+  const refreshSnapshots = refreshClaudeSetupSnapshots(instances);
   const accountsLock = yield* Semaphore.make(1);
+  // Held for a whole switch so a second request is refused instead of queued behind the first.
+  const switchPermit = yield* Semaphore.make(1);
+  // A switch runs in this scope, not in its caller's fiber, so a caller that goes away cannot cut it in half.
+  const scope = yield* Scope.Scope;
 
   const requireLinux = Effect.fn("ClaudeAccounts.requireLinux")(function* () {
     if ((yield* HostProcess.Platform) !== "linux") {
@@ -340,6 +320,46 @@ export const make = Effect.gen(function* () {
     yield* secrets.set(STORAGE_NAME, new TextEncoder().encode(json));
   }, Effect.mapError(storageError));
 
+  const rememberLogin = Effect.fn("ClaudeAccounts.rememberLogin")(function* (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly name: string;
+    readonly login: ClaudeSetupLogin;
+  }) {
+    yield* requireLinux();
+    const { instanceId, login } = input;
+    const name = input.name.trim();
+    const remembered = yield* accountsLock.withPermits(1)(
+      Effect.gen(function* () {
+        if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
+        const accounts = yield* loadAccounts();
+        if (accounts.some((account) => sameName(account.name, name))) {
+          return yield* new ClaudeAccountError({ reason: "nameInUse", name });
+        }
+        const duplicate = accounts.find((account) =>
+          sameClaudeAccount(account.identity, login.identity),
+        );
+        if (duplicate !== undefined) {
+          return yield* new ClaudeAccountError({
+            reason: "alreadyRemembered",
+            name: duplicate.name,
+          });
+        }
+        yield* saveAccounts([
+          ...accounts,
+          {
+            name,
+            oauthAccount: login.oauthAccount,
+            claudeAiOauth: login.claudeAiOauth,
+            identity: login.identity,
+          },
+        ]);
+        return { name, email: login.identity.email } satisfies RememberedClaudeAccount;
+      }),
+    );
+    yield* Effect.logInfo("Claude account remembered", { operation: "remember", name, instanceId });
+    return remembered;
+  });
+
   const remember = Effect.fn("ClaudeAccounts.remember")(function* (input: {
     readonly instanceId: ProviderInstanceId;
     readonly name: string;
@@ -353,37 +373,28 @@ export const make = Effect.gen(function* () {
     if (Option.isNone(login)) {
       return yield* new ClaudeAccountError({ reason: "notLoggedIn", instanceId });
     }
+    return yield* rememberLogin({ instanceId, name: input.name, login: login.value });
+  });
+
+  const prepareAddAccount = Effect.fn("ClaudeAccounts.prepareAddAccount")(function* (input: {
+    readonly instanceId: ProviderInstanceId;
+    readonly name: string;
+  }) {
+    yield* requireLinux();
+    const { instanceId } = input;
+    const setup = yield* resolveSetup(instanceId);
     const name = input.name.trim();
-    const remembered = yield* accountsLock.withPermits(1)(
-      Effect.gen(function* () {
-        if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
-        const accounts = yield* loadAccounts();
-        if (accounts.some((account) => sameName(account.name, name))) {
-          return yield* new ClaudeAccountError({ reason: "nameInUse", name });
-        }
-        const duplicate = accounts.find((account) =>
-          sameClaudeAccount(account.identity, login.value.identity),
-        );
-        if (duplicate !== undefined) {
-          return yield* new ClaudeAccountError({
-            reason: "alreadyRemembered",
-            name: duplicate.name,
-          });
-        }
-        yield* saveAccounts([
-          ...accounts,
-          {
-            name,
-            oauthAccount: login.value.oauthAccount,
-            claudeAiOauth: login.value.claudeAiOauth,
-            identity: login.value.identity,
-          },
-        ]);
-        return { name, email: login.value.identity.email } satisfies RememberedClaudeAccount;
-      }),
-    );
-    yield* Effect.logInfo("Claude account remembered", { operation: "remember", name, instanceId });
-    return remembered;
+    if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
+    const accounts = yield* loadAccounts();
+    if (accounts.some((account) => sameName(account.name, name))) {
+      return yield* new ClaudeAccountError({ reason: "nameInUse", name });
+    }
+    return {
+      instanceId,
+      name,
+      binaryPath: expandHomePath(setup.settings.binaryPath, yield* HostProcess.HomeDirectory),
+      environment: setup.environment,
+    } satisfies ClaudeAddAccountTarget;
   });
 
   const activeAccount = Effect.fn("ClaudeAccounts.activeAccount")(function* (
@@ -486,10 +497,9 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const checkSwitch = Effect.fn("ClaudeAccounts.checkSwitch")(function* (input: {
-    readonly instanceId: ProviderInstanceId;
-    readonly name: string;
-  }) {
+  const checkSwitch = Effect.fn("ClaudeAccounts.checkSwitch")(function* (
+    input: ClaudeAccountSwitchInput,
+  ) {
     const { instanceId } = input;
     yield* requireLinux();
     const setup = yield* resolveSetup(instanceId);
@@ -521,6 +531,7 @@ export const make = Effect.gen(function* () {
       } satisfies AlreadyActive;
     }
     yield* refuseExternalPrograms(setup);
+    if (!input.stopRunningTurns) yield* refuseRunningTurns(instanceId, affectedInstanceIds);
 
     const checked = yield* loginCheck.check({
       claudeAiOauth: target.claudeAiOauth,
@@ -628,6 +639,45 @@ export const make = Effect.gen(function* () {
       return found;
     },
     Effect.mapError(stopStepFailed("enumerate")),
+  );
+
+  const failSessionStop = (requestedId: ProviderInstanceId) => (failure: SessionStopStepError) =>
+    Effect.logWarning("Claude account switch could not stop sessions", {
+      operation: "switch",
+      outcome: "sessionStopFailed",
+      instanceId: requestedId,
+      step: failure.step,
+      errorTag: failure.errorTag,
+    }).pipe(
+      Effect.andThen(
+        Effect.fail(
+          new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
+        ),
+      ),
+    );
+
+  const refuseRunningTurns = Effect.fn("ClaudeAccounts.refuseRunningTurns")(
+    function* (
+      instanceId: ProviderInstanceId,
+      affectedInstanceIds: ReadonlyArray<ProviderInstanceId>,
+    ) {
+      const runs = yield* activeRunsOn(new Set(affectedInstanceIds));
+      if (runs.length > 0) {
+        yield* Effect.logInfo("Claude account switch refused while turns run", {
+          operation: "switch",
+          outcome: "turnsRunning",
+          instanceId,
+          runningTurns: runs.length,
+        });
+        return yield* new ClaudeAccountError({ reason: "turnsRunning", instanceId });
+      }
+    },
+    (effect, instanceId) =>
+      effect.pipe(
+        Effect.catchTags({
+          SessionStopStepError: (failure) => failSessionStop(instanceId)(failure),
+        }),
+      ),
   );
 
   const runEnded = (threadId: ThreadId, runId: OrchestrationV2Run["id"]) =>
@@ -741,20 +791,7 @@ export const make = Effect.gen(function* () {
         orElse: () => Effect.fail(stopStepFailed("timeout")()),
       }),
       Effect.catchTags({
-        SessionStopStepError: (failure) =>
-          Effect.logWarning("Claude account switch could not stop sessions", {
-            operation: "switch",
-            outcome: "sessionStopFailed",
-            instanceId: requestedId,
-            step: failure.step,
-            errorTag: failure.errorTag,
-          }).pipe(
-            Effect.andThen(
-              Effect.fail(
-                new ClaudeAccountError({ reason: "sessionStopFailed", instanceId: requestedId }),
-              ),
-            ),
-          ),
+        SessionStopStepError: (failure) => failSessionStop(requestedId)(failure),
       }),
     );
     yield* Effect.logInfo("Claude account switch stopped sessions", {
@@ -791,41 +828,79 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (input: {
-    readonly instanceId: ProviderInstanceId;
-    readonly name: string;
-  }) {
-    return yield* accountsLock.withPermits(1)(
-      Effect.gen(function* () {
-        // Every refusal comes before anything is stopped, so a refused switch leaves turns alone.
-        const plan = yield* checkSwitch(input);
-        if (plan._tag === "AlreadyActive") return plan.result;
-        // Command ids are persisted receipts, so they must stay unique across restarts.
-        const switchId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
-        const held = yield* Ref.make<ReadonlyArray<HeldThread>>([]);
-        return yield* Effect.gen(function* () {
-          const interruptedRuns = yield* stopSetupSessions(
-            plan.affectedInstanceIds,
-            input.instanceId,
-            held,
-            switchId,
-          );
-          return yield* applySwitch(plan).pipe(
-            Effect.tapError((error) =>
-              Effect.logInfo("Claude account switch refused after stopping sessions", {
-                operation: "switch",
-                instanceId: input.instanceId,
-                reason: error.reason,
-                interruptedRuns,
-              }),
-            ),
-          );
-        }).pipe(Effect.ensuring(resumeHeldQueues(held, switchId)));
-      }),
-    );
+  const runSwitch = Effect.fn("ClaudeAccounts.runSwitch")(function* (
+    input: ClaudeAccountSwitchInput,
+  ) {
+    // Every refusal comes before anything is stopped, so a refused switch leaves turns alone.
+    const plan = yield* checkSwitch(input);
+    if (plan._tag === "AlreadyActive") return { result: plan.result, applied: false };
+    if (!input.stopRunningTurns) {
+      yield* refuseRunningTurns(input.instanceId, plan.affectedInstanceIds);
+    }
+    // Command ids are persisted receipts, so they must stay unique across restarts.
+    const switchId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+    const held = yield* Ref.make<ReadonlyArray<HeldThread>>([]);
+    return yield* Effect.gen(function* () {
+      const interruptedRuns = yield* stopSetupSessions(
+        plan.affectedInstanceIds,
+        input.instanceId,
+        held,
+        switchId,
+      );
+      const result = yield* applySwitch(plan).pipe(
+        Effect.tapError((error) =>
+          Effect.logInfo("Claude account switch refused after stopping sessions", {
+            operation: "switch",
+            instanceId: input.instanceId,
+            reason: error.reason,
+            interruptedRuns,
+          }),
+        ),
+      );
+      return { result, applied: true };
+    }).pipe(Effect.ensuring(resumeHeldQueues(held, switchId)));
   });
 
-  return ClaudeAccounts.of({ remember, list: list(), forget, switch: switchAccount });
+  const switchAccount = Effect.fn("ClaudeAccounts.switch")(function* (
+    input: ClaudeAccountSwitchInput,
+  ) {
+    // The status re-check holds the switch permit, so no other switch writes the files it
+    // reads, but not the accounts lock, so remember and forget do not wait behind the probe.
+    const fiber = yield* switchPermit
+      .withPermitsIfAvailable(1)(
+        accountsLock
+          .withPermits(1)(runSwitch(input))
+          .pipe(
+            Effect.tap(({ result, applied }) =>
+              applied ? refreshSnapshots(result.affectedInstanceIds) : Effect.void,
+            ),
+            Effect.map(({ result }) => result),
+          ),
+      )
+      .pipe(Effect.forkIn(scope));
+    const outcome = yield* Fiber.join(fiber);
+    if (Option.isNone(outcome)) {
+      yield* Effect.logInfo("Claude account switch refused while another runs", {
+        operation: "switch",
+        outcome: "switchInProgress",
+        instanceId: input.instanceId,
+      });
+      return yield* new ClaudeAccountError({
+        reason: "switchInProgress",
+        instanceId: input.instanceId,
+      });
+    }
+    return outcome.value;
+  });
+
+  return ClaudeAccounts.of({
+    remember,
+    list: list(),
+    forget,
+    switch: switchAccount,
+    prepareAddAccount,
+    rememberLogin,
+  });
 });
 
 export const layer: Layer.Layer<
@@ -841,4 +916,5 @@ export const layer: Layer.Layer<
   | ProviderSessionManager.ProviderSessionManagerV2
   | ProjectionStore.ProjectionStoreV2
   | Crypto.Crypto
+  | ProviderInstanceRegistry.ProviderInstanceRegistry
 > = Layer.effect(ClaudeAccounts, make);

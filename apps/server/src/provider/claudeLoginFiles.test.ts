@@ -10,6 +10,7 @@ import * as Redacted from "effect/Redacted";
 import {
   ClaudeLoginFileError,
   ClaudeLoginWriteError,
+  readClaudeAccountConfigIds,
   readClaudeSetupLogin,
   sameClaudeAccount,
   writeClaudeSetupLogin,
@@ -131,6 +132,42 @@ it.layer(NodeServices.layer)("readClaudeSetupLogin", (it) => {
 
   unreadable("not JSON", `{"claudeAiOauth": {"accessToken": "${SECRET}"`);
   unreadable("a JSON array", JSON.stringify([SECRET]));
+});
+
+it.layer(NodeServices.layer)("readClaudeAccountConfigIds", (it) => {
+  const idsOf = (content: string | undefined) =>
+    Effect.gen(function* () {
+      const { paths } = yield* setup(content === undefined ? {} : { account: content });
+      return yield* readClaudeAccountConfigIds(paths.accountConfigPath);
+    }).pipe(Effect.scoped);
+
+  it.effect("returns the organization and the account", () =>
+    Effect.gen(function* () {
+      const ids = yield* idsOf(account({ organizationUuid: "org-a", accountUuid: "acct-work" }));
+      assert.deepStrictEqual(ids, { organizationUuid: "org-a", accountUuid: "acct-work" });
+    }),
+  );
+
+  it.effect("returns an undefined account when the file has no accountUuid", () =>
+    Effect.gen(function* () {
+      const ids = yield* idsOf(account({ organizationUuid: "org-a" }));
+      assert.deepStrictEqual(ids, { organizationUuid: "org-a", accountUuid: undefined });
+    }),
+  );
+
+  // A missing file is "not logged in", the same as a file without `oauthAccount`.
+  it.effect("returns no organization and no account for a missing file", () =>
+    Effect.gen(function* () {
+      const ids = yield* idsOf(undefined);
+      assert.deepStrictEqual(ids, { organizationUuid: undefined, accountUuid: undefined });
+    }),
+  );
+
+  it.effect("returns undefined for a file that is not JSON", () =>
+    Effect.gen(function* () {
+      assert.isUndefined(yield* idsOf(`{"oauthAccount": {"accountUuid": "acct-work"`));
+    }),
+  );
 });
 
 it("sameClaudeAccount is true only when account and organization both match", () => {
