@@ -94,6 +94,8 @@ import {
   type TerminalMetadataStreamEvent,
   type PullRequestRef,
   WS_METHODS,
+  WsClaudeAccountsRpcGroup,
+  WsCoreRpcGroup,
   WsRpcGroup,
 } from "@t3tools/contracts";
 import {
@@ -550,6 +552,8 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
 // Middleware added later wraps middleware added earlier, so instrumentation wraps authorization.
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
+const ServerWsCoreRpcGroup = WsCoreRpcGroup.middleware(RpcInstrumentation);
+const ServerWsClaudeAccountsRpcGroup = WsClaudeAccountsRpcGroup.middleware(RpcInstrumentation);
 // Replaying each intervening event costs a shell refetch; past this gap a
 // single O(active-threads) snapshot is cheaper and bounded.
 const SHELL_RESUME_MAX_GAP = 1_000;
@@ -1186,6 +1190,18 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
+const layerClaudeAccountsRpc = ServerWsClaudeAccountsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const claudeAccounts = yield* ClaudeAccounts.ClaudeAccounts;
+    // Runs in the connection's scope, so a closed socket ends its add-account logins.
+    const claudeAccountAdd = yield* (yield* ClaudeAccountLogin.ClaudeAccountLogin).openConnection;
+    return {
+      ...claudeAccountsRpcHandlers(claudeAccounts),
+      ...claudeAccountAddRpcHandlers(claudeAccountAdd),
+    };
+  }),
+);
+
 export const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
   clientOrigin: OrchestrationClientOrigin,
@@ -1193,7 +1209,7 @@ export const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
 ) =>
-  ServerWsRpcGroup.toLayer(
+  ServerWsCoreRpcGroup.toLayer(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
@@ -1283,9 +1299,6 @@ export const layerWsRpc = (
         yield* AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const providerAuth = yield* ProviderAuthService.ProviderAuthService;
-      const claudeAccounts = yield* ClaudeAccounts.ClaudeAccounts;
-      // Runs in the connection's scope, so a closed socket ends its add-account logins.
-      const claudeAccountAdd = yield* (yield* ClaudeAccountLogin.ClaudeAccountLogin).openConnection;
       const providerInstallation = yield* makeProviderInstallation();
       const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
@@ -1812,9 +1825,7 @@ export const layerWsRpc = (
         return result;
       });
 
-      const handlers = ServerWsRpcGroup.of({
-        ...claudeAccountsRpcHandlers(claudeAccounts),
-        ...claudeAccountAddRpcHandlers(claudeAccountAdd),
+      const handlers = ServerWsCoreRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -3133,7 +3144,7 @@ export const layerWsRpc = (
       });
       return handlers;
     }),
-  );
+  ).pipe(Layer.merge(layerClaudeAccountsRpc));
 
 // RpcServer's default sends a socket-level Defect frame instead, and the client
 // ends every pending request on the socket with it.

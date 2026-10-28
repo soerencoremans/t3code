@@ -16,15 +16,11 @@ import { EnvironmentHttpApi, type RepositoryIdentity } from "@t3tools/contracts"
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Deferred from "effect/Deferred";
-import type * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import type * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http";
-import type { ChildProcessSpawner } from "effect/process";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
@@ -1071,14 +1067,4 @@ const layerMakeServer = Layer.unwrap(
   }),
 ).pipe(Layer.provide(ProcessRunner.layer));
 
-// Spelled out because inferring them from the CLI goes so deep through the RPC group that
-// TypeScript gives up and silently widens them to `any`.
-export const runServer: Effect.Effect<
-  never,
-  Layer.Error<typeof layerMakeServer>,
-  | ChildProcessSpawner.ChildProcessSpawner
-  | Crypto.Crypto
-  | FileSystem.FileSystem
-  | Path.Path
-  | ServerConfig.ServerConfig
-> = Layer.launch(layerMakeServer);
+export const runServer = Layer.launch(layerMakeServer);

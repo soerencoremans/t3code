@@ -1955,7 +1955,21 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
   { error: EnvironmentAuthorizationError },
 ) {}
 
-export const WsRpcGroup = RpcGroup.make(
+// Effect types every handler against the whole group, so the cost of one `toLayer` grows with
+// the square of its size. The server builds each part's handlers on its own to stay under
+// TypeScript's instantiation limit; clients use the merged `WsRpcGroup`.
+export const WsClaudeAccountsRpcGroup = RpcGroup.make(
+  WsClaudeAccountsListRpc,
+  WsClaudeAccountsRememberRpc,
+  WsClaudeAccountsForgetRpc,
+  WsClaudeAccountsSwitchRpc,
+  WsClaudeAccountsAddStartRpc,
+  WsClaudeAccountsAddRespondRpc,
+  WsClaudeAccountsAddCancelRpc,
+  WsClaudeAccountsAddSubscribeRpc,
+).middleware(RpcScopeAuthorization);
+
+export const WsCoreRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -1975,14 +1989,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProviderInstallCancelRpc,
   WsProviderInstallSubscribeRpc,
   WsProviderInstallRemoveRpc,
-  WsClaudeAccountsListRpc,
-  WsClaudeAccountsRememberRpc,
-  WsClaudeAccountsForgetRpc,
-  WsClaudeAccountsSwitchRpc,
-  WsClaudeAccountsAddStartRpc,
-  WsClaudeAccountsAddRespondRpc,
-  WsClaudeAccountsAddCancelRpc,
-  WsClaudeAccountsAddSubscribeRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,
@@ -2163,3 +2169,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
 ).middleware(RpcScopeAuthorization);
+
+export const WsRpcGroup = WsCoreRpcGroup.merge(WsClaudeAccountsRpcGroup);
