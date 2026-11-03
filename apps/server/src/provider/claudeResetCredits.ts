@@ -172,12 +172,6 @@ export const readClaudeResetCredits = Effect.fn("readClaudeResetCredits")(
   Effect.orElseSucceed(() => undefined),
 );
 
-export const readClaudeOrganizationId = (accountConfigPath: string) =>
-  readJson(Config, accountConfigPath).pipe(
-    Effect.map((config) => config.oauthAccount?.organizationUuid?.trim() || undefined),
-    Effect.orElseSucceed(() => undefined),
-  );
-
 const CLAIM_OUTCOMES = {
   reset: "reset",
   not_limited: "nothingToReset",

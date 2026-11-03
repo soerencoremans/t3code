@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import { assert, describe, it } from "@effect/vitest";
 import {
   CommandId,
@@ -617,7 +618,10 @@ const makeAccountsTestLayer = (options: {
         configMap: deriveProviderInstanceConfigMap(current),
       });
     }),
-  ).pipe(Layer.provide(layerSettings));
+  ).pipe(
+    Layer.provide(layerSettings),
+    Layer.provide(Layer.mock(SecretResolver.SecretResolver)({})),
+  );
   const layerOrchestration = ThreadManagementService.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(

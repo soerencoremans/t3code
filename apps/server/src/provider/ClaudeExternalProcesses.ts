@@ -23,7 +23,7 @@ export class ClaudeProcessScanError extends Schema.TaggedError<ClaudeProcessScan
   }
 }
 
-export const CLAUDE_PROCESS_SCAN_TIMEOUT = Duration.seconds(5);
+const CLAUDE_PROCESS_SCAN_TIMEOUT = Duration.seconds(5);
 
 export class ClaudeExternalProcesses extends Context.Service<
   ClaudeExternalProcesses,
