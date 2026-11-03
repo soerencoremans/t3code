@@ -1458,22 +1458,23 @@ function claudeLiveSelectionFlagSettings(
   };
 }
 
-// A delegated child is its own SDK session, so Claude Code gives it the main-conversation cache
-// TTL. When the user sets Claude's subagentPromptCacheTtl, the child follows it like a native
-// subagent would. An explicit CLAUDE_CODE_PROMPT_CACHE_TTL on the instance still wins.
+// Delegated children follow Claude's subagentPromptCacheTtl like native subagents do. Claude Code
+// withholds its Artifact tool from SDK hosts unless CLAUDE_CODE_ARTIFACT opts in. Explicit
+// instance values for either variable still win.
 export function claudeQueryEnvironment(
   environment: NodeJS.ProcessEnv,
   appThread: Pick<OrchestrationV2AppThread, "lineage">,
   subagentPromptCacheTtl: "5m" | "1h" | undefined,
 ): NodeJS.ProcessEnv {
+  const withArtifacts = { CLAUDE_CODE_ARTIFACT: "1", ...environment };
   if (
     appThread.lineage.relationshipToParent !== "subagent" ||
     subagentPromptCacheTtl === undefined ||
     environment.CLAUDE_CODE_PROMPT_CACHE_TTL !== undefined
   ) {
-    return environment;
+    return withArtifacts;
   }
-  return { ...environment, CLAUDE_CODE_PROMPT_CACHE_TTL: subagentPromptCacheTtl };
+  return { ...withArtifacts, CLAUDE_CODE_PROMPT_CACHE_TTL: subagentPromptCacheTtl };
 }
 
 // Claude Code's auto tool search sends every MCP schema in full while they fit under a share of the

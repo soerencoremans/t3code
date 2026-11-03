@@ -24,6 +24,7 @@ import {
   liveActivityToolStatus,
   toolGroupAction,
   resolveWorkEntryToolPresentation,
+  workEntryClaudeArtifact,
   summarizeToolGroup,
   toolGroupSummaryKind,
   type ToolGroupSummaryKind,
@@ -258,6 +259,8 @@ export function workEntryRowLabel(entry: WorkLogPresentationEntry, expanded = fa
     return entry.toolLifecycleStatus === "inProgress" ? "Thinking" : "Thought";
   const presentation = resolveWorkEntryToolPresentation(entry);
   if (presentation) return presentation.displayName;
+  const artifact = workEntryClaudeArtifact(entry);
+  if (artifact) return `Artifact: ${artifact.title}`;
   if (entry.command?.trim()) return compactWorkEntryText(commandDisplayText(entry.command));
   const action = toolGroupAction(entry);
   const isToolRead = action === "read" && entry.itemType === "dynamic_tool";

@@ -81,10 +81,12 @@ import {
 } from "./thread-feed-live-follow";
 import {
   resolveWorkEntryToolPresentation,
+  workEntryClaudeArtifact,
   toolGroupAction,
   type ToolGroupSummaryKind,
   workEntryViewedImagePath,
 } from "@t3tools/client-runtime/work-log/presentation";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/scroll-anchor";
 import { notificationChildThreadId } from "@t3tools/client-runtime/state/thread-execution";
 import type { MarkdownImageRenderer } from "../../native/SelectableMarkdownText";
@@ -1060,6 +1062,7 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
       </Text>
     );
   const toolPresentation = resolveWorkEntryToolPresentation(row.workEntry);
+  const artifact = workEntryClaudeArtifact(row.workEntry);
   const previewText = row.groupStandIn?.label ?? workEntryRowLabel(row.workEntry);
   const answerPreview = row.workEntry.questionAnswer
     ? getQuestionAnswerPreview(row.workEntry.questionAnswer)
@@ -1085,15 +1088,21 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
     >
       <WorkLogPressable
         accessibilityRole={
-          notifiedSubagentThreadId !== undefined ? "link" : canExpand ? "button" : undefined
+          notifiedSubagentThreadId !== undefined || artifact
+            ? "link"
+            : canExpand
+              ? "button"
+              : undefined
         }
         accessibilityLabel={failed ? `${accessiblePreview}, tool call failed` : accessiblePreview}
         accessibilityHint={
           notifiedSubagentThreadId !== undefined
             ? "Opens this agent's thread. Long press to copy."
-            : canExpand
-              ? `Double tap to ${expanded ? "hide" : "show"} full details. Long press to copy.`
-              : "Long press to copy."
+            : artifact
+              ? "Opens the artifact. Long press to copy."
+              : canExpand
+                ? `Double tap to ${expanded ? "hide" : "show"} full details. Long press to copy.`
+                : "Long press to copy."
         }
         accessibilityState={canExpand ? { expanded } : undefined}
         onPress={() => {
@@ -1102,6 +1111,10 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               environmentId: String(props.environmentId),
               threadId: String(notifiedSubagentThreadId),
             });
+            return;
+          }
+          if (artifact) {
+            void tryOpenExternalUrl(artifact.url, "artifact");
             return;
           }
           if (canExpand) {

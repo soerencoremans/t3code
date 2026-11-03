@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  claudeArtifactFromToolItem,
   compactDynamicToolOutput,
   MAX_TOOL_OUTPUT_IMAGES,
   toolOutputImages,
@@ -136,6 +137,53 @@ describe("compactDynamicToolOutput", () => {
     expect(compactDynamicToolOutput({ threadId: "known", body: "x".repeat(1_000_000) })).toEqual({
       threadId: "known",
     });
+  });
+});
+
+describe("claudeArtifactFromToolItem", () => {
+  const published = {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          read: "owner",
+          slug: "5fe12b95-3c94-47c9-913a-6cb406917022",
+          title: "T3 artifact probe",
+          url: "https://claude.ai/artifact/CqhUbCVzn6o9HDMdvnBRnH",
+          version: "1793721966-cecf",
+        }),
+      },
+    ],
+  };
+  const artifact = {
+    title: "T3 artifact probe",
+    url: "https://claude.ai/artifact/CqhUbCVzn6o9HDMdvnBRnH",
+  };
+
+  it("keeps only the link and title of a published claude.ai artifact", () => {
+    expect(compactDynamicToolOutput(published)).toEqual({ artifact });
+    for (const tool of ["publish_files", "publish_version", "edit_version", "create_from_type"]) {
+      const toolName = `mcp__claude-artifacts__${tool}`;
+      expect(claudeArtifactFromToolItem({ toolName, output: published }), tool).toEqual(artifact);
+    }
+  });
+
+  it("ignores other tools, failures and links outside claude.ai", () => {
+    const toolName = "mcp__claude-artifacts__publish_files";
+    const elsewhere = { url: "https://example.com/artifact/x", title: "Fake", slug: "s" };
+    expect(
+      claudeArtifactFromToolItem({ toolName: "mcp__other__publish", output: published }),
+    ).toBeUndefined();
+    expect(
+      claudeArtifactFromToolItem({
+        toolName: "mcp__claude-artifacts__read_artifact",
+        output: published,
+      }),
+    ).toBeUndefined();
+    expect(
+      claudeArtifactFromToolItem({ toolName, output: { ...published, isError: true } }),
+    ).toBeUndefined();
+    expect(claudeArtifactFromToolItem({ toolName, output: elsewhere })).toBeUndefined();
   });
 });
 

@@ -308,10 +308,24 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     assert.isUndefined(ttl(env, null));
     assert.isUndefined(ttl(env, "fork"));
     assert.equal(ttl({ ...env, CLAUDE_CODE_PROMPT_CACHE_TTL: "1h" }, "subagent"), "1h");
-    assert.strictEqual(
-      ClaudeAdapterV2.claudeQueryEnvironment(env, lineage("subagent"), undefined),
-      env,
+    assert.isUndefined(
+      ClaudeAdapterV2.claudeQueryEnvironment(env, lineage("subagent"), undefined)
+        .CLAUDE_CODE_PROMPT_CACHE_TTL,
     );
+  });
+
+  it("opts SDK sessions into Claude's Artifact tool unless the instance sets it", () => {
+    const lineage = {
+      lineage: {
+        parentThreadId: null,
+        relationshipToParent: null,
+        rootThreadId: ThreadId.make("thread-root"),
+      },
+    } as const;
+    const artifact = (environment: NodeJS.ProcessEnv) =>
+      ClaudeAdapterV2.claudeQueryEnvironment(environment, lineage, undefined).CLAUDE_CODE_ARTIFACT;
+    assert.equal(artifact({ PATH: "/bin" }), "1");
+    assert.equal(artifact({ CLAUDE_CODE_ARTIFACT: "0" }), "0");
   });
 
   it("pins Claude's auto tool search on through flag settings", () => {
