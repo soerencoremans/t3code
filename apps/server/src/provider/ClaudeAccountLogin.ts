@@ -9,7 +9,7 @@ import {
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -78,14 +78,14 @@ interface Attempt {
 const loginFailed = () => new ClaudeAccountError({ reason: "loginFailed" });
 const loginNotFound = () => new ClaudeAccountError({ reason: "loginNotFound" });
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const accounts = yield* ClaudeAccounts;
   const serverConfig = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const pty = yield* PtyAdapter.PtyAdapter;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   // Attempts outlive the RPC call that started them; they run in the service's scope.
   const layerScope = yield* Scope.Scope;
   const attemptsLock = yield* Semaphore.make(1);
@@ -271,7 +271,7 @@ export const make = Effect.gen(function* () {
   });
 
   const openConnection = Effect.gen(function* () {
-    const owner = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+    const owner = yield* random.uuidV4();
     let closed = false;
 
     yield* Effect.addFinalizer(() =>
@@ -299,7 +299,7 @@ export const make = Effect.gen(function* () {
       input: ClaudeAccountAddStartInput,
     ) {
       const target = yield* accounts.prepareAddAccount(input);
-      const attemptId = yield* crypto.randomUUIDv4().pipe(Effect.mapError(loginFailed));
+      const attemptId = yield* random.uuidV4();
       const initial: ClaudeAccountAddState = {
         attemptId,
         instanceId: target.instanceId,
@@ -392,5 +392,5 @@ export const layer: Layer.Layer<
   | FileSystem.FileSystem
   | Path.Path
   | PtyAdapter.PtyAdapter
-  | Crypto.Crypto
+  | SecureRandom.SecureRandom
 > = Layer.effect(ClaudeAccountLogin, make);
