@@ -21,7 +21,7 @@ function Shell({
         "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-2xl before:bg-(--chat-composer-glass-surface)/(--glass-opacity) before:backdrop-blur-(--glass-blur) before:backdrop-saturate-(--glass-saturation)",
         "not-supports-[((backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px)))]:before:bg-(--chat-composer-glass-surface)",
         "has-data-[composer-banner-surface=attached]:before:hidden",
-        // With a context row below, the card paints its own glass (see Host) so the row stays bare.
+        // With a context row below, the card and the row each paint their own glass (see Host, ContextStrip).
         "data-context-row:before:hidden",
         className,
       )}
@@ -68,13 +68,15 @@ function Main({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-/** A plain row under the card (environment, worktree, branch) with no surface of its own. */
+/** The row under the card (environment, worktree, branch), on glass so chat text scrolling behind it stays hidden. */
 function ContextStrip({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-context-strip"
       className={cn(
-        "group/composer-context relative flex w-full items-center gap-2 overflow-x-clip px-2 pt-2 text-muted-foreground",
+        "group/composer-context relative isolate flex w-full items-center gap-2 overflow-x-clip px-2 pt-2 text-muted-foreground",
+        "before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-b-2xl before:bg-(--chat-composer-glass-surface)/(--glass-opacity) before:backdrop-blur-(--glass-blur) before:backdrop-saturate-(--glass-saturation)",
+        "not-supports-[((backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px)))]:before:bg-(--chat-composer-glass-surface)",
         className,
       )}
       {...props}
