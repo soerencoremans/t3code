@@ -1,0 +1,86 @@
+name: Fork nightly
+
+# Builds the Linux AppImage from every push to main and publishes it as a
+# nightly prerelease on this fork, so installed fork builds update themselves.
+# Upstream's release.yml needs blacksmith runners and maintainer secrets.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Build and publish Linux AppImage
+    if: github.repository == 'soerencoremans/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve nightly version
+        id: version
+        run: |
+          base="$(jq -r .version apps/desktop/package.json)"
+          version="${base}-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Nightly version: $version"
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-ci-deps
+
+      - name: Install Linux desktop build libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev pkg-config imagemagick
+
+      - name: Align package versions to nightly version
+        run: node scripts/update-release-package-versions.ts "${{ steps.version.outputs.version }}"
+
+      - name: Build AppImage
+        run: |
+          vp run dist:desktop:artifact \
+            --platform linux --target AppImage --arch x64 \
+            --build-version "${{ steps.version.outputs.version }}" \
+            --verbose
+
+      - name: Publish prerelease
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          shopt -s nullglob
+          assets=(release/*.AppImage release/nightly*.yml)
+          if [[ ! -e release/nightly-linux.yml ]]; then
+            echo "release/nightly-linux.yml is missing; the build did not get the update feed." >&2
+            ls -la release >&2
+            exit 1
+          fi
+          gh release create "v${VERSION}" "${assets[@]}" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "T3 Code (Nightly) ${VERSION}" \
+            --notes "Fork nightly built from ${GITHUB_SHA}."
+
+      - name: Prune old nightlies
+        run: |
+          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease and (.tagName | test("-nightly\\.")))] | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' \
+            | while read -r tag; do
+                gh release delete "$tag" --yes --cleanup-tag
+              done
