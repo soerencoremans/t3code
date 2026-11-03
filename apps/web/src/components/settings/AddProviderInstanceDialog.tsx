@@ -42,7 +42,7 @@ import { WizardPanel, WizardPopup, WizardHeader, WizardFooter } from "../ui/wiza
 import {
   ADD_PROVIDER_WIZARD_STEPS,
   ACP_REGISTRY_WIZARD_STEPS,
-  LOCAL_ACP_WIZARD_STEPS,
+  IDENTITY_ONLY_WIZARD_STEPS,
   deriveAvailableInstanceId,
   resolveAcpRegistryWizardNavigation,
   resolveWizardNavigation,
@@ -55,6 +55,8 @@ import { AcpRegistrySearchStep, useAcpRegistrySearch } from "./AcpRegistrySearch
 import { ProviderWizardAuthenticationStep } from "./ProviderWizardAuthenticationStep";
 import { resolveOfficialAcpRegistryIconUrl } from "./AcpRegistryIcon";
 import { AddManagedCodexAccountDialog } from "./CodexSetupSection";
+import { ClaudeShareConfigAddAccount, ClaudeShareConfigOption } from "./ClaudeShareConfigOption";
+import { useClaudeAccountsAvailable } from "./useClaudeAccounts";
 import { MultipleAccountsNote } from "./MultipleAccountsNote";
 import { ProviderEnvironmentSection } from "./ProviderInstanceCard";
 import { useSecretSources } from "./SecretSourceInput";
@@ -196,6 +198,11 @@ export function AddProviderInstanceDialog({
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [createdInstanceId, setCreatedInstanceId] = useState<ProviderInstanceId | null>(null);
+  const [shareClaudeSetup, setShareClaudeSetup] = useState<ProviderInstanceId | null>(null);
+  const [addingClaudeAccountFor, setAddingClaudeAccountFor] = useState<ProviderInstanceId | null>(
+    null,
+  );
+  const claudeAccountsAvailable = useClaudeAccountsAvailable(environmentId);
 
   // Reserve Codex/Claude default ids because they run before configuration; other unconfigured slots are
   // available.
@@ -207,9 +214,12 @@ export function AddProviderInstanceDialog({
 
   const driverOption = providerClients.get(driver) ?? DEFAULT_DRIVER_OPTION;
   const isAcpRegistry = driver === ACP_REGISTRY_DRIVER_KIND;
+  // Sharing adds an account to an existing setup, so no instance id or config is used.
+  const sharingClaudeConfig = driver === "claudeAgent" && shareClaudeSetup !== null;
   const showRegistrySearch =
     !createdInstanceId &&
     !addingChatGptAccount &&
+    addingClaudeAccountFor === null &&
     wizardStep === 0 &&
     !(isAcpRegistry && isManualAcpConfiguration);
   // Searches while Show more is closed, so the fold opens on results.
@@ -234,7 +244,7 @@ export function AddProviderInstanceDialog({
       existingIds,
     );
   const driverSettingsFields = deriveProviderSettingsFields(driverOption);
-  const instanceIdError = validateInstanceId(instanceId, existingIds);
+  const instanceIdError = sharingClaudeConfig ? null : validateInstanceId(instanceId, existingIds);
   const showInstanceIdError = hasAttemptedSubmit && instanceIdError !== null;
   const identityStep = 1;
   const previewLabel = label.trim() || `${driverOption.label} Workspace`;
@@ -257,7 +267,9 @@ export function AddProviderInstanceDialog({
         previewLabel,
         null,
       ] as const)
-    : ([driverOption.label, previewLabel, null] as const);
+    : sharingClaudeConfig
+      ? ([driverOption.label, null] as const)
+      : ([driverOption.label, previewLabel, null] as const);
   const setConfigDraft = (config: Record<string, unknown> | undefined) => {
     setConfigByDriver((existing) => {
       const next = { ...existing };
@@ -271,6 +283,7 @@ export function AddProviderInstanceDialog({
   };
   const selectDriver = (value: string) => {
     setDriver(ProviderDriverKind.make(value));
+    setShareClaudeSetup(null);
     setIsManualAcpConfiguration(false);
     setHasAttemptedSubmit(false);
   };
@@ -297,7 +310,7 @@ export function AddProviderInstanceDialog({
     applyWizardNavigation(
       isAcpRegistry
         ? isLocalAcp
-          ? resolveWizardNavigation(wizardStep, requestedStep, LOCAL_ACP_WIZARD_STEPS.length, {
+          ? resolveWizardNavigation(wizardStep, requestedStep, IDENTITY_ONLY_WIZARD_STEPS.length, {
               instanceIdError,
               prerequisite: { step: 0, error: acpSelectionError },
             })
@@ -305,9 +318,14 @@ export function AddProviderInstanceDialog({
               instanceIdError,
               selectionError: acpSelectionError,
             })
-        : resolveWizardNavigation(wizardStep, requestedStep, ADD_PROVIDER_WIZARD_STEPS.length, {
-            instanceIdError,
-          }),
+        : resolveWizardNavigation(
+            wizardStep,
+            requestedStep,
+            sharingClaudeConfig
+              ? IDENTITY_ONLY_WIZARD_STEPS.length
+              : ADD_PROVIDER_WIZARD_STEPS.length,
+            { instanceIdError },
+          ),
     );
   };
 
@@ -381,7 +399,7 @@ export function AddProviderInstanceDialog({
 
   const handleSave = async () => {
     if (!readEnvironmentScope(environmentId, AuthProvidersManageScope)) return;
-    if (isSaving || createdInstanceId) return;
+    if (isSaving || createdInstanceId || sharingClaudeConfig) return;
     setHasAttemptedSubmit(true);
     if (instanceIdError !== null || (isAcpRegistry && acpSelectionError !== null)) return;
 
@@ -432,6 +450,16 @@ export function AddProviderInstanceDialog({
     onOpenChange(false);
   };
 
+  if (addingClaudeAccountFor !== null) {
+    return (
+      <ClaudeShareConfigAddAccount
+        environmentId={environmentId}
+        instanceId={addingClaudeAccountFor}
+        onClose={() => onOpenChange(false)}
+      />
+    );
+  }
+
   if (addingChatGptAccount) {
     return (
       <AddManagedCodexAccountDialog
@@ -453,7 +481,7 @@ export function AddProviderInstanceDialog({
               currentStep={wizardStep}
               summaries={wizardStepSummaries}
               instanceIdError={instanceIdError}
-              steps={isLocalAcp ? LOCAL_ACP_WIZARD_STEPS : ACP_REGISTRY_WIZARD_STEPS}
+              steps={isLocalAcp ? IDENTITY_ONLY_WIZARD_STEPS : ACP_REGISTRY_WIZARD_STEPS}
               disabled={isSaving || isPreparingRegistryAgent || createdInstanceId !== null}
               identityStep={1}
               prerequisite={{ step: 0, error: acpSelectionError }}
@@ -464,6 +492,7 @@ export function AddProviderInstanceDialog({
               currentStep={wizardStep}
               summaries={wizardStepSummaries}
               instanceIdError={instanceIdError}
+              steps={sharingClaudeConfig ? IDENTITY_ONLY_WIZARD_STEPS : ADD_PROVIDER_WIZARD_STEPS}
               disabled={isSaving || isPreparingRegistryAgent}
               onNavigation={applyWizardNavigation}
             />
@@ -624,9 +653,20 @@ export function AddProviderInstanceDialog({
                 </div>
               ) : null}
 
+              {driver === "claudeAgent" && claudeAccountsAvailable ? (
+                // Mounted from step 0 so the list has usually arrived before the Identity step shows.
+                <div className={cn(wizardStep !== identityStep && "hidden")}>
+                  <ClaudeShareConfigOption
+                    environmentId={environmentId}
+                    value={shareClaudeSetup}
+                    onChange={setShareClaudeSetup}
+                  />
+                </div>
+              ) : null}
+
               <SettingsGroup
                 variant="plain"
-                className={cn(wizardStep !== identityStep && "hidden")}
+                className={cn((wizardStep !== identityStep || sharingClaudeConfig) && "hidden")}
               >
                 <SettingsRow
                   title={<label htmlFor="add-provider-label">Label</label>}
@@ -746,6 +786,14 @@ export function AddProviderInstanceDialog({
                     />
                   )}
                 </>
+              ) : sharingClaudeConfig && wizardStep === identityStep ? (
+                <Button
+                  size="sm"
+                  disabled={!canManageProviders}
+                  onClick={() => setAddingClaudeAccountFor(shareClaudeSetup)}
+                >
+                  Add account…
+                </Button>
               ) : wizardStep < (isAcpRegistry ? 1 : 2) ? (
                 <Button
                   size="sm"

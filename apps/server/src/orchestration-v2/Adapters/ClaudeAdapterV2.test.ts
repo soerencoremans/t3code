@@ -1296,6 +1296,7 @@ const captureSdkExecutablePaths = Effect.fn("captureSdkExecutablePaths")(functio
 ) {
   const executablePaths: Array<string | undefined> = [];
   const taskToolEnvironment: Array<string | undefined> = [];
+  const ownerPids: Array<string | undefined> = [];
   const adapter = yield* ClaudeAdapterV2.createClaudeAdapterV2(
     {
       instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
@@ -1317,6 +1318,7 @@ const captureSdkExecutablePaths = Effect.fn("captureSdkExecutablePaths")(functio
         Effect.sync(() => {
           executablePaths.push(input.options.pathToClaudeCodeExecutable);
           taskToolEnvironment.push(input.options.env?.CLAUDE_CODE_ENABLE_TODO_TOOLS);
+          ownerPids.push(input.options.env?.T3CODE_CLAUDE_OWNER_PID);
           return {
             messages: Stream.never,
             offer: () => Effect.void,
@@ -1356,10 +1358,24 @@ const captureSdkExecutablePaths = Effect.fn("captureSdkExecutablePaths")(functio
       attachments: [],
     }),
   );
-  return { executablePaths, taskToolEnvironment };
+  return { executablePaths, taskToolEnvironment, ownerPids };
 });
 
 describe("ClaudeAdapterV2 executable path", () => {
+  it.effect("marks the spawned Claude CLI with the server pid", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { ownerPids } = yield* captureSdkExecutablePaths("claude");
+
+        assert.deepEqual(ownerPids, [String(process.pid)]);
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
   it.effect("follows a bare claude on Windows to the npm package executable", () =>
     Effect.scoped(
       Effect.gen(function* () {

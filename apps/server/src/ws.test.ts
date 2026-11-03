@@ -43,6 +43,8 @@ import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as NativeChildWorkQuery from "./orchestration-v2/NativeChildWorkQuery.ts";
 import * as CommandOutputHub from "./orchestration-v2/CommandOutputHub.ts";
+import * as ClaudeAccountLogin from "./provider/ClaudeAccountLogin.ts";
+import * as ClaudeAccounts from "./provider/ClaudeAccounts.ts";
 import * as CodexInstallation from "./provider/CodexInstallation.ts";
 import * as DeviceService from "./device/DeviceService.ts";
 import * as DocumentText from "./provider/DocumentText.ts";
@@ -542,6 +544,10 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(AntigravityInstallation.AntigravityInstallation)({ managedDirectory: "/unused" }),
   Layer.mock(BackgroundPolicy.BackgroundPolicy)({}),
   Layer.mock(CheckpointDiffQuery.CheckpointDiffQuery)({}),
+  Layer.mock(ClaudeAccountLogin.ClaudeAccountLogin)({
+    openConnection: Effect.succeed({} as ClaudeAccountLogin.ClaudeAccountLoginConnection),
+  }),
+  Layer.mock(ClaudeAccounts.ClaudeAccounts)({}),
   Layer.mock(NativeChildWorkQuery.NativeChildWorkQuery)({}),
   Layer.mock(CommandOutputHub.CommandOutputHub)({}),
   Layer.mock(CodexInstallation.CodexInstallation)({ managedDirectory: "/unused" }),

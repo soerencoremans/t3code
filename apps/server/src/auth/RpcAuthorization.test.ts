@@ -35,6 +35,27 @@ describe("RPC authorization scopes", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });
 
+  it("requires provider management to list, remember, forget or switch Claude accounts", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsList)).toBe(AuthProvidersManageScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsRemember)).toBe(
+      AuthProvidersManageScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsForget)).toBe(
+      AuthProvidersManageScope,
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.claudeAccountsSwitch)).toBe(
+      AuthProvidersManageScope,
+    );
+    for (const method of [
+      WS_METHODS.claudeAccountsAddStart,
+      WS_METHODS.claudeAccountsAddRespond,
+      WS_METHODS.claudeAccountsAddCancel,
+      WS_METHODS.claudeAccountsAddSubscribe,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthProvidersManageScope);
+    }
+  });
+
   it("keeps webhook delivery logs, which hold request bodies, behind operate scope", () => {
     for (const method of [
       WS_METHODS.scheduledTasksListWebhookDeliveries,

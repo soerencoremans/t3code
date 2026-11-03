@@ -172,21 +172,6 @@ export const readClaudeResetCredits = Effect.fn("readClaudeResetCredits")(
   Effect.orElseSucceed(() => undefined),
 );
 
-export const readClaudeOrganizationId = (accountConfigPath: string) =>
-  readJson(Config, accountConfigPath).pipe(
-    Effect.map((config) => config.oauthAccount?.organizationUuid?.trim() || undefined),
-    Effect.orElseSucceed(() => undefined),
-  );
-
-export const claudeAccountConfigPath = Effect.fn("claudeAccountConfigPath")(function* (
-  configDir: string | undefined,
-) {
-  const path = yield* Path.Path;
-  return configDir
-    ? path.join(configDir, ".claude.json")
-    : path.join(yield* HostProcess.HomeDirectory, ".claude.json");
-});
-
 const CLAIM_OUTCOMES = {
   reset: "reset",
   not_limited: "nothingToReset",

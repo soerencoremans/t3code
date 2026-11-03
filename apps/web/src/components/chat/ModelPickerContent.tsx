@@ -21,6 +21,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { ClaudeAccountPickerRow } from "./ClaudeAccountPickerRow";
 import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
@@ -1075,6 +1076,14 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               onRequestClose={onRequestClose}
               onOpenProviderSetup={onOpenProviderSetup}
             />
+            {props.environmentId !== null && selectedEntry?.driverKind === "claudeAgent" ? (
+              <ClaudeAccountPickerRow
+                key={`${props.environmentId}:${selectedEntry.instanceId}`}
+                environmentId={props.environmentId}
+                instanceId={selectedEntry.instanceId}
+                {...(onRequestClose ? { onRequestClose } : {})}
+              />
+            ) : null}
             {props.listFooter}
           </div>
         </Combobox>
