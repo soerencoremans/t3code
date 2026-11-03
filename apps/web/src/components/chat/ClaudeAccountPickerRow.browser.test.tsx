@@ -11,12 +11,11 @@ import {
 import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { Atom, AtomRegistry } from "effect/reactivity";
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
+import { act, render as renderUi } from "../../../test/render";
 
 interface QueryView<A = ClaudeAccountList> {
   readonly data: A | null;
@@ -224,44 +223,63 @@ function SettingsStandIn() {
   );
 }
 
-let root: Root;
-let registry: AtomRegistry.AtomRegistry;
+type PickerOptions = {
+  readonly environmentId?: EnvironmentId | null;
+  readonly multiModel?: boolean;
+  readonly standIn?: boolean;
+  readonly open?: boolean;
+};
 
-async function render(
-  options: {
-    readonly environmentId?: EnvironmentId | null;
-    readonly multiModel?: boolean;
-    readonly standIn?: boolean;
-    readonly open?: boolean;
-  } = {},
-) {
-  await act(async () =>
-    root.render(
-      <RegistryContext.Provider value={registry}>
-        <ProviderModelPicker
-          environmentId={
-            options.environmentId === undefined ? environmentId : options.environmentId
-          }
-          activeInstanceId={instanceId}
-          model="claude-opus"
-          lockedProvider={null}
-          instanceEntries={[claudeEntry, codexEntry]}
-          modelOptionsByInstance={
-            new Map([
-              [instanceId, [{ slug: "claude-opus", name: "Claude Opus" }]],
-              [codexId, [{ slug: "gpt-5", name: "GPT 5" }]],
-            ])
-          }
-          {...(options.multiModel
-            ? { selectedModels: [{ instanceId, model: "claude-opus" }], onToggleModel: () => {} }
-            : {})}
-          onInstanceModelChange={() => {}}
-          {...(options.open === undefined ? {} : { open: options.open })}
-        />
-        {options.standIn ? <SettingsStandIn /> : null}
-      </RegistryContext.Provider>,
-    ),
+function pickerUi(registry: AtomRegistry.AtomRegistry, options: PickerOptions) {
+  return (
+    <RegistryContext.Provider value={registry}>
+      <ProviderModelPicker
+        environmentId={options.environmentId === undefined ? environmentId : options.environmentId}
+        activeInstanceId={instanceId}
+        model="claude-opus"
+        lockedProvider={null}
+        instanceEntries={[claudeEntry, codexEntry]}
+        modelOptionsByInstance={
+          new Map([
+            [instanceId, [{ slug: "claude-opus", name: "Claude Opus" }]],
+            [codexId, [{ slug: "gpt-5", name: "GPT 5" }]],
+          ])
+        }
+        {...(options.multiModel
+          ? { selectedModels: [{ instanceId, model: "claude-opus" }], onToggleModel: () => {} }
+          : {})}
+        onInstanceModelChange={() => {}}
+        {...(options.open === undefined ? {} : { open: options.open })}
+      />
+      {options.standIn ? <SettingsStandIn /> : null}
+    </RegistryContext.Provider>
   );
+}
+
+async function render(options: PickerOptions = {}) {
+  await using stack = new AsyncDisposableStack();
+  const registry = AtomRegistry.make();
+  stack.defer(() => registry.dispose());
+  const screen = stack.use(await renderUi(pickerUi(registry, options)));
+  const owned = stack.move();
+  return {
+    rerender: (next: PickerOptions) => screen.rerender(pickerUi(registry, next)),
+    [Symbol.asyncDispose]: () => owned.disposeAsync(),
+  };
+}
+
+function setup() {
+  vi.clearAllMocks();
+  state.os = "linux";
+  state.granted = true;
+  setList(workActive);
+  state.remember.mockReset().mockResolvedValue(success(work));
+  state.switch.mockReset().mockResolvedValue(success());
+  state.addView = { data: null, error: null, failure: null, isPending: false, refresh: () => {} };
+  state.start.mockReset().mockResolvedValue(success(running));
+  state.respond.mockReset().mockResolvedValue(success());
+  state.cancel.mockReset().mockResolvedValue(success());
+  state.confirm.mockReset().mockResolvedValue(false);
 }
 
 const pickerTrigger = () =>
@@ -276,16 +294,13 @@ const modelInDom = () =>
     option.textContent?.includes("Claude Opus"),
   );
 
-async function click(target: Parameters<typeof userEvent.click>[0]) {
-  await act(async () => userEvent.click(target));
-}
 async function openPicker(tab = claudeEntry.displayName) {
-  await click(pickerTrigger());
-  await click(page.getByRole("button", { name: tab, exact: true }));
+  await userEvent.click(pickerTrigger());
+  await userEvent.click(page.getByRole("button", { name: tab, exact: true }));
 }
 async function closePicker() {
   searchInput().focus();
-  await act(async () => userEvent.keyboard("{Escape}"));
+  await userEvent.keyboard("{Escape}");
   await expect.element(modelOption()).not.toBeInTheDocument();
 }
 
@@ -309,47 +324,24 @@ function button(label: string) {
 // The model rows' favorite buttons are tab stops too, so the row is a few Tabs away.
 async function tabTo(target: Element | null) {
   for (let presses = 0; presses < 6 && document.activeElement !== target; presses++) {
-    await act(async () => userEvent.keyboard("{Tab}"));
+    await userEvent.keyboard("{Tab}");
   }
   expect(document.activeElement).toBe(target);
 }
 
 async function openAccountMenu() {
-  await click(rowTrigger()!);
+  await userEvent.click(rowTrigger()!);
   await expect.poll(menuOpen).toBe(true);
 }
 async function pickPrivate() {
   await openAccountMenu();
-  await click(page.getByRole("menuitemradio", { name: "Private" }));
+  await userEvent.click(page.getByRole("menuitemradio", { name: "Private" }));
 }
 
 describe("ClaudeAccountPickerRow", () => {
-  beforeEach(() => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    vi.clearAllMocks();
-    state.os = "linux";
-    state.granted = true;
-    setList(workActive);
-    state.remember.mockReset().mockResolvedValue(success(work));
-    state.switch.mockReset().mockResolvedValue(success());
-    state.addView = { data: null, error: null, failure: null, isPending: false, refresh: () => {} };
-    state.start.mockReset().mockResolvedValue(success(running));
-    state.respond.mockReset().mockResolvedValue(success());
-    state.cancel.mockReset().mockResolvedValue(success());
-    state.confirm.mockReset().mockResolvedValue(false);
-    registry = AtomRegistry.make();
-    root = createRoot(document.body.appendChild(document.createElement("div")));
-  });
-
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    registry.dispose();
-    document.body.replaceChildren();
-    vi.unstubAllGlobals();
-  });
-
   it("AK-1: shows the logged-in account for all Claude chats below the Claude models", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
 
     await expect.element(modelOption()).toBeVisible();
@@ -365,7 +357,8 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-2: lists the remembered accounts and switches at once when no turns run", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     await openAccountMenu();
 
@@ -374,7 +367,7 @@ describe("ClaudeAccountPickerRow", () => {
     expect(document.querySelector('[role="menu"] [role="separator"]')).not.toBeNull();
     expect(page.getByRole("menuitem", { name: "Manage accounts" }).element()).toBeTruthy();
 
-    await click(page.getByRole("menuitemradio", { name: "Private" }));
+    await userEvent.click(page.getByRole("menuitemradio", { name: "Private" }));
 
     expect(state.switch).toHaveBeenCalledTimes(1);
     expect(state.switch).toHaveBeenCalledWith({
@@ -387,8 +380,9 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-3 / AK-4: asks before stopping running turns, and declining changes nothing", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("turnsRunning"));
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
 
@@ -401,9 +395,10 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-5: confirming switches again with running turns stopped", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("turnsRunning"));
     state.confirm.mockResolvedValueOnce(true);
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
 
@@ -416,15 +411,16 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-6: shows a running switch, even after the picker is closed and reopened", async () => {
+    setup();
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
 
     expect(rowTrigger()?.textContent).toContain("Switching to Private…");
     expect(rowStatus()).toBe("Switching Claude account to Private…");
-    await click(rowTrigger()!);
+    await userEvent.click(rowTrigger()!);
     expect(menuOpen()).toBe(false);
 
     await closePicker();
@@ -436,9 +432,10 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-7: a switch started elsewhere blocks the picker's menu", async () => {
+    setup();
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render({ standIn: true });
+    await using _view = await render({ standIn: true });
     // Started before the picker opens: a press outside the picker would close it.
     await act(async () =>
       document.querySelector<HTMLButtonElement>('[data-testid="settings-switch"]')!.click(),
@@ -446,7 +443,7 @@ describe("ClaudeAccountPickerRow", () => {
     await openPicker();
 
     expect(rowTrigger()?.textContent).toContain("Switching to Private…");
-    await click(rowTrigger()!);
+    await userEvent.click(rowTrigger()!);
     expect(menuOpen()).toBe(false);
     expect(state.switch).toHaveBeenCalledTimes(1);
 
@@ -454,8 +451,9 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-7: a switch refused because another runs shows why in the row, not as a toast", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("switchInProgress"));
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
 
@@ -464,10 +462,11 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("clears the switch error when the next pick starts", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("switchInProgress"));
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
     expect(rowAlert()).toBe(message("switchInProgress"));
@@ -478,7 +477,8 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-8: after a switch the row shows the new account and announces it", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
     setList(privateActive);
@@ -490,9 +490,10 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("reports a failed switch as a toast when the picker closed while it ran", async () => {
+    setup();
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
     await closePicker();
@@ -507,9 +508,10 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("reports a successful switch as a toast when the picker closed while it ran", async () => {
+    setup();
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render();
+    await using _view = await render();
     await openPicker();
     await pickPrivate();
     await closePicker();
@@ -522,8 +524,9 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-12: offers to remember an account T3 has not remembered yet", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
-    await render();
+    await using _view = await render();
     await openPicker();
 
     expect(row()?.querySelector('[aria-label="Toggle account email visibility"]')).not.toBeNull();
@@ -535,14 +538,15 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-13: remembers the account from the picker and keeps the picker open", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
-    await render();
+    await using _view = await render();
     await openPicker();
-    await click(button("Remember the Claude account for all Claude chats")!);
+    await userEvent.click(button("Remember the Claude account for all Claude chats")!);
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
     expect(modelInDom()).toBe(true);
-    await act(() => userEvent.fill(input, "Work"));
-    await click(page.getByRole("button", { name: "Remember", exact: true }));
+    await userEvent.fill(input, "Work");
+    await userEvent.click(page.getByRole("button", { name: "Remember", exact: true }));
 
     expect(state.remember).toHaveBeenCalledWith({
       environmentId,
@@ -559,32 +563,34 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("returns focus to Remember… when the dialog is cancelled", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
-    await render();
+    await using _view = await render();
     await openPicker();
     const remember = button("Remember the Claude account for all Claude chats")!;
-    await click(remember);
-    await click(page.getByRole("button", { name: "Cancel" }));
+    await userEvent.click(remember);
+    await userEvent.click(page.getByRole("button", { name: "Cancel" }));
 
     await expect.poll(() => document.activeElement).toBe(remember);
     await expect.element(modelOption()).toBeInTheDocument();
   });
 
   it("keyboard: Tab reaches the row, arrows and Enter switch, focus stays on the row", async () => {
+    setup();
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render();
+    await using _view = await render();
     await openPicker();
     searchInput().focus();
 
     await tabTo(rowTrigger());
-    await act(async () => userEvent.keyboard("{ArrowDown}"));
+    await userEvent.keyboard("{ArrowDown}");
     await expect.poll(menuOpen).toBe(true);
     await expect.poll(() => document.activeElement?.getAttribute("role")).toBe("menuitemradio");
     for (let i = 0; i < 3 && document.activeElement?.textContent !== "Private"; i++) {
-      await act(async () => userEvent.keyboard("{ArrowDown}"));
+      await userEvent.keyboard("{ArrowDown}");
     }
-    await act(async () => userEvent.keyboard("{Enter}"));
+    await userEvent.keyboard("{Enter}");
 
     expect(state.switch).toHaveBeenCalledWith({
       environmentId,
@@ -596,17 +602,18 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("keyboard: Tab reaches Remember…, Enter opens the dialog and submits the name", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
-    await render();
+    await using _view = await render();
     await openPicker();
     searchInput().focus();
     const remember = button("Remember the Claude account for all Claude chats");
 
     await tabTo(remember);
-    await act(async () => userEvent.keyboard("{Enter}"));
+    await userEvent.keyboard("{Enter}");
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
     await expect.poll(() => document.activeElement).toBe(input);
-    await act(async () => userEvent.keyboard("Work{Enter}"));
+    await userEvent.keyboard("Work{Enter}");
 
     expect(state.remember).toHaveBeenCalledWith({
       environmentId,
@@ -615,20 +622,22 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("keyboard: Escape in the account menu closes only the menu", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     rowTrigger()!.focus();
-    await act(async () => userEvent.keyboard("{ArrowDown}"));
+    await userEvent.keyboard("{ArrowDown}");
     await expect.poll(menuOpen).toBe(true);
 
-    await act(async () => userEvent.keyboard("{Escape}"));
+    await userEvent.keyboard("{Escape}");
     await expect.poll(menuOpen).toBe(false);
     await expect.element(modelOption()).toBeVisible();
     await expect.poll(() => document.activeElement).toBe(rowTrigger());
   });
 
   it("AK-28: a forgotten account is no longer offered", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     setList(accounts({ email: work.email, rememberedAs: "Work" }, [work]));
     await publish();
@@ -638,10 +647,11 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("Manage accounts closes the picker and opens the setup's provider settings", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     await openAccountMenu();
-    await click(page.getByRole("menuitem", { name: "Manage accounts" }));
+    await userEvent.click(page.getByRole("menuitem", { name: "Manage accounts" }));
 
     await expect.element(modelOption()).not.toBeInTheDocument();
     expect(state.navigate).toHaveBeenCalledWith({
@@ -651,8 +661,9 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("says so when no account is logged in, and offers Manage accounts", async () => {
+    setup();
     setList(accounts(null, [priv]));
-    await render();
+    await using _view = await render();
     await openPicker();
 
     expect(row()?.textContent).toContain("No Claude account is logged in on this setup.");
@@ -661,8 +672,9 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("shows a loading line before the list arrives", async () => {
+    setup();
     setList(null);
-    await render();
+    await using _view = await render();
     await openPicker();
 
     expect(row()?.textContent).toContain("Loading account…");
@@ -670,12 +682,13 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("shows a read failure's reason with Retry, and clears it once the list arrives", async () => {
+    setup();
     setList(null, new ClaudeAccountError({ reason: "setupUnreadable" }));
-    await render();
+    await using _view = await render();
     await openPicker();
 
     expect(rowAlert()).toBe(message("setupUnreadable"));
-    await click(button("Retry")!);
+    await userEvent.click(button("Retry")!);
     expect(state.refresh).toHaveBeenCalledTimes(1);
 
     setList(workActive);
@@ -684,15 +697,17 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-33: shows the row on the Claude tab on Linux with the grant", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
 
     expect(row()).not.toBeNull();
   });
 
   it("AK-34: shows no row and never lists accounts off Linux", async () => {
+    setup();
     state.os = "darwin";
-    await render();
+    await using _view = await render();
     await openPicker();
 
     await expect.element(modelOption()).toBeVisible();
@@ -702,8 +717,9 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-34: shows no row and never lists accounts without the provider grant", async () => {
+    setup();
     state.granted = false;
-    await render();
+    await using _view = await render();
     await openPicker();
 
     await expect.element(modelOption()).toBeVisible();
@@ -712,17 +728,19 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("shows no row on the Codex tab or under Favorites", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker(codexEntry.displayName);
     await expect.element(page.getByRole("option", { name: /GPT 5/ })).toBeVisible();
     expect(row()).toBeNull();
 
-    await click(page.getByRole("button", { name: "Favorites", exact: true }));
+    await userEvent.click(page.getByRole("button", { name: "Favorites", exact: true }));
     expect(row()).toBeNull();
   });
 
   it("shows no row when the picker has no environment", async () => {
-    await render({ environmentId: null });
+    setup();
+    await using _view = await render({ environmentId: null });
     await openPicker();
 
     await expect.element(modelOption()).toBeVisible();
@@ -730,7 +748,8 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("shows the row in multi-model mode", async () => {
-    await render({ multiModel: true });
+    setup();
+    await using _view = await render({ multiModel: true });
     await openPicker();
 
     await expect.element(modelOption()).toBeVisible();
@@ -744,25 +763,26 @@ describe("ClaudeAccountPickerRow", () => {
   const terminalShown = () => document.querySelector('[data-testid="terminal"]') !== null;
   async function startAdding() {
     await openAccountMenu();
-    await click(page.getByRole("menuitem", { name: "Add account…" }));
+    await userEvent.click(page.getByRole("menuitem", { name: "Add account…" }));
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
-    await act(() => userEvent.fill(input, "Private"));
-    await click(page.getByRole("button", { name: "Log in…" }));
+    await userEvent.fill(input, "Private");
+    await userEvent.click(page.getByRole("button", { name: "Log in…" }));
     await expect.poll(terminalShown).toBe(true);
   }
 
   it("AK-17: Add account… sits above Manage accounts and starts the login for this setup", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     await openAccountMenu();
 
     expect(plainItems()).toEqual(["Add account…", "Manage accounts"]);
-    await click(page.getByRole("menuitem", { name: "Add account…" }));
+    await userEvent.click(page.getByRole("menuitem", { name: "Add account…" }));
     await expect.poll(menuOpen).toBe(false);
     expect(modelInDom()).toBe(true);
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
-    await act(() => userEvent.fill(input, "Private"));
-    await click(page.getByRole("button", { name: "Log in…" }));
+    await userEvent.fill(input, "Private");
+    await userEvent.click(page.getByRole("button", { name: "Log in…" }));
 
     expect(state.start).toHaveBeenCalledWith({
       environmentId,
@@ -773,11 +793,12 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("AK-23: closing the picker during the login stops the attempt once", async () => {
-    await render();
+    setup();
+    await using view = await render();
     await openPicker();
     await startAdding();
 
-    await render({ open: false });
+    await view.rerender({ open: false });
 
     await expect.poll(() => state.cancel.mock.calls.length).toBe(1);
     expect(state.cancel).toHaveBeenCalledWith({ environmentId, input: { attemptId: "a1" } });
@@ -785,7 +806,8 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("re-reads the account list after an account was added", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     await startAdding();
 
@@ -796,12 +818,13 @@ describe("ClaudeAccountPickerRow", () => {
   });
 
   it("a click on the add dialog's backdrop keeps the dialog and the picker open", async () => {
-    await render();
+    setup();
+    await using _view = await render();
     await openPicker();
     await startAdding();
 
     const viewport = document.querySelector<HTMLElement>('[data-slot="dialog-viewport"]')!;
-    await act(() => userEvent.click(viewport, { position: { x: 4, y: 4 } }));
+    await userEvent.click(viewport, { position: { x: 4, y: 4 } });
     await act(async () => {});
 
     expect(terminalShown()).toBe(true);

@@ -5,12 +5,12 @@ import {
   type ClaudeAccountList,
 } from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
-import { act, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { useState } from "react";
 import { userEvent } from "vite-plus/test/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import "~/index.css";
+import { act, render } from "../../../test/render";
 
 interface QueryView<A> {
   readonly data: A | null;
@@ -171,9 +171,19 @@ function Host() {
   );
 }
 
-let root: Root;
+function setup() {
+  vi.clearAllMocks();
+  state.os = "linux";
+  state.granted = true;
+  setAdd(null);
+  setList(oneSetup);
+  state.start.mockReset().mockResolvedValue(success(running));
+  state.respond.mockReset().mockResolvedValue(success());
+  state.cancel.mockReset().mockResolvedValue(success());
+  state.persist.mockReset().mockResolvedValue(success({}));
+}
 
-const render = () => act(async () => root.render(<Host />));
+const renderHost = () => render(<Host />);
 function button(label: string) {
   return (
     [...document.querySelectorAll("button")].find(
@@ -185,14 +195,14 @@ async function click(label: string) {
   const target = button(label);
   expect(target, `button ${label}`).not.toBeNull();
   expect(target!.disabled, `${label} disabled`).toBe(false);
-  await act(async () => target!.click());
+  await userEvent.click(target!);
 }
 async function chooseDriver(label: string) {
   const radio = [...document.querySelectorAll<HTMLElement>('[role="radio"]')].find((element) =>
     element.textContent?.includes(label),
   );
   expect(radio, `radio ${label}`).toBeDefined();
-  await act(async () => radio!.click());
+  await userEvent.click(radio!);
 }
 async function chooseClaude() {
   await chooseDriver("Claude");
@@ -202,7 +212,7 @@ const shareCheckbox = () =>
   [...document.querySelectorAll<HTMLElement>('[role="checkbox"]')].find((element) =>
     element.closest("label")?.textContent?.includes(SHARE_LABEL),
   ) ?? null;
-const toggleShare = () => act(async () => shareCheckbox()!.click());
+const toggleShare = () => userEvent.click(shareCheckbox()!);
 // Off-step rows stay mounted under a `hidden` ancestor; only what is laid out counts as shown.
 const visible = (element: Element | null) =>
   element !== null && (element as HTMLElement).offsetParent !== null;
@@ -228,39 +238,18 @@ const setupOption = (label: string) =>
     (element) => element.textContent?.trim() === label,
   );
 async function nameAndLogIn() {
-  await act(() =>
-    userEvent.fill(
-      document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!,
-      "Private",
-    ),
+  await userEvent.fill(
+    document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!,
+    "Private",
   );
   await click("Log in…");
 }
 const flushMicrotasks = () => act(async () => {});
 
 describe("AddProviderInstanceDialog share config", () => {
-  beforeEach(() => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    vi.clearAllMocks();
-    state.os = "linux";
-    state.granted = true;
-    setAdd(null);
-    setList(oneSetup);
-    state.start.mockReset().mockResolvedValue(success(running));
-    state.respond.mockReset().mockResolvedValue(success());
-    state.cancel.mockReset().mockResolvedValue(success());
-    state.persist.mockReset().mockResolvedValue(success({}));
-    root = createRoot(document.body.appendChild(document.createElement("div")));
-  });
-
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    document.body.replaceChildren();
-    vi.unstubAllGlobals();
-  });
-
   it("fetches the list when Claude is chosen, before Next, and only once", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await chooseDriver("Claude");
     expect(state.list).toHaveBeenCalledTimes(1);
     expect(state.list).toHaveBeenCalledWith({ environmentId, input: {} });
@@ -270,7 +259,8 @@ describe("AddProviderInstanceDialog share config", () => {
   });
 
   it("AK-19 / AK-33: offers the option unticked above the identity rows on Linux", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await chooseClaude();
 
     const checkbox = shareCheckbox();
@@ -291,8 +281,9 @@ describe("AddProviderInstanceDialog share config", () => {
     ],
     ["no setups", { accounts: [], setups: [] }],
   ] as const)("AK-20: hides the option with %s", async (_name, list) => {
+    setup();
     setList(list);
-    await render();
+    await using _screen = await renderHost();
     await chooseClaude();
 
     expect(shareCheckbox()).toBeNull();
@@ -304,8 +295,9 @@ describe("AddProviderInstanceDialog share config", () => {
     ["off Linux", () => (state.os = "darwin")],
     ["without the providers:manage grant", () => (state.granted = false)],
   ])("AK-34: hides the option %s, without calling the list or an alert", async (_name, arrange) => {
+    setup();
     arrange();
-    await render();
+    await using _screen = await renderHost();
     await chooseClaude();
 
     expect(shareCheckbox()).toBeNull();
@@ -314,14 +306,16 @@ describe("AddProviderInstanceDialog share config", () => {
   });
 
   it("offers the option for Claude only", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await click("Configure manually");
 
     expect(shareCheckbox()).toBeNull();
   });
 
   it("AK-21: one setup — adds the account to it and creates no provider", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await chooseClaude();
     await toggleShare();
 
@@ -360,16 +354,17 @@ describe("AddProviderInstanceDialog share config", () => {
   });
 
   it("two setups — the Setup select chooses which one gets the account", async () => {
+    setup();
     setList(twoSetups);
-    await render();
+    await using _screen = await renderHost();
     await chooseClaude();
     await toggleShare();
 
     expect(setupTrigger()?.textContent).toContain("Claude");
     expect(setupTrigger()?.textContent).not.toContain("Work Claude");
-    await act(async () => setupTrigger()!.click());
+    await userEvent.click(setupTrigger()!);
     await expect.poll(() => setupOption("Work Claude")).toBeDefined();
-    await act(async () => setupOption("Work Claude")!.click());
+    await userEvent.click(setupOption("Work Claude")!);
     await expect.poll(() => setupTrigger()?.textContent).toContain("Work Claude");
 
     await click("Add account…");
@@ -381,7 +376,8 @@ describe("AddProviderInstanceDialog share config", () => {
   });
 
   it("unticking restores the identity rows and a new driver choice starts unticked", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await chooseClaude();
     await toggleShare();
     await toggleShare();
@@ -400,7 +396,8 @@ describe("AddProviderInstanceDialog share config", () => {
   });
 
   it("AK-22 / AK-23: Cancel during the login stops the attempt once and closes", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await chooseClaude();
     await toggleShare();
     await click("Add account…");

@@ -70,6 +70,7 @@ function ClaudeAccountPickerRowInner({
   const view = accounts.view;
   const pending = accountSwitch.pendingTarget;
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks mount so a switch that settles after the popup closes reports by toast
   useEffect(() => {
     mountedRef.current = true;
     return () => {

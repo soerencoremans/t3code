@@ -6,12 +6,12 @@ import {
   type ClaudeAccountErrorReason,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { act, StrictMode, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { StrictMode, useState } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
+import { act, render } from "../../../test/render";
 
 interface QueryView {
   readonly data: ClaudeAccountAddState | null;
@@ -157,20 +157,26 @@ function Host() {
   );
 }
 
-let root: Root;
-
-function render(options: { readonly strict?: boolean } = {}) {
-  return act(async () =>
-    root.render(
-      options.strict ? (
-        <StrictMode>
-          <Host />
-        </StrictMode>
-      ) : (
+function renderHost(options: { readonly strict?: boolean } = {}) {
+  return render(
+    options.strict ? (
+      <StrictMode>
         <Host />
-      ),
+      </StrictMode>
+    ) : (
+      <Host />
     ),
+    // The dialog does not use the router.
+    { router: false },
   );
+}
+
+function setup() {
+  vi.clearAllMocks();
+  setAddState(null);
+  state.start.mockReset().mockResolvedValue(success(addState()));
+  state.respond.mockReset().mockResolvedValue(success());
+  state.cancel.mockReset().mockResolvedValue(success());
 }
 
 function button(label: string) {
@@ -194,7 +200,7 @@ const dialogOpen = () => document.querySelector('[role="dialog"]') !== null;
 const flushMicrotasks = () => act(async () => {});
 
 async function typeName(value: string) {
-  await act(() => userEvent.fill(nameInput()!, value));
+  await userEvent.fill(nameInput()!, value);
 }
 async function submitName(value = "Private") {
   await typeName(value);
@@ -208,30 +214,15 @@ async function reachLogin() {
 // A click on the viewport's corner lands outside the popup, on the backdrop area.
 async function clickOutside() {
   const viewport = document.querySelector<HTMLElement>('[data-slot="dialog-viewport"]')!;
-  await act(() => userEvent.click(viewport, { position: { x: 4, y: 4 } }));
+  await userEvent.click(viewport, { position: { x: 4, y: 4 } });
 }
 
 describe("AddClaudeAccountDialog", () => {
-  beforeEach(() => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    vi.clearAllMocks();
-    setAddState(null);
-    state.start.mockReset().mockResolvedValue(success(addState()));
-    state.respond.mockReset().mockResolvedValue(success());
-    state.cancel.mockReset().mockResolvedValue(success());
-    root = createRoot(document.body.appendChild(document.createElement("div")));
-  });
-
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    document.body.replaceChildren();
-    vi.unstubAllGlobals();
-  });
-
   it("name step: disables Log in… until a name is typed and starts the login once", async () => {
+    setup();
     const call = deferred<unknown>();
     state.start.mockReturnValueOnce(call.promise);
-    await render();
+    await using _screen = await renderHost();
 
     expect(title()).toBe("Add Claude account");
     expect(button("Log in…")!.disabled).toBe(true);
@@ -253,8 +244,9 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-32: a refused name stays on the name step with the reason and no subscription", async () => {
+    setup();
     state.start.mockResolvedValueOnce(refusal("nameInUse", "Private"));
-    await render();
+    await using _screen = await renderHost();
     await submitName();
 
     await expect.poll(alertText).toBe(message("nameInUse", "Private"));
@@ -264,7 +256,8 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-15 / AK-16: the login step shows the terminal and sends its input in order", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
 
     expect(title()).toBe("Add account “Private”");
@@ -290,7 +283,8 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-15: a landed login reports the account and Done closes without switching", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
     expect(button("Done")!.disabled).toBe(true);
 
@@ -309,7 +303,8 @@ describe("AddClaudeAccountDialog", () => {
   it.each(["loginFailed", "loginTimedOut"] as const)(
     "AK-32: a %s login returns to the name step with the reason",
     async (reason) => {
-      await render();
+      setup();
+      await using _screen = await renderHost();
       await reachLogin();
 
       await publish(addState({ phase: "failed", error: new ClaudeAccountError({ reason }) }));
@@ -321,7 +316,8 @@ describe("AddClaudeAccountDialog", () => {
   );
 
   it("a lost subscription returns to the name step with the server's reason", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
 
     await publish(null, new ClaudeAccountError({ reason: "loginNotFound" }));
@@ -333,7 +329,8 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("a success without an account returns to the name step and says to check", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
 
     await publish(addState({ phase: "succeeded", account: null }));
@@ -345,9 +342,10 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("a failed send to the terminal shows why and drops the queued input", async () => {
+    setup();
     const first = deferred<unknown>();
     state.respond.mockReturnValueOnce(first.promise);
-    await render();
+    await using _screen = await renderHost();
     await reachLogin();
 
     await click("Type");
@@ -359,7 +357,8 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("a login the server stopped returns to the name step", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
 
     await publish(addState({ phase: "cancelled" }));
@@ -369,7 +368,8 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-22: Cancel during the login stops the attempt once and closes", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
 
     await click("Cancel");
@@ -381,10 +381,11 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-23: Escape during the login stops the attempt once", async () => {
-    await render();
+    setup();
+    await using _screen = await renderHost();
     await reachLogin();
 
-    await act(() => userEvent.keyboard("{Escape}"));
+    await userEvent.keyboard("{Escape}");
     await expect.poll(dialogOpen).toBe(false);
     await flushMicrotasks();
 
@@ -394,26 +395,26 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-23: unmounting the whole tree during the login stops the attempt once", async () => {
-    await render();
+    setup();
+    await using screen = await renderHost();
     await reachLogin();
 
-    await act(async () => root.unmount());
+    await screen.unmount();
     await flushMicrotasks();
 
     expect(state.cancel).toHaveBeenCalledTimes(1);
     expect(state.cancel).toHaveBeenCalledWith({ environmentId, input: { attemptId: "a1" } });
-    root = createRoot(document.body.appendChild(document.createElement("div")));
   });
 
   it("an outside click closes the name step but not a running login", async () => {
-    await render();
+    setup();
+    await using first = await renderHost();
     await clickOutside();
     await expect.poll(dialogOpen).toBe(false);
 
     onClose.mockClear();
-    await act(async () => root.unmount());
-    root = createRoot(document.body.appendChild(document.createElement("div")));
-    await render();
+    await first.unmount();
+    await using _second = await renderHost();
     await reachLogin();
     await clickOutside();
     await flushMicrotasks();
@@ -424,12 +425,13 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-23: closing while the start is pending stops the attempt it returns", async () => {
+    setup();
     const call = deferred<unknown>();
     state.start.mockReturnValueOnce(call.promise);
-    await render();
+    await using _screen = await renderHost();
     await submitName();
 
-    await act(() => userEvent.keyboard("{Escape}"));
+    await userEvent.keyboard("{Escape}");
     await expect.poll(dialogOpen).toBe(false);
     await act(async () => call.resolve(success(addState({ attemptId: "a2" }))));
 
@@ -438,38 +440,36 @@ describe("AddClaudeAccountDialog", () => {
   });
 
   it("AK-23: StrictMode's remount does not stop the login, a real unmount does once", async () => {
-    await render({ strict: true });
+    setup();
+    await using screen = await renderHost({ strict: true });
     await reachLogin();
     await flushMicrotasks();
     expect(state.cancel).not.toHaveBeenCalled();
 
-    await act(async () => root.unmount());
+    await screen.unmount();
     await flushMicrotasks();
 
     expect(state.cancel).toHaveBeenCalledTimes(1);
-    root = createRoot(document.body.appendChild(document.createElement("div")));
   });
 
   it("sends no cancel after the login succeeded or failed", async () => {
-    await render();
+    setup();
+    await using first = await renderHost();
     await reachLogin();
     await publish(addState({ phase: "succeeded", account: privateAccount }));
     await expect.poll(() => document.body.textContent).toContain("Added “Private”.");
-    await act(async () => root.unmount());
+    await first.unmount();
     await flushMicrotasks();
     expect(state.cancel).not.toHaveBeenCalled();
-
-    root = createRoot(document.body.appendChild(document.createElement("div")));
     setAddState(null);
-    await render();
+    await using second = await renderHost();
     await reachLogin();
     await publish(
       addState({ phase: "failed", error: new ClaudeAccountError({ reason: "loginFailed" }) }),
     );
     await expect.poll(alertText).toBe(message("loginFailed"));
-    await act(async () => root.unmount());
+    await second.unmount();
     await flushMicrotasks();
     expect(state.cancel).not.toHaveBeenCalled();
-    root = createRoot(document.body.appendChild(document.createElement("div")));
   });
 });
