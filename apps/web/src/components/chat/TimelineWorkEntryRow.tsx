@@ -17,6 +17,7 @@ import { notificationChildThreadId } from "@t3tools/client-runtime/state/thread-
 import {
   resolveViewedImageAsset,
   toolGroupAction,
+  workEntryClaudeArtifact,
   workEntryViewedImagePath,
 } from "@t3tools/client-runtime/work-log/presentation";
 import {
@@ -24,6 +25,8 @@ import {
   turnItemNeedsDetailFetch,
 } from "@t3tools/client-runtime/work-log/item-detail";
 import { claudeSkillInvocation } from "@t3tools/shared/toolActivity";
+import type { ClaudeArtifactReference } from "@t3tools/shared/toolOutput";
+import { useOpenLink } from "~/browser/useOpenLink";
 import { memo, use, useState, type KeyboardEvent } from "react";
 import {
   workEntryDisplayIndicatesToolFailure,
@@ -116,6 +119,22 @@ const toolCallExpandedBodyClassName =
 
 const stopRowToggle = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
+function OpenArtifactButton({ artifact }: { artifact: ClaudeArtifactReference }) {
+  const openLink = useOpenLink(use(TimelineRowCtx).threadRef);
+  return (
+    <InlineButton
+      aria-label={`Open artifact ${artifact.title}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        void openLink(artifact.url, { event }).catch(() => undefined);
+      }}
+      onKeyDown={stopRowToggle}
+    >
+      Open artifact
+    </InlineButton>
+  );
+}
+
 export function ReasoningTraceContent({ entries }: { entries: ReadonlyArray<TimelineWorkEntry> }) {
   const ctx = use(TimelineRowCtx);
   const { isWorking, latestRunId } = use(TimelineRowActivityCtx);
@@ -181,6 +200,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
     workEntry.projectedItem?.item.type === "thread_created"
       ? workEntry.projectedItem.item
       : undefined;
+  const artifact = workEntryClaudeArtifact(workEntry);
   const notifiedSubagentThreadId =
     workEntry.projectedItem?.item.type === "notification"
       ? notificationChildThreadId(workEntry.projectedItem.item.source)
@@ -476,6 +496,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
               Open chat
             </button>
           ) : null}
+          {artifact ? <OpenArtifactButton artifact={artifact} /> : null}
           {notifiedSubagentThreadId ? (
             <InlineButton
               aria-label="Open subagent thread"

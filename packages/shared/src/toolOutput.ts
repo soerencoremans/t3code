@@ -19,7 +19,18 @@ const MAX_THREADS = 100;
 const MAX_CONTENT_BLOCKS = 32;
 const MAX_ENVELOPE_DEPTH = 4;
 const MAX_ENVELOPE_NODES = 128;
+const MAX_ARTIFACT_TITLE_LENGTH = 200;
+const CLAUDE_ARTIFACT_PUBLISH_TOOLS = new Set(
+  ["publish_files", "publish_version", "edit_version", "create_from_type"].map(
+    (tool) => `mcp__claude-artifacts__${tool}`,
+  ),
+);
 const encoder = new TextEncoder();
+
+export interface ClaudeArtifactReference {
+  readonly url: string;
+  readonly title: string;
+}
 
 interface ResultReadBudget {
   remainingBytes: number;
@@ -41,6 +52,7 @@ interface CompactToolOutput {
   status?: "rolled_back";
   htmlRender?: HtmlRenderReference;
   [MCP_APP_OUTPUT_KEY]?: McpAppReference;
+  artifact?: ClaudeArtifactReference;
   thread?: { threadId: string };
   threads?: Array<{ threadId?: string; status?: "rolled_back" }>;
   linkedCount?: number;
@@ -103,6 +115,23 @@ function readResult(value: unknown, budget: ResultReadBudget, depth = 0): Result
   return { data: value, failed };
 }
 
+function readClaudeArtifactReference(
+  data: Record<PropertyKey, unknown>,
+): ClaudeArtifactReference | undefined {
+  if (typeof data.url !== "string" || typeof data.title !== "string") return undefined;
+  if (typeof data.slug !== "string") return undefined;
+  let url: URL;
+  try {
+    url = new URL(data.url);
+  } catch {
+    return undefined;
+  }
+  const title = data.title.trim().slice(0, MAX_ARTIFACT_TITLE_LENGTH);
+  return url.protocol === "https:" && url.hostname === "claude.ai" && title !== ""
+    ? { url: url.href, title }
+    : undefined;
+}
+
 function boundedId(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length > MAX_ID_LENGTH || value.trim() === "") {
     return undefined;
@@ -133,6 +162,8 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
     const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
     if (mcpApp !== undefined) output[MCP_APP_OUTPUT_KEY] = mcpApp;
+    const artifact = readClaudeArtifactReference(data);
+    if (artifact !== undefined) output.artifact = artifact;
     const nestedThreadId = Predicate.isObject(data.thread)
       ? boundedId(data.thread.threadId)
       : undefined;
@@ -189,6 +220,15 @@ export function htmlRenderFromToolItem(item: {
   if (resolveT3McpToolId(item.toolName) !== HTML_RENDER_TOOL_NAME) return undefined;
   const output = compactDynamicToolOutput(item.output);
   return output?.isError ? undefined : output?.htmlRender;
+}
+
+export function claudeArtifactFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): ClaudeArtifactReference | undefined {
+  if (!item.toolName || !CLAUDE_ARTIFACT_PUBLISH_TOOLS.has(item.toolName)) return undefined;
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.artifact;
 }
 
 /** Accept app references only when server and tool match the item, so tools cannot impersonate another app source. */

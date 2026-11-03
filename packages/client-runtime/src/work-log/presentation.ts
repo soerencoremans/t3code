@@ -21,7 +21,7 @@ import { sourceControlClients } from "@t3tools/client-runtime/source-control-cli
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/mediaPreview";
 import { formatTokens } from "@t3tools/shared/usageFormat";
 import { classifyToolActivity } from "@t3tools/shared/toolActivity";
-import { toolOutputIndicatesFailure } from "@t3tools/shared/toolOutput";
+import { claudeArtifactFromToolItem, toolOutputIndicatesFailure } from "@t3tools/shared/toolOutput";
 
 import {
   summarizeT3ToolCalls,
@@ -162,6 +162,15 @@ function workEntryToolOutput(
   return item?.type === "dynamic_tool"
     ? item.output
     : (data?.output ?? data?.result ?? data?.rawOutput ?? data?.content);
+}
+
+export function workEntryClaudeArtifact(
+  entry: Pick<WorkLogPresentationEntry, "label" | "toolTitle" | "toolData" | "structuredPayload">,
+) {
+  return claudeArtifactFromToolItem({
+    toolName: workEntryToolName(entry),
+    output: workEntryToolOutput(entry),
+  });
 }
 
 function resolveT3McpToolPresentation(
