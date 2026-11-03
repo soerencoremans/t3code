@@ -18,7 +18,7 @@ import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -210,7 +210,7 @@ export const refreshClaudeSetupSnapshots =
       { concurrency: "unbounded", discard: true },
     );
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -221,7 +221,7 @@ export const make = Effect.gen(function* () {
   const threads = yield* ThreadManagementService.ThreadManagementService;
   const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const instances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
   const refreshSnapshots = refreshClaudeSetupSnapshots(instances);
   const accountsLock = yield* Semaphore.make(1);
@@ -838,7 +838,7 @@ export const make = Effect.gen(function* () {
       yield* refuseRunningTurns(input.instanceId, plan.affectedInstanceIds);
     }
     // Command ids are persisted receipts, so they must stay unique across restarts.
-    const switchId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+    const switchId = yield* random.uuidV4();
     const held = yield* Ref.make<ReadonlyArray<HeldThread>>([]);
     return yield* Effect.gen(function* () {
       const interruptedRuns = yield* stopSetupSessions(
@@ -915,6 +915,6 @@ export const layer: Layer.Layer<
   | ThreadManagementService.ThreadManagementService
   | ProviderSessionManager.ProviderSessionManagerV2
   | ProjectionStore.ProjectionStoreV2
-  | Crypto.Crypto
+  | SecureRandom.SecureRandom
   | ProviderInstanceRegistry.ProviderInstanceRegistry
 > = Layer.effect(ClaudeAccounts, make);

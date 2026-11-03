@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import { assert, describe, it } from "@effect/vitest";
 import {
@@ -43,7 +44,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -162,8 +163,8 @@ const decodeStored = Schema.decodeUnknownSync(
 );
 
 const randomToken = Effect.fn("test.randomToken")(function* (label: string) {
-  const crypto = yield* Crypto.Crypto;
-  return `${label}-${yield* crypto.randomUUIDv4()}`;
+  const random = yield* SecureRandom.SecureRandom;
+  return `${label}-${yield* random.uuidV4()}`;
 });
 
 const FIXED_SETTINGS = '{"theme":"dark"}\n';
@@ -669,7 +670,7 @@ const makeAccountsTestLayer = (options: {
 const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const setups: Record<string, { readonly dir: string }> = {};
   const tokens: Array<string> = [];
   const providerInstances: Record<string, ProviderInstanceConfig> = {};
@@ -790,13 +791,13 @@ const buildHarness = Effect.fn("test.buildHarness")(function* (spec: HarnessSpec
         ...(yield* writeLoginFiles(setups[instance]!.dir, login).pipe(
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
-          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.provideService(SecureRandom.SecureRandom, random),
         )),
       );
     }),
     newOauth: Effect.fn("test.newOauth")(function* (label: string) {
-      const accessToken = `${label}-access-${yield* crypto.randomUUIDv4()}`;
-      const refreshToken = `${label}-refresh-${yield* crypto.randomUUIDv4()}`;
+      const accessToken = `${label}-access-${yield* random.uuidV4()}`;
+      const refreshToken = `${label}-refresh-${yield* random.uuidV4()}`;
       tokens.push(accessToken, refreshToken);
       return {
         accessToken,
@@ -834,7 +835,11 @@ const run = <A, E>(
   spec: HarnessSpec,
   body: (
     harness: Harness,
-  ) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope | Crypto.Crypto>,
+  ) => Effect.Effect<
+    A,
+    E,
+    FileSystem.FileSystem | Path.Path | Scope.Scope | SecureRandom.SecureRandom
+  >,
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -998,7 +1003,7 @@ const interruptsOn = (h: Harness, thread: TestThread) =>
 const opensAfter = (h: Harness, mark: number, thread: TestThread) =>
   h.fake.opens.slice(mark).filter((open) => open.threadId === thread.threadId);
 
-it.layer(NodeServices.layer)("ClaudeAccounts", (it) => {
+it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ClaudeAccounts", (it) => {
   it.effect("AK-1: remembers the account logged in on a setup under a chosen name", () =>
     run(one(alice), (h) =>
       Effect.gen(function* () {

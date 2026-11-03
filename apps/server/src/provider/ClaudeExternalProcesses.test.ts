@@ -1,8 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -140,7 +141,7 @@ const scanError = Effect.fn("test.scanError")(function* (
   return error;
 });
 
-it.layer(NodeServices.layer)("ClaudeExternalProcesses", (it) => {
+it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ClaudeExternalProcesses", (it) => {
   it.effect("finds a claude process on the config dir", () =>
     scan(
       ({ setup }) => Effect.succeed({ "101": claudeOn(setup) }),
@@ -352,7 +353,7 @@ it.layer(NodeServices.layer)("ClaudeExternalProcesses", (it) => {
       lines.push(message);
     });
     return Effect.gen(function* () {
-      const secret = `sk-ant-${yield* (yield* Crypto.Crypto).randomUUIDv4()}`;
+      const secret = `sk-ant-${yield* (yield* SecureRandom.SecureRandom).uuidV4()}`;
       return yield* scan(
         ({ setup }) => Effect.succeed({ "101": claudeOn(setup, `ANTHROPIC_API_KEY=${secret}`) }),
         (h) =>
