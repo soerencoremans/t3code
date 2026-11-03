@@ -5,9 +5,9 @@ The rules every Loop-Forge agent is bound by in this repository, whatever its ro
 loop needs on top of it. Where the two disagree, `AGENTS.md` wins and the disagreement is a
 finding.
 
-This repository is a fork of `pingdotgg/t3code`. Aufträge are cut from `loop/main`, which is
-upstream `main` plus this directory. Keep every change upstreamable: no fork-only
-conventions in product code.
+This repository is a fork of `pingdotgg/t3code`. Aufträge are cut from `main`, which is
+upstream `main` plus this directory and the fork's features. Keep every change
+upstreamable: no fork-only conventions in product code.
 
 ## 1. Safety
 
@@ -85,7 +85,7 @@ The gate the transition tool runs comes from `.loop-forge/config.json` in the BA
 - Contracts first: anything crossing the wire is typed in `packages/contracts`. A change
   there reaches server, web, mobile and desktop; name every consumer you updated.
 - Commit on the ticket branch only, Conventional Commits (`<type>(<scope>): <summary>`), the
-  ticket number and turn in the message. Never push, never touch `main` or `loop/main`,
+  ticket number and turn in the message. Never push, never touch `main`,
   never rewrite history on BASE.
 - The transition tool is the only way to move the ticket. Labels, statuses and the board
   are never edited by hand.
