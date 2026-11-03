@@ -407,8 +407,13 @@ export function resolveAdvertisedEndpointPairingUrl(
   return resolveDesktopPairingUrl(endpoint.httpBaseUrl, credential);
 }
 
-export function resolveCurrentOriginPairingUrl(credential: string): string {
-  const url = new URL("/pair", window.location.href);
+export function resolveCurrentOriginPairingUrl(
+  credential: string,
+  href: string = window.location.href,
+): string | null {
+  const url = new URL("/pair", href);
+  // The desktop renderer origin (t3code://app) is not reachable from another device.
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   return setPairingTokenOnUrl(url, credential).toString();
 }
 
