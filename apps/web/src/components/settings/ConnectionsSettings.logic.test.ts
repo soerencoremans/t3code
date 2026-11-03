@@ -2,6 +2,7 @@ import type { DesktopWslState } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   applyWslEnableSelection,
+  resolveCurrentOriginPairingUrl,
   resolveTailscaleServeBaseUrl,
   selectQrEndpointOption,
   togglePairingScopeSelection,
@@ -39,6 +40,15 @@ describe("togglePairingScopeSelection", () => {
     },
   ] as const)("$label", ({ current, scope, checked, expected }) => {
     expect(togglePairingScopeSelection(current, scope, checked)).toEqual(expected);
+  });
+});
+
+describe("resolveCurrentOriginPairingUrl", () => {
+  it.each([
+    ["https://t3.example.com/settings", "https://t3.example.com/pair#token=CODE"],
+    ["t3code://app/settings", null],
+  ] as const)("shares %s as %s", (href, expected) => {
+    expect(resolveCurrentOriginPairingUrl("CODE", href)).toBe(expected);
   });
 });
 
