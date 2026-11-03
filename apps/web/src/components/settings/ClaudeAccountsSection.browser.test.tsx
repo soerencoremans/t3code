@@ -8,10 +8,10 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import type { Atom } from "effect/reactivity";
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { userEvent } from "vite-plus/test/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { act, render, type Screen } from "../../../test/render";
 
 interface QueryView<A = ClaudeAccountList> {
   readonly data: A | null;
@@ -168,17 +168,12 @@ function PickerStandIn() {
   return <output data-testid="picker-pending">{pendingTarget ?? "none"}</output>;
 }
 
-let root: Root;
-let container: HTMLDivElement;
-
-function render() {
-  return act(async () =>
-    root.render(
-      <>
-        <ClaudeAccountsSection environmentId={remoteEnvironmentId} instanceId={instanceId} />
-        <PickerStandIn />
-      </>,
-    ),
+function renderSection() {
+  return render(
+    <>
+      <ClaudeAccountsSection environmentId={remoteEnvironmentId} instanceId={instanceId} />
+      <PickerStandIn />
+    </>,
   );
 }
 
@@ -195,19 +190,20 @@ async function click(label: string) {
   expect(target!.disabled, `${label} disabled`).toBe(false);
   await act(async () => target!.click());
 }
-function item(name: string) {
+function item(screen: Screen, name: string) {
   return (
-    [...container.querySelectorAll("li")].find(
+    [...screen.container.querySelectorAll("li")].find(
       (element) => element.firstElementChild?.textContent === name,
     ) ?? null
   );
 }
-const section = () => container.querySelector('section[aria-label="Claude accounts"]');
+const section = (screen: Screen) =>
+  screen.container.querySelector('section[aria-label="Claude accounts"]');
 const alertText = () => document.querySelector('[role="alert"]')?.textContent ?? null;
-const pickerPending = () =>
-  container.querySelector('[data-testid="picker-pending"]')?.textContent ?? null;
+const pickerPending = (screen: Screen) =>
+  screen.container.querySelector('[data-testid="picker-pending"]')?.textContent ?? null;
 async function tooltipOf(label: string) {
-  await act(() => userEvent.hover(button(label)!.parentElement!));
+  await userEvent.hover(button(label)!.parentElement!);
   await expect
     .poll(() => document.querySelector('[data-slot="tooltip-popup"][data-open]')?.textContent)
     .toBeTruthy();
@@ -216,44 +212,37 @@ async function tooltipOf(label: string) {
 
 const switchConfirm = `Switch this Claude setup to "Private"? Switching stops running Claude turns on this setup, in every chat that uses it. Queued messages wait and send on the new account. Send "continue" to pick a stopped turn up.`;
 
+function setup() {
+  vi.clearAllMocks();
+  state.os = "linux";
+  state.granted = true;
+  setList(workActive);
+  state.addView = { data: null, error: null, failure: null, isPending: false, refresh: () => {} };
+  for (const command of [state.remember, state.forget, state.switch, state.cancel]) {
+    command.mockReset().mockResolvedValue(success());
+  }
+  state.start.mockReset().mockResolvedValue(success(running));
+  state.confirm.mockReset().mockResolvedValue(false);
+  queryListeners.clear();
+}
+
 describe("ClaudeAccountsSection", () => {
-  beforeEach(() => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    vi.clearAllMocks();
-    state.os = "linux";
-    state.granted = true;
-    setList(workActive);
-    state.addView = { data: null, error: null, failure: null, isPending: false, refresh: () => {} };
-    for (const command of [state.remember, state.forget, state.switch, state.cancel]) {
-      command.mockReset().mockResolvedValue(success());
-    }
-    state.start.mockReset().mockResolvedValue(success(running));
-    state.confirm.mockReset().mockResolvedValue(false);
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  });
-
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    container.remove();
-    vi.unstubAllGlobals();
-  });
-
   it("AK-25 / AK-36: lists the remote setup's accounts and marks the active one", async () => {
-    await render();
+    setup();
+    await using screen = await renderSection();
 
     expect(state.list).toHaveBeenCalledWith({ environmentId: remoteEnvironmentId, input: {} });
-    expect(item("Work")?.textContent).toContain("Active");
+    expect(item(screen, "Work")?.textContent).toContain("Active");
     expect(button("Switch to Work")).toBeNull();
-    expect(item("Private")?.textContent).not.toContain("Active");
+    expect(item(screen, "Private")?.textContent).not.toContain("Active");
     expect(button("Switch to Private")).not.toBeNull();
-    expect(section()?.textContent).toContain("Logged in as Work");
-    expect(section()?.textContent).toContain("Used by all chats on this setup.");
+    expect(section(screen)?.textContent).toContain("Logged in as Work");
+    expect(section(screen)?.textContent).toContain("Used by all chats on this setup.");
   });
 
   it("AK-26 / AK-39: switches at once when no turns run, then shows the new active account", async () => {
-    await render();
+    setup();
+    await using screen = await renderSection();
     await click("Switch to Private");
 
     expect(state.switch).toHaveBeenCalledTimes(1);
@@ -266,33 +255,35 @@ describe("ClaudeAccountsSection", () => {
 
     setList(accounts({ email: priv.email, rememberedAs: "Private" }));
     await publish();
-    expect(item("Private")?.textContent).toContain("Active");
-    expect(item("Work")?.textContent).not.toContain("Active");
+    expect(item(screen, "Private")?.textContent).toContain("Active");
+    expect(item(screen, "Work")?.textContent).not.toContain("Active");
   });
 
   it("AK-38 / AK-4: asks before stopping running turns, and declining changes nothing", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("turnsRunning"));
     const answer = deferred<boolean>();
     state.confirm.mockReturnValueOnce(answer.promise);
-    await render();
+    await using screen = await renderSection();
     await click("Switch to Private");
 
     expect(state.confirm).toHaveBeenCalledTimes(1);
     expect(state.confirm).toHaveBeenCalledWith(switchConfirm, { variant: "destructive" });
-    expect(section()?.textContent).not.toContain("Switching to");
-    expect(pickerPending()).toBe("none");
+    expect(section(screen)?.textContent).not.toContain("Switching to");
+    expect(pickerPending(screen)).toBe("none");
 
     await act(async () => answer.resolve(false));
     expect(state.switch).toHaveBeenCalledTimes(1);
     expect(alertText()).toBeNull();
-    expect(item("Work")?.textContent).toContain("Active");
+    expect(item(screen, "Work")?.textContent).toContain("Active");
     expect(state.refresh).not.toHaveBeenCalled();
   });
 
   it("AK-5: confirming stops the running turns and switches", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("turnsRunning"));
     state.confirm.mockResolvedValueOnce(true);
-    await render();
+    await using _screen = await renderSection();
     await click("Switch to Private");
 
     expect(state.switch).toHaveBeenCalledTimes(2);
@@ -305,6 +296,7 @@ describe("ClaudeAccountsSection", () => {
   });
 
   it("AK-7: no second switch starts while one runs, here or in the model picker", async () => {
+    setup();
     setList(
       accounts({ email: work.email, rememberedAs: "Work" }, [
         work,
@@ -314,26 +306,27 @@ describe("ClaudeAccountsSection", () => {
     );
     const call = deferred<unknown>();
     state.switch.mockReturnValueOnce(call.promise);
-    await render();
+    await using screen = await renderSection();
     await click("Switch to Private");
 
-    expect(section()?.textContent).toContain("Switching to Private…");
+    expect(section(screen)?.textContent).toContain("Switching to Private…");
     expect(button("Switch to Private")!.disabled).toBe(true);
     expect(button("Switch to Third")!.disabled).toBe(true);
-    expect(pickerPending()).toBe("Private");
+    expect(pickerPending(screen)).toBe("Private");
     await act(async () => button("Switch to Third")!.click());
     expect(state.switch).toHaveBeenCalledTimes(1);
 
     await act(async () => call.resolve(success()));
     expect(button("Switch to Private")!.disabled).toBe(false);
     expect(button("Switch to Third")!.disabled).toBe(false);
-    expect(pickerPending()).toBe("none");
-    expect(section()?.textContent).not.toContain("Switching to");
+    expect(pickerPending(screen)).toBe("none");
+    expect(section(screen)?.textContent).not.toContain("Switching to");
   });
 
   it("AK-7: a switch refused because another one runs shows why and does not refresh", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("switchInProgress"));
-    await render();
+    await using _screen = await renderSection();
     await click("Switch to Private");
 
     expect(alertText()).toBe(message("switchInProgress"));
@@ -341,8 +334,9 @@ describe("ClaudeAccountsSection", () => {
   });
 
   it("AK-31: a refused switch tells the user why in plain words", async () => {
+    setup();
     state.switch.mockResolvedValueOnce(refusal("externalClaudePrograms"));
-    await render();
+    await using screen = await renderSection();
     await click("Switch to Private");
 
     const text = alertText();
@@ -350,11 +344,12 @@ describe("ClaudeAccountsSection", () => {
     expect(text).not.toContain("claudeAgent");
     expect(text).not.toContain("`");
     expect(text).not.toContain("claude auth");
-    expect(item("Work")?.textContent).toContain("Active");
+    expect(item(screen, "Work")?.textContent).toContain("Active");
   });
 
   it("AK-27 / AK-29: forget asks first, and declining keeps the account", async () => {
-    await render();
+    setup();
+    await using screen = await renderSection();
     await click("Forget Private");
 
     expect(state.confirm).toHaveBeenCalledWith(
@@ -362,12 +357,13 @@ describe("ClaudeAccountsSection", () => {
       { variant: "destructive" },
     );
     expect(state.forget).not.toHaveBeenCalled();
-    expect(item("Private")).not.toBeNull();
+    expect(item(screen, "Private")).not.toBeNull();
   });
 
   it("AK-28: confirming forget removes the account from the list", async () => {
+    setup();
     state.confirm.mockResolvedValueOnce(true);
-    await render();
+    await using screen = await renderSection();
     await click("Forget Private");
 
     expect(state.forget).toHaveBeenCalledWith({
@@ -377,12 +373,13 @@ describe("ClaudeAccountsSection", () => {
     expect(state.refresh).toHaveBeenCalledTimes(1);
     setList(accounts({ email: work.email, rememberedAs: "Work" }, [work]));
     await publish();
-    expect(item("Private")).toBeNull();
+    expect(item(screen, "Private")).toBeNull();
   });
 
   it("AK-30: forgetting the active account keeps the login and offers to remember it", async () => {
+    setup();
     state.confirm.mockResolvedValueOnce(true);
-    await render();
+    await using screen = await renderSection();
     await click("Forget Work");
 
     expect(state.confirm).toHaveBeenCalledWith(
@@ -393,18 +390,19 @@ describe("ClaudeAccountsSection", () => {
     await publish();
 
     expect(button("Remember…")).not.toBeNull();
-    expect(section()?.textContent).toContain("Remember it to switch back to it later.");
+    expect(section(screen)?.textContent).toContain("Remember it to switch back to it later.");
     expect(button("Switch to Private")!.disabled).toBe(true);
     expect(await tooltipOf("Switch to Private")).toBe("Remember the current account first.");
   });
 
   it("AK-14: remembers the logged-in account under a name", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
     state.remember.mockResolvedValueOnce(success(work));
-    await render();
+    await using screen = await renderSection();
     await click("Remember…");
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
-    await act(() => userEvent.fill(input, "Work"));
+    await userEvent.fill(input, "Work");
     await click("Remember");
 
     expect(state.remember).toHaveBeenCalledWith({
@@ -416,17 +414,18 @@ describe("ClaudeAccountsSection", () => {
 
     setList(accounts({ email: work.email, rememberedAs: "Work" }, [work, priv]));
     await publish();
-    expect(item("Work")?.textContent).toContain("Active");
+    expect(item(screen, "Work")?.textContent).toContain("Active");
   });
 
   it("keeps the remember dialog open with the server's reason, and submits once", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
     const call = deferred<unknown>();
     state.remember.mockReturnValueOnce(call.promise);
-    await render();
+    await using _screen = await renderSection();
     await click("Remember…");
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
-    await act(() => userEvent.fill(input, "Private"));
+    await userEvent.fill(input, "Private");
     const form = input.closest("form")!;
     await act(async () => {
       form.requestSubmit();
@@ -442,10 +441,11 @@ describe("ClaudeAccountsSection", () => {
   });
 
   it("tells the user what to do when no account is logged in", async () => {
+    setup();
     setList(accounts(null, [priv]));
-    await render();
+    await using screen = await renderSection();
 
-    expect(section()?.textContent).toContain(
+    expect(section(screen)?.textContent).toContain(
       "No Claude account is logged in on this setup. Log in to Claude on the machine T3 runs on, then reopen this page. Remembered accounts can be switched to once a login exists.",
     );
     expect(button("Switch to Private")!.disabled).toBe(true);
@@ -454,18 +454,20 @@ describe("ClaudeAccountsSection", () => {
   });
 
   it("shows a loading state before the list arrives", async () => {
+    setup();
     setList(null);
-    await render();
+    await using screen = await renderSection();
 
-    expect(section()?.textContent).toContain("Loading accounts…");
-    expect(container.querySelector("ul")).toBeNull();
+    expect(section(screen)?.textContent).toContain("Loading accounts…");
+    expect(screen.container.querySelector("ul")).toBeNull();
     expect(alertText()).toBeNull();
   });
 
   it("clears a forget error when the next forget succeeds", async () => {
+    setup();
     state.confirm.mockResolvedValue(true);
     state.forget.mockResolvedValueOnce(refusal("storage"));
-    await render();
+    await using _screen = await renderSection();
     await click("Forget Private");
     expect(alertText()).toBe(message("storage"));
 
@@ -474,51 +476,56 @@ describe("ClaudeAccountsSection", () => {
   });
 
   it("AK-34: renders nothing and never lists outside Linux", async () => {
+    setup();
     state.os = "darwin";
-    await render();
+    await using screen = await renderSection();
 
-    expect(section()).toBeNull();
+    expect(section(screen)).toBeNull();
     expect(state.list).not.toHaveBeenCalled();
     expect(alertText()).toBeNull();
   });
 
   it("AK-34: renders nothing and never lists without the provider scope", async () => {
+    setup();
     state.granted = false;
-    await render();
+    await using screen = await renderSection();
 
-    expect(section()).toBeNull();
+    expect(section(screen)).toBeNull();
     expect(state.list).not.toHaveBeenCalled();
   });
 
   it("AK-33: shows the account row and the remembered accounts on Linux", async () => {
-    await render();
+    setup();
+    await using screen = await renderSection();
 
-    expect(section()?.textContent).toContain("Claude account");
-    expect(section()?.textContent).toContain("Remembered accounts");
+    expect(section(screen)?.textContent).toContain("Claude account");
+    expect(section(screen)?.textContent).toContain("Remembered accounts");
   });
 
   it("shows the list failure's own reason, not the formatted error", async () => {
+    setup();
     setList(null, {
       failure: new ClaudeAccountError({ reason: "setupUnreadable" }),
       error: "Some unrelated transport text",
     });
-    await render();
+    await using screen = await renderSection();
 
     expect(alertText()).toBe(message("setupUnreadable"));
-    expect(container.querySelector("ul")).toBeNull();
+    expect(screen.container.querySelector("ul")).toBeNull();
   });
 
   async function startAdding() {
     await click("Add account…");
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Account name"]')!;
-    await act(() => userEvent.fill(input, "Private"));
+    await userEvent.fill(input, "Private");
     await click("Log in…");
     await expect.poll(() => document.querySelector('[data-testid="terminal"]')).not.toBeNull();
   }
 
   it("AK-18: adds an account from the Remembered accounts row and keeps the setup's account", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: "Work" }, [work]));
-    await render();
+    await using screen = await renderSection();
     await startAdding();
 
     expect(state.start).toHaveBeenCalledWith({
@@ -531,14 +538,15 @@ describe("ClaudeAccountsSection", () => {
     setList(workActive);
     await publish();
     await click("Done");
-    expect(item("Private")).not.toBeNull();
-    expect(item("Work")?.textContent).toContain("Active");
-    expect(item("Private")?.textContent).not.toContain("Active");
+    expect(item(screen, "Private")).not.toBeNull();
+    expect(item(screen, "Work")?.textContent).toContain("Active");
+    expect(item(screen, "Private")?.textContent).not.toContain("Active");
   });
 
   it("offers Add account… when the account is not remembered or no one is logged in", async () => {
+    setup();
     setList(accounts({ email: work.email, rememberedAs: null }, [priv]));
-    await render();
+    await using _screen = await renderSection();
     expect(button("Add account…")).not.toBeNull();
 
     setList(accounts(null));
@@ -547,7 +555,8 @@ describe("ClaudeAccountsSection", () => {
   });
 
   it("re-reads the list when the add dialog is cancelled during the login", async () => {
-    await render();
+    setup();
+    await using _screen = await renderSection();
     await startAdding();
 
     await click("Cancel");

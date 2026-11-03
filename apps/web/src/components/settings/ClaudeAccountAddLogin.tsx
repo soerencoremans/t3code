@@ -55,6 +55,7 @@ export function ClaudeAccountAddLogin({
     endedRef.current = true;
     onEnded(outcome);
   });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reports the login phase the server pushes; no user event to hang it on
   useEffect(() => {
     if (data?.phase === "succeeded") {
       end(
@@ -76,6 +77,7 @@ export function ClaudeAccountAddLogin({
 
   // Every way out of the dialog unmounts this step, so this is the only cancel. The microtask
   // lets StrictMode's simulated remount set `mountedRef` again before anything is sent.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- cancels the server-side login attempt when this step unmounts
   useEffect(() => {
     mountedRef.current = true;
     return () => {

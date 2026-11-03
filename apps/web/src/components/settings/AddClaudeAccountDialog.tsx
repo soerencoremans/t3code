@@ -50,6 +50,7 @@ export function AddClaudeAccountDialog({
   const startingRef = useRef(false);
   const mountedRef = useRef(false);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks mount so a login start that settles after unmount does not set state
   useEffect(() => {
     mountedRef.current = true;
     return () => {

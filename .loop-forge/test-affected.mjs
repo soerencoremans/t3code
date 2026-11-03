@@ -1,10 +1,7 @@
-// Loop-Forge's "test": the gate before an Auftrag's last ticket.
-//   node .loop-forge/test-affected.mjs
-//
-// Tests and typechecks the packages the branch affects, as CI does for a pull request:
-// .github/scripts/ci-changes.cjs maps the diff against the base branch to packages and their
-// dependents, and the groups below mirror the Test, Test Web and Test Server jobs in
-// .github/workflows/ci.yml. Unlike `vp run -r`, every group runs even after one fails.
+// Loop-Forge's "test": the gate before an Auftrag's last ticket. Fork CI never runs (its
+// blacksmith runners are upstream-only), so this gate is the only check a branch gets.
+// Groups mirror ci.yml's Lint, Test, Test Web and Test Server jobs for the packages
+// ci-changes.cjs maps the diff to; every group runs even after one fails.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -64,34 +61,42 @@ const affectedLine = detect.stderr.match(/^Affected packages: (.*)$/m)?.[1] ?? "
 const affected = affectedLine === "none" ? [] : affectedLine.split(", ");
 
 const filters = (names) => names.flatMap((name) => ["--filter", name]);
+const run = (...args) => ["run", ...args];
 const groups = [];
+const present = changed
+  .split("\n")
+  .filter((file) => file && NodeFS.existsSync(NodePath.join(root, file)));
+if (present.length > 0) {
+  groups.push(["format", ["fmt", "--check", "--no-error-on-unmatched-pattern", ...present]]);
+  groups.push(["lint", ["lint", "--no-error-on-unmatched-pattern", ...present]]);
+}
 if (affected.length > 0) {
-  groups.push(["typecheck", ["--concurrency-limit", "2", ...filters(affected), "typecheck"]]);
+  groups.push(["typecheck", run("--concurrency-limit", "2", ...filters(affected), "typecheck")]);
 }
 if (outputs.test === "true") {
   const packages = outputs.test_packages ? outputs.test_packages.split(" ") : null;
   if (packages === null || packages.includes("@t3tools/desktop")) {
-    groups.push(["electron", ["--filter", "@t3tools/desktop", "ensure:electron"]]);
+    groups.push(["electron", run("--filter", "@t3tools/desktop", "ensure:electron")]);
   }
   // Empty means every package the CI Test job covers.
   const testFilters = packages
     ? filters(packages)
     : filters(["!t3", "!@t3tools/monorepo", "!@t3tools/web"]);
-  groups.push(["test", ["--parallel", "--concurrency-limit", "4", ...testFilters, "test"]]);
+  groups.push(["test", run("--parallel", "--concurrency-limit", "4", ...testFilters, "test")]);
 }
-if (outputs.test_web === "true") groups.push(["test web", ["--filter", "@t3tools/web", "test"]]);
-if (outputs.test_server === "true") groups.push(["test server", ["--filter", "t3", "test"]]);
+if (outputs.test_web === "true") groups.push(["test web", run("--filter", "@t3tools/web", "test")]);
+if (outputs.test_server === "true") groups.push(["test server", run("--filter", "t3", "test")]);
 
 if (groups.length === 0) {
-  console.log(`Nothing to test: no package is affected by the diff against ${baseRef}.`);
+  console.log(`Nothing to check: the diff against ${baseRef} is empty.`);
   process.exit(0);
 }
 
 const results = [];
 for (const [name, args] of groups) {
-  console.log(`\n=== ${name}: vp run ${args.join(" ")} ===`);
+  console.log(`\n=== ${name}: vp ${args.join(" ")} ===`);
   const started = Date.now();
-  const run = NodeChildProcess.spawnSync("vp", ["run", ...args], { cwd: root, stdio: "inherit" });
+  const run = NodeChildProcess.spawnSync("vp", args, { cwd: root, stdio: "inherit" });
   results.push({ name, status: run.status, seconds: Math.round((Date.now() - started) / 1000) });
 }
 

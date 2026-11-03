@@ -1,10 +1,7 @@
 // Loop-Forge's "test-scoped": the Auftrag's own test files, for every ticket but its last.
-//   node .loop-forge/test-scoped.mjs <file>…   repo-relative, as `git diff --name-only` prints them
-//
-// Files are run through their package's own `test` script, from that package, because
-// apps/server, apps/web, apps/desktop and packages/client-runtime carry configs (setup
+//   node .loop-forge/test-scoped.mjs <file>…   repo-relative, as `git diff --name-only` prints
+// Each file runs through its package's `test` script: several packages carry configs (setup
 // files, projects, serial files) that a root-level `vp test run` would silently skip.
-// Paths that are not test files, or that live outside a workspace package, are ignored.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
