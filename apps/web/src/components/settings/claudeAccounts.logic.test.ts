@@ -119,7 +119,7 @@ describe("claudeAccountErrorMessage", () => {
     "setupUnreadable",
     undefined,
   ] as const)("returns the server's message for reason %s", (reason) => {
-    const error = new ClaudeAccountError({ reason, name: "Work" });
+    const error = new ClaudeAccountError({ reason, accountName: "Work" });
     expect(claudeAccountErrorMessage(error)).toBe(error.message);
   });
 

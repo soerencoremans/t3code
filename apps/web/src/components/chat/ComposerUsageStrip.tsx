@@ -2,7 +2,8 @@ import type { ServerProviderUsageLimits, ServerProviderUsageWindow } from "@t3to
 import { formatResetsIn } from "@t3tools/shared/usageLimits";
 import { useState } from "react";
 
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";

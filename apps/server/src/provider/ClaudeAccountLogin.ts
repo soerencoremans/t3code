@@ -10,7 +10,6 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -21,6 +20,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -57,11 +57,11 @@ export class ClaudeAccountLogin extends Context.Service<
 >()("t3/provider/ClaudeAccountLogin") {}
 
 // Names the step that ended an attempt, for the log only; the client sees `error`.
-class AttemptEnded extends Data.TaggedError("AttemptEnded")<{
-  readonly outcome: string;
-  readonly error: ClaudeAccountError;
-  readonly exitCode?: number;
-}> {}
+class AttemptEnded extends Schema.TaggedError<AttemptEnded>()("AttemptEnded", {
+  outcome: Schema.String,
+  error: ClaudeAccountError,
+  exitCode: Schema.optional(Schema.Number),
+}) {}
 
 interface Attempt {
   readonly id: string;
