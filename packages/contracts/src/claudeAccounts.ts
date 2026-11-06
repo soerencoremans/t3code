@@ -36,7 +36,7 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
     // A newer server may refuse with a reason this build does not know yet.
     reason: ForwardCompatibleOptional(ClaudeAccountErrorReason),
     instanceId: Schema.optional(ProviderInstanceId),
-    name: Schema.optional(Schema.String),
+    accountName: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
@@ -54,19 +54,19 @@ export class ClaudeAccountError extends Schema.TaggedError<ClaudeAccountError>()
       case "invalidName":
         return "An account name must be 1 to 64 characters long and contain no control characters.";
       case "nameInUse":
-        return `The name "${this.name}" is already in use.`;
+        return `The name "${this.accountName}" is already in use.`;
       case "alreadyRemembered":
-        return `This account is already remembered as "${this.name}".`;
+        return `This account is already remembered as "${this.accountName}".`;
       case "accountNotFound":
-        return `No remembered Claude account is named "${this.name}".`;
+        return `No remembered Claude account is named "${this.accountName}".`;
       case "storage":
         return "Could not read or save the remembered Claude accounts.";
       case "currentNotRemembered":
         return "The account logged in on this Claude setup is not remembered yet. Remember it first, then switch.";
       case "needsFreshLogin":
-        return `The saved login of "${this.name}" no longer works. Forget "${this.name}", then add the account again.`;
+        return `The saved login of "${this.accountName}" no longer works. Forget "${this.accountName}", then add the account again.`;
       case "loginCheckFailed":
-        return `Could not check the saved login of "${this.name}". Try again.`;
+        return `Could not check the saved login of "${this.accountName}". Try again.`;
       case "switchFailed":
         return "Switching this Claude setup failed. It is still logged in as before.";
       case "switchRollbackFailed":

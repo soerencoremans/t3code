@@ -19,7 +19,6 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -152,12 +151,24 @@ interface HeldThread {
   readonly threadId: ThreadId;
 }
 
-type SessionStopStep = "enumerate" | "interrupt" | "wait" | "close" | "verify" | "timeout";
+const SessionStopStep = Schema.Literals([
+  "enumerate",
+  "interrupt",
+  "wait",
+  "close",
+  "verify",
+  "timeout",
+]);
+type SessionStopStep = typeof SessionStopStep.Type;
 
-class SessionStopStepError extends Data.TaggedError("SessionStopStepError")<{
-  readonly step: SessionStopStep;
-  readonly errorTag: string | undefined;
-}> {}
+class SessionStopStepError extends Schema.TaggedError<SessionStopStepError>()(
+  "SessionStopStepError",
+  {
+    step: SessionStopStep,
+    errorTag: Schema.UndefinedOr(Schema.String),
+  },
+) {}
+const isSessionStopStepError = Schema.is(SessionStopStepError);
 
 const errorTagOf = (cause: unknown) =>
   typeof cause === "object" && cause !== null && "_tag" in cause && typeof cause._tag === "string"
@@ -333,7 +344,7 @@ export const make = Effect.gen(function* () {
         if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
         const accounts = yield* loadAccounts();
         if (accounts.some((account) => sameName(account.name, name))) {
-          return yield* new ClaudeAccountError({ reason: "nameInUse", name });
+          return yield* new ClaudeAccountError({ reason: "nameInUse", accountName: name });
         }
         const duplicate = accounts.find((account) =>
           sameClaudeAccount(account.identity, login.identity),
@@ -341,7 +352,7 @@ export const make = Effect.gen(function* () {
         if (duplicate !== undefined) {
           return yield* new ClaudeAccountError({
             reason: "alreadyRemembered",
-            name: duplicate.name,
+            accountName: duplicate.name,
           });
         }
         yield* saveAccounts([
@@ -387,7 +398,7 @@ export const make = Effect.gen(function* () {
     if (!isValidName(name)) return yield* new ClaudeAccountError({ reason: "invalidName" });
     const accounts = yield* loadAccounts();
     if (accounts.some((account) => sameName(account.name, name))) {
-      return yield* new ClaudeAccountError({ reason: "nameInUse", name });
+      return yield* new ClaudeAccountError({ reason: "nameInUse", accountName: name });
     }
     return {
       instanceId,
@@ -440,7 +451,7 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const accounts = yield* loadAccounts();
         if (!accounts.some((account) => sameName(account.name, name))) {
-          return yield* new ClaudeAccountError({ reason: "accountNotFound", name });
+          return yield* new ClaudeAccountError({ reason: "accountNotFound", accountName: name });
         }
         yield* saveAccounts(accounts.filter((account) => !sameName(account.name, name)));
       }),
@@ -518,7 +529,7 @@ export const make = Effect.gen(function* () {
     const name = input.name.trim();
     const target = accounts.find((account) => sameName(account.name, name));
     if (target === undefined) {
-      return yield* new ClaudeAccountError({ reason: "accountNotFound", name });
+      return yield* new ClaudeAccountError({ reason: "accountNotFound", accountName: name });
     }
     if (target === outgoing) {
       return {
@@ -549,10 +560,13 @@ export const make = Effect.gen(function* () {
       );
     }
     if (checked.verdict === "NeedsLogin") {
-      return yield* new ClaudeAccountError({ reason: "needsFreshLogin", name: target.name });
+      return yield* new ClaudeAccountError({ reason: "needsFreshLogin", accountName: target.name });
     }
     if (checked.verdict === "Unknown") {
-      return yield* new ClaudeAccountError({ reason: "loginCheckFailed", name: target.name });
+      return yield* new ClaudeAccountError({
+        reason: "loginCheckFailed",
+        accountName: target.name,
+      });
     }
     return {
       _tag: "SwitchPlan",
@@ -762,7 +776,7 @@ export const make = Effect.gen(function* () {
       }
     },
     Effect.mapError((failure) =>
-      failure instanceof SessionStopStepError ? failure : stopStepFailed("verify")(failure),
+      isSessionStopStepError(failure) ? failure : stopStepFailed("verify")(failure),
     ),
   );
 

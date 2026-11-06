@@ -1069,7 +1069,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ClaudeAccounts",
       Effect.gen(function* () {
         yield* work(h);
         const error = yield* refusal(h, work(h, "claudeAgent", "Again"), "alreadyRemembered");
-        assert.strictEqual(error.name, "Work");
+        assert.strictEqual(error.accountName, "Work");
         assert.strictEqual(error.message, 'This account is already remembered as "Work".');
       }),
     ),
@@ -1575,7 +1575,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ClaudeAccounts",
 
           const error = yield* refusal(h, switchTo(h), "needsFreshLogin");
 
-          assert.strictEqual(error.name, "Private");
+          assert.strictEqual(error.accountName, "Private");
           assert.include(error.message, '"Private"');
           assert.deepEqual(yield* h.readEverything("claudeAgent"), before);
           const stored = (yield* h.storedAccounts()).find((a) => a.name === "Private");
@@ -2722,7 +2722,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ClaudeAccounts",
           const final = yield* finalState(connection, attemptId);
           assert.strictEqual(final.phase, "failed");
           assert.strictEqual(final.error?.reason, "alreadyRemembered");
-          assert.strictEqual(final.error?.name, "Work");
+          assert.strictEqual(final.error?.accountName, "Work");
           assert.deepEqual(yield* h.storedAccounts(), stored);
           assert.isFalse(yield* exists(dir));
         }),
@@ -3315,7 +3315,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ClaudeAccounts",
 
 it("explains each refusal in words that carry no login", () => {
   const message = (reason: ClaudeAccountsModule.ClaudeAccountErrorReason) =>
-    new ClaudeAccountError({ reason, instanceId: id("claudeAgent"), name: "Work" }).message;
+    new ClaudeAccountError({ reason, instanceId: id("claudeAgent"), accountName: "Work" }).message;
   assert.strictEqual(message("setupNotFound"), "This Claude setup no longer exists.");
   assert.strictEqual(
     message("setupUnreadable"),

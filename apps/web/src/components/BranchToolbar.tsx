@@ -10,7 +10,7 @@ import type {
   ServerProviderUsageLimits,
   ThreadId,
 } from "@t3tools/contracts";
-import type { ContextWindowSnapshot } from "~/lib/contextWindow";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { ComposerUsageStrip } from "./chat/ComposerUsageStrip";
 import { FolderGit2Icon, FolderGitIcon, FolderIcon, PlusIcon, ScaleIcon } from "lucide-react";
 import {

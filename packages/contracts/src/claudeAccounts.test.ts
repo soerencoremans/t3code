@@ -35,7 +35,7 @@ describe("ClaudeAccountError", () => {
       const { message } = new ClaudeAccountError({
         reason,
         instanceId: ProviderInstanceId.make("claudeAgent_work"),
-        name: "Work",
+        accountName: "Work",
       });
       expect(message).not.toBe("");
       for (const forbidden of ["claudeAgent_work", "`", "claude auth", "CLAUDE_CONFIG_DIR"]) {
@@ -45,10 +45,10 @@ describe("ClaudeAccountError", () => {
   );
 
   it("rebuilds the same message on the client after crossing the wire", () => {
-    const error = new ClaudeAccountError({ reason: "nameInUse", name: "Work" });
+    const error = new ClaudeAccountError({ reason: "nameInUse", accountName: "Work" });
     const decoded = roundTripError(error);
     expect(decoded.reason).toBe("nameInUse");
-    expect(decoded.name).toBe("Work");
+    expect(decoded.accountName).toBe("Work");
     expect(decoded.message).toBe(error.message);
   });
 
@@ -143,7 +143,7 @@ describe("Claude account add wire schemas", () => {
       output: "",
       outputOffset: 0,
       account: null,
-      error: new ClaudeAccountError({ reason: "nameInUse", name: "Private" }),
+      error: new ClaudeAccountError({ reason: "nameInUse", accountName: "Private" }),
     };
     const decoded = decodeAddState(encodeAddState(state));
     expect(decoded.error?.reason).toBe("nameInUse");

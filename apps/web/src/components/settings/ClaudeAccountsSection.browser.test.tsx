@@ -150,10 +150,10 @@ const running: ClaudeAccountAddState = {
 const success = (value: unknown = undefined) => ({ _tag: "Success", value });
 const refusal = (reason: ClaudeAccountErrorReason, name?: string) => ({
   _tag: "Failure",
-  cause: Cause.fail(new ClaudeAccountError({ reason, ...(name ? { name } : {}) })),
+  cause: Cause.fail(new ClaudeAccountError({ reason, ...(name ? { accountName: name } : {}) })),
 });
 const message = (reason: ClaudeAccountErrorReason, name?: string) =>
-  new ClaudeAccountError({ reason, ...(name ? { name } : {}) }).message;
+  new ClaudeAccountError({ reason, ...(name ? { accountName: name } : {}) }).message;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
