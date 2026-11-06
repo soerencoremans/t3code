@@ -181,7 +181,7 @@ describe("DesktopServerExposure", () => {
     );
   });
 
-  it.effect("falls back to local-only without losing the requested network preference", () =>
+  it.effect("keeps binding every interface when the network is not up yet at startup", () =>
     withHarness(
       emptyNetworkInterfaces,
       Effect.gen(function* () {
@@ -191,12 +191,12 @@ describe("DesktopServerExposure", () => {
         yield* settings.setServerExposureMode("network-accessible");
 
         const state = yield* serverExposure.configureFromSettings({ port: 4173 });
-        assert.equal(state.mode, "local-only");
+        assert.equal(state.mode, "network-accessible");
         assert.equal(state.endpointUrl, null);
         assert.equal((yield* settings.get).serverExposureMode, "network-accessible");
 
         const backendConfig = yield* serverExposure.backendConfig;
-        assert.equal(backendConfig.bindHost, "127.0.0.1");
+        assert.equal(backendConfig.bindHost, "0.0.0.0");
         assert.equal(backendConfig.httpBaseUrl.href, "http://127.0.0.1:4173/");
       }),
     ),

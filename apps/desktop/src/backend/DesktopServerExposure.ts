@@ -390,20 +390,12 @@ function resolveRuntimeState(input: {
           !address.internal && address.family === "IPv4" && isTailscaleIpv4Address(address.address),
       ),
     );
-  const exposure = unavailable
-    ? resolveDesktopServerExposure({
-        mode: "local-only",
-        port: input.port,
-        networkInterfaces: input.networkInterfaces,
-        ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
-      })
-    : requestedExposure;
 
   return {
     state: runtimeStateFromResolvedExposure({
       requestedMode: input.requestedMode,
       settings: input.settings,
-      exposure,
+      exposure: requestedExposure,
       port: input.port,
     }),
     unavailable,
