@@ -68,7 +68,7 @@ function LimitWindowItem({ window }: { readonly window: ServerProviderUsageWindo
         <span>{SHORT_LABEL[window.kind] ?? window.label}</span>
         <UsageBar percent={window.usedPercent} tone={tone} />
         {pace ? (
-          <span aria-hidden className={cn("font-bold", TONE_TEXT[tone])}>
+          <span aria-hidden className={TONE_TEXT[tone]}>
             {pace.glyph}
           </span>
         ) : null}
@@ -76,8 +76,8 @@ function LimitWindowItem({ window }: { readonly window: ServerProviderUsageWindo
       </TooltipTrigger>
       <TooltipPopup side="top">
         <div className="flex flex-col gap-0.5">
-          <span className="font-medium">
-            {window.label} limit · {percent}% used
+          <span>
+            {window.label} limit: {percent}% used
           </span>
           {resetsIn ? <span className="first-letter:uppercase">{resetsIn}</span> : null}
           {pace?.projectedPercent != null ? (

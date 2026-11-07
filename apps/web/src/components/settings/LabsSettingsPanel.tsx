@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema";
 
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
-import { Button } from "../ui/button";
+import { Button, InlineButton } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { ScopedSwitch } from "./ScopedSwitch";
@@ -22,6 +22,7 @@ export function LabsSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection id="beta" title="Beta">
+        <ScrollingWorkspacesRow />
         <BoringSidebarRow />
         <BoringSidebarMultilineRow />
         <ToolCallVisibilityRow />
@@ -32,6 +33,26 @@ export function LabsSettingsPanel() {
       </SettingsSection>
       <LegacyFeaturesSection />
     </SettingsPageContainer>
+  );
+}
+
+function ScrollingWorkspacesRow() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  return (
+    <SettingsRow
+      {...searchableSetting("scrolling-workspaces")}
+      description="Panes scroll sideways instead of shrinking, and you can keep several workspaces with an overview, swipes and a layout tour. Splits, tabs and layout templates work either way."
+      control={
+        <Switch
+          checked={settings.scrollingWorkspacesEnabled}
+          onCheckedChange={(checked) =>
+            updateSettings({ scrollingWorkspacesEnabled: Boolean(checked) })
+          }
+          aria-label="Scrolling workspaces"
+        />
+      }
+    />
   );
 }
 
@@ -127,7 +148,7 @@ function GuestLinksRowWithSignIn() {
       {...searchableSetting("guest-links")}
       description="Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links."
       control={
-        <Button size="sm" variant="outline" onClick={openAuthPrompt}>
+        <Button size="sm" variant="secondary" onClick={openAuthPrompt}>
           Sign in
         </Button>
       }
@@ -158,10 +179,8 @@ function GuestLinksRow() {
         <>
           Share a thread with a guest who watches it live in a browser and sends messages you
           approve. Needs T3 Connect: sign in and link this machine in{" "}
-          <Link to="/settings/access" className="underline underline-offset-2">
-            Sharing & access
-          </Link>
-          . Turning it off stops every guest link.
+          <InlineButton render={<Link to="/settings/access" />}>Sharing & access</InlineButton>.
+          Turning it off stops every guest link.
         </>
       }
       control={
@@ -188,10 +207,8 @@ function LinkedEnvironmentsRow() {
         <>
           Let agents here work on your other machines, and theirs here. Turn it on for each machine,
           then link them in{" "}
-          <Link to="/settings/connections" className="underline underline-offset-2">
-            Connections
-          </Link>
-          . While off, nothing new starts over a link; running tasks finish.
+          <InlineButton render={<Link to="/settings/connections" />}>Connections</InlineButton>.
+          While off, nothing new starts over a link; running tasks finish.
         </>
       }
       control={
@@ -219,19 +236,16 @@ function SimlockHostsRow() {
       description={
         <>
           Let the Device panel lease simulators and emulators from your own{" "}
-          <a
-            href="https://incubator.callstack.com/simlock/"
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-2"
+          <InlineButton
+            render={
+              <a href="https://incubator.callstack.com/simlock/" target="_blank" rel="noreferrer" />
+            }
           >
             Simlock
-          </a>{" "}
+          </InlineButton>{" "}
           pool, added in{" "}
-          <Link to="/settings/devices" className="underline underline-offset-2">
-            Devices
-          </Link>
-          . An alpha that may change or break. T3 Code never installs Simlock.
+          <InlineButton render={<Link to="/settings/devices" />}>Devices</InlineButton>. An alpha
+          that may change or break. T3 Code never installs Simlock.
         </>
       }
       control={

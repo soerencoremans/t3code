@@ -89,13 +89,13 @@ export function RememberClaudeAccountDialog(props: {
             />
           </form>
           {error ? (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-meta text-destructive">
               {error}
             </p>
           ) : null}
         </WizardPanel>
         <WizardFooter>
-          <Button variant="outline" disabled={pending} onClick={props.onClose}>
+          <Button variant="secondary" disabled={pending} onClick={props.onClose}>
             Cancel
           </Button>
           <Button

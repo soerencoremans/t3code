@@ -7,6 +7,11 @@ import {
   type ReferenceAutolink,
 } from "@t3tools/client-runtime/source-control-clients";
 import type { PluggableList } from "unified";
+import { chatMarkdownImageSources } from "@t3tools/shared/markdownPipeline";
+import {
+  splitPullRequestBody,
+  type PullRequestBodySegment,
+} from "@t3tools/client-runtime/pull-request-markdown";
 
 export {
   splitPullRequestBody,
@@ -94,4 +99,31 @@ export function pullRequestMarkdownPlugins(
     markdownPlugins.set(key, plugins);
   }
   return plugins;
+}
+
+export function pullRequestAttachments(body: string) {
+  const attachments: Array<{ url: string; media: "image" | "video"; caption: string }> = [];
+  const seen = new Set<string>();
+  const add = (url: string, media: "image" | "video", caption: string) => {
+    if (seen.has(url) || !/^https?:\/\//iu.test(url)) return;
+    seen.add(url);
+    attachments.push({
+      url,
+      media,
+      caption: caption || `${media === "image" ? "Image" : "Video"} ${attachments.length + 1}`,
+    });
+  };
+  const visit = (segments: ReadonlyArray<PullRequestBodySegment>) => {
+    for (const segment of segments) {
+      if (segment.kind === "attachment") {
+        if (segment.media !== "unknown") add(segment.url, segment.media, "");
+      } else if (segment.kind === "table") {
+        for (const row of segment.rows) for (const cell of row) visit(cell.segments);
+      } else {
+        for (const url of chatMarkdownImageSources(segment.text)) add(url, "image", "");
+      }
+    }
+  };
+  visit(splitPullRequestBody(body));
+  return attachments;
 }

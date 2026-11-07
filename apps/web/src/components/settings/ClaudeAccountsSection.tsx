@@ -61,7 +61,8 @@ function accountDescription(
     case "remembered":
       return (
         <>
-          Logged in as {view.name} · <Email value={view.email} />. Used by all chats on this setup.
+          Logged in as {view.name} (<Email value={view.email} />
+          ). Used by all chats on this setup.
         </>
       );
     case "notRemembered":
@@ -146,19 +147,19 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
           title="Remembered accounts"
           description="Saved logins you can switch to without logging in again."
           control={
-            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+            <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
               Add account…
             </Button>
           }
         >
           {view.accounts.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No remembered accounts yet.</p>
+            <p className="text-meta text-muted-foreground">No remembered accounts yet.</p>
           ) : (
             <ul className="flex flex-col gap-1.5">
               {view.accounts.map((account) => (
                 <li
                   key={account.name}
-                  className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm"
+                  className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-body"
                 >
                   <span>{account.name}</span>
                   <Email value={account.email} className="text-muted-foreground" />
@@ -189,7 +190,7 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
         </SettingsRow>
       ) : null}
       {error !== null ? (
-        <p role="alert" className="px-3 py-2 text-xs text-destructive sm:px-4">
+        <p role="alert" className="px-3 py-2 text-meta text-destructive sm:px-4">
           {error}
         </p>
       ) : null}

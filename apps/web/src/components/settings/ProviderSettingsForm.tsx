@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
@@ -233,7 +233,7 @@ function ProviderCommandArguments({
         <Button
           type="button"
           size="sm"
-          variant="outline"
+          variant="secondary"
           onClick={() => updateArguments([...rows, makeCommandArgumentDraftRow("")])}
         >
           <PlusIcon />
@@ -245,7 +245,7 @@ function ProviderCommandArguments({
         <div className="mt-3 min-w-0 space-y-2 pb-2">
           {rows.map((argument, index) =>
             managedReason !== undefined ? (
-              <code key={argument.id} className="block min-w-0 truncate text-xs">
+              <code key={argument.id} className="block min-w-0 truncate text-meta">
                 {argument.value}
               </code>
             ) : (
@@ -493,14 +493,14 @@ function ProviderSettingsFieldRow({
           value={value}
           inputId={inputId}
           size="sm"
-          className="w-full max-w-full @min-[32rem]/settings-row:w-56"
+          className="w-full max-w-full @min-[26rem]/settings-row:w-50"
           onChange={onChange}
         />
       ) : field.control === "textarea" ? (
         <Textarea
           id={inputId}
           aria-describedby={descriptionId}
-          className="w-full max-w-full @min-[32rem]/settings-row:w-[min(24rem,50cqw)]"
+          className="w-full max-w-full @min-[26rem]/settings-row:w-[min(24rem,50cqw)]"
           value={readProviderConfigString(value, field.key)}
           onChange={(event) =>
             onChange(nextProviderConfigWithFieldValue(value, field, event.target.value))
@@ -518,7 +518,7 @@ function ProviderSettingsFieldRow({
           onChange={onChange}
         />
       ) : field.secret ? (
-        <div className="flex w-full min-w-0 items-center gap-2 @min-[32rem]/settings-row:w-56">
+        <div className="flex w-full min-w-0 items-center gap-2 @min-[26rem]/settings-row:w-50">
           <SecretInput
             id={inputId}
             aria-describedby={descriptionId}
@@ -545,7 +545,7 @@ function ProviderSettingsFieldRow({
           id={inputId}
           aria-describedby={descriptionId}
           size="sm"
-          className="w-full max-w-full @min-[32rem]/settings-row:w-56"
+          className="w-full max-w-full @min-[26rem]/settings-row:w-50"
           type={field.control === "password" ? "password" : undefined}
           autoComplete={field.control === "password" ? "off" : undefined}
           value={readProviderConfigString(value, field.key)}
@@ -678,6 +678,7 @@ export function ProviderSettingsForm({
   managed,
   environmentId,
 }: ProviderSettingsFormProps) {
+  const formId = useId();
   const fields = deriveProviderSettingsFields(definition, value);
   const isLocalAcp =
     definition.driverKind === "acpRegistry" &&
@@ -694,7 +695,7 @@ export function ProviderSettingsForm({
           key={field.key}
           field={field}
           value={value}
-          idPrefix={idPrefix}
+          idPrefix={`${idPrefix}-${formId}`}
           variant={variant}
           onChange={onChange}
           managedReason={managed?.keys.has(field.key) ? managed.reason : undefined}
