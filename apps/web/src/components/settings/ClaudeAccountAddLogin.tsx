@@ -129,7 +129,7 @@ export function ClaudeAccountAddLogin({
     <div className="flex flex-col gap-2">
       <div className="py-2">
         <Suspense
-          fallback={<p className="text-xs text-muted-foreground">Loading login terminal…</p>}
+          fallback={<p className="text-meta text-muted-foreground">Loading login terminal…</p>}
         >
           <ProviderAuthTerminal
             output={data?.output ?? ""}
@@ -138,17 +138,17 @@ export function ClaudeAccountAddLogin({
           />
         </Suspense>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-meta text-muted-foreground">
         Open the link in a browser and log in with the account you want to add. If the browser is on
         another device, log in there and paste the code it shows into the terminal.
       </p>
       {data === null || data.phase === "running" ? (
-        <p role="status" className="text-xs text-muted-foreground">
+        <p role="status" className="text-meta text-muted-foreground">
           Waiting for login… “Done” turns on once the login lands.
         </p>
       ) : null}
       {alert !== null ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-meta text-destructive">
           {alert}
         </p>
       ) : null}

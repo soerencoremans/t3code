@@ -38,13 +38,13 @@ export function ClaudeAccountPickerRow(props: ClaudeAccountPickerRowProps) {
   return <ClaudeAccountPickerRowInner {...props} />;
 }
 
-const ROW_LABEL = "Account · all Claude chats";
+const ROW_LABEL = "Claude account";
 
 function RowLines(props: { readonly children: ReactNode }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="text-xs text-muted-foreground">{ROW_LABEL}</span>
-      <span className="flex items-center gap-1 text-sm font-medium">{props.children}</span>
+      <span className="text-meta text-muted-foreground">{ROW_LABEL}</span>
+      <span className="flex items-center gap-1 text-label">{props.children}</span>
     </span>
   );
 }
@@ -120,10 +120,7 @@ function ClaudeAccountPickerRowInner({
               : `Claude account for all Claude chats: ${activeName}`
           }
           render={
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-2 border-t border-border/70 px-3 py-2 text-left hover:bg-accent"
-            />
+            <Button variant="ghost" size="multiline" className="w-full justify-between text-left" />
           }
         >
           <RowLines>
@@ -198,7 +195,7 @@ function ClaudeAccountPickerRowInner({
       action = <InlineButton onClick={accounts.refresh}>Retry</InlineButton>;
     }
     row = (
-      <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
         <RowLines>{value}</RowLines>
         {action}
       </div>
@@ -206,10 +203,10 @@ function ClaudeAccountPickerRowInner({
   }
 
   return (
-    <div data-slot="claude-account-picker-row">
+    <div data-slot="claude-account-picker-row" className="border-t border-border/70">
       {row}
       {alert !== null ? (
-        <p role="alert" className="px-3 pb-2 text-xs text-destructive">
+        <p role="alert" className="px-3 pb-2 text-meta text-destructive">
           {alert}
         </p>
       ) : null}

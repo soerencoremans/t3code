@@ -16,6 +16,13 @@ export interface PendingUserInputDraftAnswer {
 
 export type PendingUserInputAnswer = string | ReadonlyArray<string>;
 
+/** Providers may group questions into one request or issue several requests at once. */
+export function countPendingUserInputQuestions(
+  requests: ReadonlyArray<{ readonly questions: ReadonlyArray<PendingUserInputQuestion> }>,
+): number {
+  return requests.reduce((count, request) => count + request.questions.length, 0);
+}
+
 function normalizeDraftAnswer(value: string | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -162,15 +169,15 @@ export function buildPendingUserInputAnswers(
   questions: ReadonlyArray<PendingUserInputQuestion>,
   draftAnswers: Record<string, PendingUserInputDraftAnswer>,
 ): Record<string, PendingUserInputAnswer> | null {
-  const answers: Record<string, PendingUserInputAnswer> = {};
+  const entries: Array<[string, PendingUserInputAnswer]> = [];
 
   for (const question of questions) {
     const answer = resolvePendingUserInputAnswer(question, draftAnswers[question.id]);
     if (answer === null) {
       return null;
     }
-    answers[question.id] = answer;
+    entries.push([question.id, answer]);
   }
 
-  return answers;
+  return Object.fromEntries(entries);
 }

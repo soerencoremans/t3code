@@ -119,10 +119,11 @@ Join modifiers and a key with `+`, such as `mod+shift+d` or `ctrl+l`.
 
 Available context keys are `terminalFocus`, `terminalOpen`, `previewFocus`,
 `previewOpen`, `rightPanelOpen`, `modelPickerOpen`, `usagePageOpen`, `composerFocus`,
-`draftThreadRoute`, `turnRunning`, `editableFocus`, `isWeb`, and `isDesktop`.
+`draftThreadRoute`, `turnRunning`, `assistantSelection`, `editableFocus`, `isWeb`, and `isDesktop`.
 `rightPanelOpen` applies only to `rightPanel.new` and is true while the right panel is
 open; the default `mod+t` uses it to open the panel's new-tab menu.
 `draftThreadRoute` is true on a draft thread, including a restored draft, until it is first sent.
+`assistantSelection` is true while a citable passage of an assistant response is selected.
 `editableFocus` is true while a text field, the composer, or another editor has
 the keyboard. `isWeb` is true in a browser tab. `isDesktop` is true in the
 desktop app. Unknown keys evaluate to `false`.
@@ -167,7 +168,9 @@ in a text field such as the composer. Once you type or press another key, the
 field gets its own undo back. Terminals always keep their native shortcut.
 
 `navigation.back` (`mod+[` by default) and `navigation.forward` (`mod+]`) move
-through the pages you have visited, like a browser's back and forward buttons.
+through the pages you have visited, like the back and forward buttons next to the
+sidebar toggle. Both stop at the first page you opened in T3 Code, so in a browser
+they never leave the app; the browser's own buttons still can.
 
 `chat.new` may ask you to choose a project when there is more than one.
 `chat.newLocal` skips that chooser. Both use your
@@ -176,10 +179,11 @@ through the pages you have visited, like a browser's back and forward buttons.
 
 ## Reserved shortcuts
 
-In the desktop app, `mod+w` closes the focused terminal or the active right-panel
-tab. When nothing remains to close, it does nothing; it never closes the window. In a browser, `mod+w`
-closes the browser tab; rebind `rightPanel.close` and `terminal.close` to an available
-shortcut such as `alt+w`.
+In the desktop app, `mod+w` closes the focused terminal, the active side-pane tab,
+or the focused tab. It never closes the window. In a browser,
+`mod+t`, `mod+n` and `mod+w` belong to the browser; use `+`, the tab menu, or rebind
+`tab.new` and `tab.close` (`mod+alt+w` also closes a tab). The layout keys are in
+[Tabs, panes and workspaces](./layout.md).
 
 `mod+shift+t` reopens the last closed tab across the app, including files,
 diffs, pull requests, browsers, and devices, in the order you closed them.

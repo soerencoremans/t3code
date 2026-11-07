@@ -1,4 +1,5 @@
 import { isInSideChatPane } from "../../lib/sideChatPane";
+import { openLayerMatches } from "../../lib/openLayers";
 import { registerCommands } from "../../shortcuts/dispatcher";
 import {
   eventPathContainsSelector,
@@ -67,7 +68,10 @@ const DOWN_KEYS = new Set(["PageDown", "End", "ArrowDown", " "]);
  * Owns the timeline scroll node's input listeners for as long as the node is
  * mounted, and turns them into one navigation signal.
  */
-export function attachTimelineViewport(scrollNode: HTMLElement): TimelineViewport & {
+export function attachTimelineViewport(
+  scrollNode: HTMLElement,
+  ownsDocumentKeys?: () => boolean,
+): TimelineViewport & {
   readonly dispose: () => void;
 } {
   const listeners = new Set<(navigation: TimelineNavigation) => void>();
@@ -96,6 +100,7 @@ export function attachTimelineViewport(scrollNode: HTMLElement): TimelineViewpor
       !(event.target instanceof Node) ||
       (!scrollNode.contains(event.target) &&
         ((event.target !== document.body && event.target !== document.documentElement) ||
+          ownsDocumentKeys?.() === false ||
           isInSideChatPane(scrollNode))) ||
       event.isComposing ||
       event.altKey ||
@@ -103,7 +108,7 @@ export function attachTimelineViewport(scrollNode: HTMLElement): TimelineViewpor
       event.metaKey ||
       event.shiftKey ||
       eventPathContainsSelector(event, TYPE_TO_FOCUS_EDITABLE_SELECTOR) ||
-      document.querySelector(TYPE_TO_FOCUS_FLOATING_LAYER_SELECTOR) ||
+      openLayerMatches(TYPE_TO_FOCUS_FLOATING_LAYER_SELECTOR) ||
       (scrollNode.contains(event.target) &&
         !isTimelineScrollTarget(event.target, scrollNode, direction === "up" ? -1 : 1))
     ) {

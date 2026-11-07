@@ -345,7 +345,7 @@ describe("ClaudeAccountPickerRow", () => {
     await openPicker();
 
     await expect.element(modelOption()).toBeVisible();
-    expect(row()?.textContent).toContain("Account · all Claude chats");
+    expect(row()?.textContent).toContain("Claude account");
     expect(row()?.textContent).toContain("Work");
     expect(rowTrigger()?.getAttribute("aria-label")).toBe(
       "Claude account for all Claude chats: Work",

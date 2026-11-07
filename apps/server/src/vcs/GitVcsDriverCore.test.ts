@@ -14,6 +14,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
 import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
@@ -128,6 +129,55 @@ const makeDriverReleasingLock = (
     );
     return { driver, failures };
   });
+
+it.effect("runs background Git in its own lane so user commands never queue behind it", () =>
+  Effect.gen(function* () {
+    const gate = yield* Deferred.make<void>();
+    const starts = yield* Queue.unbounded<string>();
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.gen(function* () {
+        yield* Queue.offer(
+          starts,
+          ChildProcess.isStandardCommand(command) ? String(command.args[0]) : "",
+        );
+        return ChildProcessSpawner.makeHandle({
+          ...makeSuccessfulHandle("ok"),
+          exitCode: Deferred.await(gate).pipe(Effect.as(ChildProcessSpawner.ExitCode(0))),
+        });
+      }),
+    );
+    const driver = yield* makeGitVcsDriverCore().pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provide(layerServerConfig),
+    );
+    const run = (args: ReadonlyArray<string>) =>
+      driver.execute({ operation: "test.gitLane", cwd: "/repo", args: [...args] });
+    const background = yield* Effect.forEach(
+      Array.from({ length: 12 }),
+      () => run(["background"]),
+      {
+        concurrency: "unbounded",
+      },
+    ).pipe(Effect.provideService(GitVcsDriver.BackgroundGitWork, true), Effect.forkChild);
+    const foreground = yield* Effect.forEach(Array.from({ length: 4 }), () => run(["foreground"]), {
+      concurrency: "unbounded",
+    }).pipe(Effect.forkChild);
+
+    yield* TestClock.adjust("2 seconds");
+    const started = yield* Queue.takeAll(starts);
+    assert.deepStrictEqual([...started].toSorted(), [
+      "background",
+      "background",
+      "foreground",
+      "foreground",
+      "foreground",
+      "foreground",
+    ]);
+    yield* Deferred.succeed(gate, undefined);
+    assert.equal((yield* Fiber.join(background)).length, 12);
+    assert.equal((yield* Fiber.join(foreground)).length, 4);
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
 
 describe("Git output collection", () => {
   // Git writes in arbitrary chunk sizes; one byte per chunk splits every
@@ -3816,6 +3866,7 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
           path: "HEAD",
           insertions: 1,
           deletions: 0,
+          status: "modified",
         });
       }),
     );
@@ -3836,9 +3887,9 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
         const status = yield* driver.statusDetails(cwd);
 
         assert.deepEqual(status.workingTree.files, [
-          { path: "café notes.md", insertions: 1, deletions: 0 },
-          { path: "src/new.ts", insertions: 1, deletions: 0 },
-          { path: "src/old.ts", insertions: 0, deletions: 0 },
+          { path: "café notes.md", insertions: 1, deletions: 0, status: "modified" },
+          { path: "src/new.ts", insertions: 1, deletions: 0, status: "renamed" },
+          { path: "src/old.ts", insertions: 0, deletions: 0, status: "deleted" },
         ]);
         yield* driver.commit(cwd, "Commit selection", "", {
           stage: { filePaths: status.workingTree.files.map((file) => file.path) },
@@ -3866,9 +3917,9 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
         const status = yield* driver.statusDetails(nestedCwd);
 
         assert.deepEqual(status.workingTree.files, [
-          { path: "nested/new.txt", insertions: 0, deletions: 0 },
-          { path: "nested/tracked.txt", insertions: 1, deletions: 0 },
-          { path: "README.md", insertions: 1, deletions: 0 },
+          { path: "nested/new.txt", insertions: 0, deletions: 0, status: "untracked" },
+          { path: "nested/tracked.txt", insertions: 1, deletions: 0, status: "modified" },
+          { path: "README.md", insertions: 1, deletions: 0, status: "modified" },
         ]);
         // The root is what the paths above are relative to, not the nested cwd, and it keeps
         // the trailing space so the resolved editor target is the file that exists.
@@ -3901,13 +3952,61 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
         const status = yield* driver.statusDetails(nestedCwd);
 
         assert.deepEqual(status.workingTree.files, [
-          { path: "nested/new.txt", insertions: 0, deletions: 0 },
-          { path: "nested/tracked.txt", insertions: 1, deletions: 0 },
+          { path: "nested/new.txt", insertions: 0, deletions: 0, status: "untracked" },
+          { path: "nested/tracked.txt", insertions: 1, deletions: 0, status: "modified" },
         ]);
         assert.equal(
           NodeFS.realpathSync.native(status.workingTree.rootPath!),
           NodeFS.realpathSync.native(worktreePath),
         );
+      }),
+    );
+
+    it.effect("reports how each working-tree file changed", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, "keep.ts", "keep\n");
+        yield* writeTextFile(cwd, "remove.ts", "remove\n");
+        yield* writeTextFile(cwd, "old name.ts", "rename me\n");
+        yield* git(cwd, ["add", "."]);
+        yield* git(cwd, ["commit", "-m", "add files"]);
+        yield* writeTextFile(cwd, "keep.ts", "keep\nedited\n");
+        yield* git(cwd, ["rm", "-q", "remove.ts"]);
+        yield* git(cwd, ["mv", "old name.ts", "new name.ts"]);
+        yield* writeTextFile(cwd, "staged.ts", "staged\n");
+        yield* git(cwd, ["add", "staged.ts"]);
+        yield* writeTextFile(cwd, "untracked.ts", "untracked\n");
+        const blob = yield* git(cwd, ["rev-parse", "HEAD:keep.ts"]);
+        const conflicts = [
+          ["AU", [2]],
+          ["UD", [1, 2]],
+          ["UA", [3]],
+          ["DU", [1, 3]],
+          ["AA", [2, 3]],
+          ["UU", [1, 2, 3]],
+        ] as const;
+        for (const [xy, stages] of conflicts) {
+          yield* writeTextFile(cwd, `${xy}.ts`, "conflicted\n");
+          yield* (yield* GitVcsDriver.GitVcsDriver).execute({
+            operation: "test.unmergedIndex",
+            cwd,
+            args: ["update-index", "--index-info"],
+            stdin: stages.map((stage) => `100644 ${blob} ${stage}\t${xy}.ts\n`).join(""),
+          });
+        }
+
+        const status = yield* (yield* GitVcsDriver.GitVcsDriver).statusDetails(cwd);
+        const statuses = Object.fromEntries(
+          status.workingTree.files.map((file) => [file.path, file.status]),
+        );
+
+        assert.equal(statuses["keep.ts"], "modified");
+        assert.equal(statuses["remove.ts"], "deleted");
+        assert.equal(statuses["new name.ts"], "renamed");
+        assert.equal(statuses["staged.ts"], "added");
+        assert.equal(statuses["untracked.ts"], "untracked");
+        for (const [xy] of conflicts) assert.equal(statuses[`${xy}.ts`], "modified", xy);
       }),
     );
 

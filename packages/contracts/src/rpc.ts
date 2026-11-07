@@ -57,6 +57,7 @@ import {
   ProviderAuthCompleteInput,
   ProviderAuthState,
   ProviderAuthStartInput,
+  ProviderAuthRemoveMethodInput,
   ProviderAuthRespondInput,
   ProviderInstallCancelInput,
   ProviderInstallState,
@@ -105,6 +106,7 @@ import {
 } from "./filesystem.ts";
 import {
   AgentSessionImportInput,
+  AgentSessionImportProgressEvent,
   AgentSessionImportProjectChangedError,
   AgentSessionImportProjectNotFoundError,
   AgentSessionImportResult,
@@ -438,6 +440,7 @@ export const WS_METHODS = {
   filesystemGetMetadata: "filesystem.getMetadata",
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
+  agentSessionsImportWithProgress: "agentSessions.importWithProgress",
   assetsCreateUrl: "assets.createUrl",
   assetsPersistChatAttachments: "assets.persistChatAttachments",
   attachmentsCreateUploadUrl: "attachments.createUploadUrl",
@@ -457,6 +460,7 @@ export const WS_METHODS = {
   chatGptHandoffSubscribe: "provider.chatgpt.handoff.subscribe",
   providerAuthRespond: "provider.auth.respond",
   providerAuthCancel: "provider.auth.cancel",
+  providerAuthRemoveMethod: "provider.auth.removeMethod",
   providerAuthLogout: "provider.auth.logout",
   providerAuthSubscribe: "provider.auth.subscribe",
   providerInstallStart: "provider.install.start",
@@ -736,6 +740,12 @@ const WsChatGptHandoffSubscribeRpc = Rpc.make(WS_METHODS.chatGptHandoffSubscribe
 
 const WsProviderAuthCancelRpc = Rpc.make(WS_METHODS.providerAuthCancel, {
   payload: ProviderAuthCancelInput,
+  success: ProviderAuthState,
+  error: ProviderSetupRpcError,
+});
+
+const WsProviderAuthRemoveMethodRpc = Rpc.make(WS_METHODS.providerAuthRemoveMethod, {
+  payload: ProviderAuthRemoveMethodInput,
   success: ProviderAuthState,
   error: ProviderSetupRpcError,
 });
@@ -1470,6 +1480,18 @@ const WsAgentSessionsImportRpc = Rpc.make(WS_METHODS.agentSessionsImport, {
   ]),
 });
 
+const WsAgentSessionsImportWithProgressRpc = Rpc.make(WS_METHODS.agentSessionsImportWithProgress, {
+  payload: AgentSessionImportInput,
+  success: AgentSessionImportProgressEvent,
+  error: Schema.Union([
+    AgentSessionImportProjectChangedError,
+    AgentSessionImportProjectNotFoundError,
+    AgentSessionScanError,
+    EnvironmentAuthorizationError,
+  ]),
+  stream: true,
+});
+
 const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
   payload: AssetCreateUrlInput,
   success: AssetCreateUrlResult,
@@ -2103,6 +2125,7 @@ export const WsCoreRpcGroup = RpcGroup.make(
   WsChatGptHandoffSubscribeRpc,
   WsProviderAuthRespondRpc,
   WsProviderAuthCancelRpc,
+  WsProviderAuthRemoveMethodRpc,
   WsProviderAuthLogoutRpc,
   WsProviderAuthSubscribeRpc,
   WsProviderInstallStartRpc,
@@ -2220,6 +2243,7 @@ export const WsCoreRpcGroup = RpcGroup.make(
   WsFilesystemGetMetadataRpc,
   WsAgentSessionsScanRpc,
   WsAgentSessionsImportRpc,
+  WsAgentSessionsImportWithProgressRpc,
   WsAssetsCreateUrlRpc,
   WsAssetsPersistChatAttachmentsRpc,
   WsAttachmentsCreateUploadUrlRpc,

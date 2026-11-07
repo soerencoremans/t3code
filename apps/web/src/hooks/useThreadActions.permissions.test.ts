@@ -123,6 +123,9 @@ vi.mock("../composerDraftStore", () => ({
       clearProjectDraftThreadById: () => state.localEffects.push("clear-project-draft"),
     }),
 }));
+vi.mock("../components/ThreadSurfaceTab", () => ({
+  discardThreadSurfaces: () => state.localEffects.push("discard-surfaces"),
+}));
 vi.mock("../terminalUiStateStore", () => ({
   useTerminalUiStateStore: (select: (store: unknown) => unknown) =>
     select({
@@ -306,6 +309,18 @@ describe("thread action permissions", () => {
       expect(state.localEffects).toEqual([]);
     },
   );
+
+  it("names an archived thread in its delete confirmation and preserves it on cancel", async () => {
+    state.threads = [];
+    state.scopes.get(secondary)!.add(AuthOrchestrationOperateScope);
+    state.confirm.mockResolvedValue(false);
+    await useThreadActions().confirmAndDeleteThread(target, "Archived release notes");
+    expect(state.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('"Archived release notes"'),
+      expect.objectContaining({ title: "Delete thread?", variant: "destructive" }),
+    );
+    expect(state.requests).toEqual([]);
+  });
 
   it("deletes an archived thread only with its own environment's grant", async () => {
     state.threads = [];

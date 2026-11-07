@@ -30,7 +30,7 @@ import {
 } from "./lib/contextChipAccents";
 
 import { appAtomRegistry, subscribeAtomChanges } from "./rpc/atomRegistry";
-import { primaryServerEnvironmentThemesAtom } from "./state/server";
+import { themeServerEnvironmentThemesAtom } from "./state/server";
 
 export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, T3_CHAT_THEME, THEME_COLOR_ROLES };
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
@@ -45,6 +45,17 @@ export const CUSTOM_THEMES_STORAGE_KEY = "t3code:themes:v1";
 export const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "t3code:theme-follow-system";
 export const THEME_APPEARANCE_MODE_STORAGE_KEY = "t3code:theme-appearance-mode";
 export const THEME_HALVES_STORAGE_KEY = "t3code:theme-halves:v1";
+/** "true" when the light appearance keeps a black window and sidebar. */
+export const THEME_BLACK_CHROME_STORAGE_KEY = "t3code:theme-black-chrome";
+
+export function readStoredBlackChrome(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(THEME_BLACK_CHROME_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 const LEGACY_T3_CHAT_DARK_THEME_ID = "t3-chat-dark";
 
@@ -315,7 +326,7 @@ export function publishedThemeDefinitions(
 // Every reconnect snapshot delivers a fresh but usually identical array; keeping the
 // previous one skips regenerating palettes and repainting the document for it.
 const publishedThemesAtom = Atom.make((get): ReadonlyArray<EnvironmentTheme> => {
-  const next = get(primaryServerEnvironmentThemesAtom);
+  const next = get(themeServerEnvironmentThemesAtom);
   const previous = Option.getOrNull(get.self<ReadonlyArray<EnvironmentTheme>>());
   return previous !== null && Equal.equals(previous, next) ? previous : next;
 }).pipe(Atom.withLabel("web-published-environment-themes"));
@@ -404,15 +415,30 @@ export function getStandardThemeColors(appearance: ThemeAppearance): ThemeColors
   return (standardLightThemeColors ??= decodeThemeColors(T3_CODE_LIGHT_THEME_COLORS));
 }
 
-// index.css paints the light bubble a step darker than the shared palette mobile uses.
-const STANDARD_WEB_PAINTED_COLORS: Record<ThemeAppearance, Partial<ThemeColors>> = {
-  light: { messageSurface: "#ebebed" },
-  dark: { canvas: "#000000", messageSurface: "#1e1e1e" },
-};
+// The stock look's shell comes from index.css, not the standard palette: the thread pane on
+// `--background` and the window chrome around it. index.css mirrors these; change both.
+const STOCK_SHELL_COLORS = {
+  light: { canvas: "#f5f5f5", chrome: "#e4e4e4", toolbar: "#e4e4e4", sidebar: "#e4e4e4" },
+  dark: { canvas: "#151515", chrome: "#000000", toolbar: "#000000", sidebar: "#000000" },
+} as const;
+const stockThemeColors: Partial<Record<ThemeAppearance, ThemeColors>> = {};
 
-/** The standard theme as index.css paints it, for solves that measure the page. */
+/** The stock "T3 Code" look as a palette: what HTML renders paint and its theme file carries. */
+export function getStockThemeColors(appearance: ThemeAppearance): ThemeColors {
+  return (stockThemeColors[appearance] ??= {
+    ...getStandardThemeColors(appearance),
+    ...STOCK_SHELL_COLORS[appearance],
+  });
+}
+
+/** The stock theme colors as painted by index.css, including its message bubble. */
 export function getStandardPaintedThemeColors(appearance: ThemeAppearance): ThemeColors {
-  return { ...getStandardThemeColors(appearance), ...STANDARD_WEB_PAINTED_COLORS[appearance] };
+  return {
+    ...getStockThemeColors(appearance),
+    ...(appearance === "light"
+      ? { surface: "#f9f9f9", surfaceRaised: "#f6f6f6", messageSurface: "#fdfdfd" }
+      : { surface: "#1a1a1a", surfaceRaised: "#161616", messageSurface: "#252525" }),
+  };
 }
 
 type ThemeRgbColor = {
@@ -1608,6 +1634,9 @@ export function applyThemeColorPreview(colors: ThemeColors, appearance: ThemeApp
 
   root.dataset.themeId = THEME_PREVIEW_ID;
   root.classList.toggle("dark", appearance === "dark");
+  // Black chrome is light-only, as when the stored theme is applied, so a light draft's
+  // sidebar and chrome colors show on the black shell they will wear.
+  root.classList.toggle("black-chrome", appearance === "light" && readStoredBlackChrome());
   for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
     if (isThemeColor(value)) root.style.setProperty(APP_THEME_VARIABLES[role], value);
   }

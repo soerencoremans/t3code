@@ -3,6 +3,7 @@ import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 import { usePrimaryCloudLinkState } from "~/cloud/cloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { isElectron } from "~/env";
+import { useScrollingWorkspacesEnabled } from "~/hooks/useSettings";
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
 import { desktopWslStateAtom } from "~/state/desktopWslState";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
@@ -11,13 +12,12 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
 import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
-import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
 } from "./settingsSearch";
 
-export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
+export function useAvailableSettingsSearchItems() {
   const { environments } = useEnvironments();
   // Explicit booleans keep flags out of the filter cache so environment updates do not rebuild the list.
   const hasEnvironment =
@@ -29,16 +29,6 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
         hasServerConfig: environment.serverConfig !== null,
       }),
     ) === true;
-  const hasMacProviderSettingsEnvironment =
-    environments.some(
-      (environment) =>
-        (scopeSearch.machine === undefined || environment.environmentId === scopeSearch.machine) &&
-        environment.serverConfig?.environment.platform.os === "darwin" &&
-        isProviderSettingsEnvironmentAvailable({
-          connectionPhase: environment.connection.phase,
-          hasServerConfig: true,
-        }),
-    ) === true;
   const hasThreadAutoSettlement =
     getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -49,6 +39,7 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
   const managedTunnelActive =
     cloudLinkState?.linkRevoked !== true &&
     (cloudLinkState?.managedTunnelActive ?? cloudLinkState?.linked ?? false) === true;
+  const scrollingWorkspaces = useScrollingWorkspacesEnabled();
   const localEnvironmentDisabled = isLocalEnvironmentDisabled() === true;
   const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
   const desktopWsl = useEnvironmentQuery(
@@ -63,11 +54,11 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
     hasCloudPublicConfig: cloudPublicConfig,
     hasEnvironment,
     hasProviderSettingsEnvironment,
-    hasMacProviderSettingsEnvironment,
     canManageLocalBackend,
     isWslSettingsRowVisible: wslSettingsRowVisible,
     hasThreadAutoSettlement,
     managedTunnelActive,
     hasPeerLinkHost,
+    scrollingWorkspaces,
   });
 }

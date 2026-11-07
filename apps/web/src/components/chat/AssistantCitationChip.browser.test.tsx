@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import "~/index.css";
@@ -84,11 +84,7 @@ async function removeSource() {
 }
 
 async function clickButton(label: string) {
-  const button = [...document.querySelectorAll("button")].find(
-    (element) => element.textContent?.trim() === label,
-  );
-  expect(button, `button ${label}`).toBeDefined();
-  await act(async () => button!.click());
+  await page.getByRole("button", { name: label, exact: true }).click();
 }
 
 describe("citation comment source disappearance", () => {
@@ -129,6 +125,26 @@ describe("citation comment source disappearance", () => {
 });
 
 describe("citation comment popup position", () => {
+  it("opens at its anchor instead of sliding in from the window corner", async () => {
+    using source = setup();
+    await using _screen = await mount(
+      source.sourceAnchor,
+      vi.fn(() => true),
+    );
+    const positioner = () =>
+      document.querySelector<HTMLElement>('[data-slot="popover-positioner"]');
+    await vi.waitFor(() => expect(positioner()?.style.opacity).not.toBe("0"));
+
+    const moves = positioner()!
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation instanceof CSSTransition &&
+          ["transform", "top", "left"].includes(animation.transitionProperty),
+      );
+    expect(moves).toEqual([]);
+  });
+
   it("stays on screen when the cited text ends in a code block's hidden overflow", async () => {
     using _source = setup();
     const message = document.createElement("div");

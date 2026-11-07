@@ -692,6 +692,7 @@ export const OrchestrationV2Run = Schema.Struct({
   checkpointId: Schema.NullOr(CheckpointId),
   contextHandoffId: Schema.NullOr(ContextHandoffId),
   restartContinuationOfRunId: Schema.optional(RunId),
+  usageLimitContinuationOfRunId: Schema.optional(RunId),
   delegatedTaskId: Schema.optional(NodeId),
   workStartedAt: Schema.optional(Schema.DateTimeUtc),
   restartCancelledBackgroundWork: Schema.optional(
@@ -1685,6 +1686,8 @@ export const OrchestrationV2TurnItem = Schema.Union([
     exitCode: Schema.optional(Schema.Int),
     /** Set when the command is a monitor, so background work lists it as a monitor. */
     monitor: Schema.optional(Schema.Boolean),
+    /** Failing tests named by a test runner summary, derived when output is stripped for the wire. */
+    failedTestCount: Schema.optional(NonNegativeInt),
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2159,6 +2162,11 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
     ),
   ),
   deletedAt: Schema.NullOr(Schema.DateTimeUtc),
+  /**
+   * Settled user and assistant messages. Only the archived shell snapshot
+   * fills it (Settings › Archive); live shells omit it.
+   */
+  messageCount: Schema.optional(NonNegativeInt),
 });
 export type OrchestrationV2ThreadShell = typeof OrchestrationV2ThreadShell.Type;
 
@@ -2519,6 +2527,8 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     exitCode: Schema.optional(Schema.Int),
     /** Set when the command is a monitor, so background work lists it as a monitor. */
     monitor: Schema.optional(Schema.Boolean),
+    /** Failing tests named by a test runner summary, derived when output is stripped for the wire. */
+    failedTestCount: Schema.optional(NonNegativeInt),
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,

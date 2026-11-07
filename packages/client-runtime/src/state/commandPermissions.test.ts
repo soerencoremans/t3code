@@ -102,6 +102,29 @@ describe("command permissions", () => {
     ),
   );
 
+  it.effect.each([WS_METHODS.agentSessionsImport, WS_METHODS.agentSessionsImportWithProgress])(
+    "requires the destination operate grant for %s",
+    (method) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const registry = yield* setup;
+          const imports = createCommandPermissions(runtime, method);
+          registry.set(sessions(env), AsyncResult.success(grant(false)));
+          expect(registry.get(imports.permissionAtom(env))).toBe(false);
+          expect((yield* imports.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+            "EnvironmentAuthorizationError",
+          );
+          registry.set(sessions(env), AsyncResult.success(grant(true)));
+          expect(registry.get(imports.permissionAtom(env))).toBe(true);
+          yield* imports.authorize(registry, env);
+          registry.set(sessions(other), AsyncResult.success(grant(false)));
+          expect(registry.get(imports.permissionAtom(other))).toBe(false);
+          expect((yield* imports.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
+            "EnvironmentAuthorizationError",
+          );
+        }),
+      ),
+  );
   it.effect("requires the destination preview grant to close a browser tab", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -127,6 +150,32 @@ describe("command permissions", () => {
         expect((yield* close.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
           "EnvironmentAuthorizationError",
         );
+      }),
+    ),
+  );
+
+  it.effect("requires the destination provider grant to remove an incomplete connection", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const remove = createCommandPermissions(runtime, WS_METHODS.providerAuthRemoveMethod);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(remove.permissionAtom(env))).toBe(false);
+        expect((yield* remove.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthProvidersManageScope],
+            permissions: [AuthProvidersManageScope],
+          }),
+        );
+        expect(registry.get(remove.permissionAtom(env))).toBe(true);
+        yield* remove.authorize(registry, env);
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(remove.permissionAtom(other))).toBe(false);
       }),
     ),
   );

@@ -105,7 +105,7 @@ export function AddClaudeAccountDialog({
               description="Log in with the Claude account you want to add."
             />
             <WizardPanel>
-              <p className="text-sm">
+              <p className="text-body">
                 Added “{added.name}”. This setup stays logged in as before; switch to the new
                 account from the model picker or the account list.
               </p>
@@ -131,7 +131,7 @@ export function AddClaudeAccountDialog({
               />
             </WizardPanel>
             <WizardFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
               </Button>
               <Button variant="default" disabled>
@@ -168,13 +168,13 @@ export function AddClaudeAccountDialog({
                 />
               </form>
               {error !== null ? (
-                <p role="alert" className="text-xs text-destructive">
+                <p role="alert" className="text-meta text-destructive">
                   {error}
                 </p>
               ) : null}
             </WizardPanel>
             <WizardFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
               </Button>
               <Button

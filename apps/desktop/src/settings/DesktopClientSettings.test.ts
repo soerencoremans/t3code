@@ -49,13 +49,10 @@ const clientSettings: ClientSettings = {
   fontSizePrompt: 14,
   fontSizeTerminal: 12,
   fontSmoothing: true,
-  glassOpacity: 80,
-  onboardingCompletedAt: null,
   panelAnimationDurationMs: 0,
   planModeEnabled: false,
   proactivePanelsEnabled: true,
   showSkillsInSlashMenu: false,
-  persistComposerContextStrip: true,
   providerModelPreferences: {},
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {
@@ -68,6 +65,7 @@ const clientSettings: ClientSettings = {
   threadDetailsUsageEnabled: false,
   threadDetailsItems: {},
   legacySidebarEnabled: false,
+  hideWindowControlsWhenSidebarCollapsed: false,
   sidebarWorkingShelfEnabled: false,
   loadBalancingEnabled: false,
   loadBalancingWeights: { "environment-1": 75, "environment-2": 0 },
@@ -178,7 +176,7 @@ describe("DesktopClientSettings", () => {
         const settings = yield* DesktopClientSettings.DesktopClientSettings;
         const savedSettings = {
           ...clientSettings,
-          onboardingCompletedAt: "2026-09-05T12:00:00.000Z",
+          fontSmoothing: false,
         };
         yield* settings.set(savedSettings);
         const savedContents = yield* fileSystem.readFileString(environment.clientSettingsPath);

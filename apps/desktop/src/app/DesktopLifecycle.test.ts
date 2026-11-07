@@ -39,6 +39,7 @@ function layerElectronApp(
     metadata: Effect.die("unexpected metadata read"),
     name: Effect.succeed("T3 Code"),
     systemLocale: Effect.succeed("en-US"),
+    preferredSystemLanguages: Effect.succeed(["en-US"]),
     whenReady: Effect.void,
     requestSingleInstanceLock: Effect.succeed(true),
     quit,
@@ -62,7 +63,9 @@ function layerElectronApp(
 
 const layerElectronTheme = Layer.succeed(ElectronTheme.ElectronTheme, {
   shouldUseDarkColors: Effect.succeed(false),
+  shouldUseDarkChrome: Effect.succeed(false),
   setSource: () => Effect.void,
+  setBlackChrome: () => Effect.void,
   onUpdated: () => Effect.void,
 });
 

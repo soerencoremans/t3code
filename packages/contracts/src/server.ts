@@ -9,6 +9,7 @@ import {
 import { AuthClientPresentationMetadata, ServerAuthDescriptor } from "./auth.ts";
 import {
   ForwardCompatibleArray,
+  ForwardCompatibleOptional,
   IsoDateTime,
   NonNegativeInt,
   PositiveInt,
@@ -28,7 +29,7 @@ import { ModelCapabilities, ProviderOptionDescriptor } from "./model.ts";
 import { RuntimeMode } from "./providerPolicy.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { ServerProviderUsageLimits, UsageLimitSourceSnapshots } from "./providerUsageLimits.ts";
-import { ServerSettings } from "./settings.ts";
+import { LayoutSettings, ServerSettings } from "./settings.ts";
 import { DesktopUpdateChannelSchema } from "./ipc.ts";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -620,7 +621,11 @@ export const ServerConfig = Schema.Struct({
   /** Hints only; verify each address answers as this environment. */
   directEndpoints: Schema.optionalKey(ForwardCompatibleArray(ServerDirectEndpoint)),
   observability: ServerObservability,
-  settings: ServerSettings,
+  // Read-only migration source, using the same field older servers send.
+  settings: Schema.Struct({
+    ...ServerSettings.fields,
+    layout: ForwardCompatibleOptional(LayoutSettings),
+  }),
   /** Present when an administrator's policy file manages this environment. */
   managedPolicy: Schema.optionalKey(ManagedPolicySummary),
   shellResumeCompletionMarker: Schema.optionalKey(Schema.Boolean),
@@ -655,6 +660,11 @@ export const ServerConfig = Schema.Struct({
    * answering. Clients do not cache it, since it describes the host at connect.
    */
   lastEventLoopStall: Schema.optionalKey(ServerEventLoopStall),
+  /**
+   * The server user's home folder, where surfaces opened without a project
+   * (a terminal, the file browser) work. Absent on servers that predate it.
+   */
+  homeDirectory: Schema.optionalKey(TrimmedNonEmptyString),
   /**
    * Never sent in a config snapshot: the theme stream emits the current set
    * before any change, so a snapshot carrying it too would hand every

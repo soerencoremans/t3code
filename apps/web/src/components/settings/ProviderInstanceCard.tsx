@@ -1,3 +1,5 @@
+import { SettingsGroup } from "./SettingsGroup";
+import { Text } from "../ui/text";
 import { Spinner } from "~/components/ui/spinner";
 
 import {
@@ -15,7 +17,7 @@ import {
 import { Lock as LockGlyph, LockOpen } from "lucide";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
-import { Fragment, useState, type ReactElement, type ReactNode } from "react";
+import { Fragment, useId, useState, type ReactElement, type ReactNode } from "react";
 import {
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
@@ -46,6 +48,7 @@ import { MorphIcon } from "~/components/MorphIcon";
 import { DraftInput } from "../ui/draft-input";
 import { SecretSourceInput, type SecretSource } from "./SecretSourceInput";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { StatusDot } from "../ui/status-dot";
 import { Switch } from "../ui/switch";
 import { ManagedControl, ManagedNotice } from "../ManagedPolicy";
 import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
@@ -84,7 +87,7 @@ function ProviderStatusDiagnostic({
   detail,
   children,
 }: {
-  detail: string | null;
+  detail: ReactNode;
   children: ReactElement;
 }) {
   if (!detail) return children;
@@ -205,7 +208,7 @@ function ProviderAuthEmail(props: { readonly email: string | undefined }) {
       ariaLabel="Toggle account email visibility"
       revealTooltip="Click to reveal email"
       hideTooltip="Click to hide email"
-      className="max-w-full truncate"
+      className="pointer-events-auto max-w-full truncate"
     />
   );
 }
@@ -283,7 +286,8 @@ function ProviderEnvironmentFieldRow(props: {
   readonly managedReason?: string | undefined;
   readonly secretSources: ReadonlyArray<SecretSource>;
 }) {
-  const inputId = `${props.idPrefix}-environment-${props.field.name}`;
+  const id = useId();
+  const inputId = `${props.idPrefix}-${id}-environment-${props.field.name}`;
   const value = props.variable?.valueRedacted ? "" : (props.variable?.value ?? "");
 
   return (
@@ -292,7 +296,7 @@ function ProviderEnvironmentFieldRow(props: {
       description={props.field.description}
       managed={props.managedReason}
       control={
-        <div className="flex w-full min-w-0 items-center gap-2 @min-[32rem]/settings-row:w-56">
+        <div className="flex w-full min-w-0 items-center gap-2 @min-[26rem]/settings-row:w-56">
           {props.field.sensitive === false ? (
             <DraftInput
               id={inputId}
@@ -427,7 +431,7 @@ export function ProviderEnvironmentSection(props: {
       title="Variables"
       description="API keys, base URLs, and other per-instance CLI settings."
       control={
-        <Button type="button" size="sm" variant="outline" onClick={addVariable}>
+        <Button type="button" size="sm" variant="secondary" onClick={addVariable}>
           <PlusIcon className="size-3" />
           Add variable
         </Button>
@@ -439,10 +443,10 @@ export function ProviderEnvironmentSection(props: {
             if (props.managed?.names.has(variable.name)) {
               return (
                 <div key={variable.id} className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <code className="min-w-0 truncate text-xs sm:w-44 sm:shrink-0">
+                  <code className="min-w-0 truncate text-meta sm:w-44 sm:shrink-0">
                     {variable.name}
                   </code>
-                  <span className="text-xs text-muted-foreground">{props.managed.reason}</span>
+                  <span className="text-meta text-muted-foreground">{props.managed.reason}</span>
                 </div>
               );
             }
@@ -505,7 +509,7 @@ export function ProviderEnvironmentSection(props: {
                 </Tooltip>
               ) : null;
             const layout = (source: ReactNode, value: ReactNode) => (
-              <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border p-2">
+              <div className="flex min-w-0 flex-col gap-1.5 rounded-control surface-well p-2">
                 <div className="flex min-w-0 items-center gap-1.5">
                   {nameInput}
                   {source}
@@ -558,7 +562,7 @@ export function ProviderEnvironmentSection(props: {
               </Fragment>
             );
           })}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             Sensitive values are stored separately and never returned to the app.
             {rows.some((row) => row.valueRedacted === true)
               ? " Enter a new value to rename a saved one or make it plain text."
@@ -652,9 +656,12 @@ interface ProviderInstanceCardProps {
   readonly instance: ProviderInstanceConfig;
   readonly driverOption: ProviderClientDefinition | undefined;
   readonly liveProvider: ServerProvider | undefined;
+  /** "list" is the compact row in the providers list; "editor" is the selected instance's detail. */
   readonly mode: "list" | "editor";
-  readonly selected?: boolean | undefined;
-  readonly onSelect?: (() => void) | undefined;
+  readonly selected?: boolean;
+  /** List cards open the full editor (a sheet) from the title or the menu. */
+  readonly onConfigure?: (() => void) | undefined;
+  /** List cards offer "Reset to defaults" for dirty built-in slots. */
   readonly readOnly?: boolean | undefined;
   readonly canWriteSettings?: boolean;
   readonly onUpdate: (nextInstance: ProviderInstanceConfig) => void;
@@ -701,7 +708,7 @@ export function ProviderInstanceCard({
   liveProvider,
   mode,
   selected = false,
-  onSelect,
+  onConfigure,
   readOnly = false,
   canWriteSettings = true,
   onUpdate,
@@ -732,7 +739,7 @@ export function ProviderInstanceCard({
   const statusStyle = PROVIDER_STATUS_STYLES[statusKey];
   const summary = enabled
     ? getProviderSummary(effectiveProvider)
-    : { headline: "Disabled", detail: null };
+    : { headline: "Disabled", detail: null, authLabel: null };
   const authEmail = liveProvider?.auth.email?.trim();
   const isAuthenticated = enabled && liveProvider?.auth.status === "authenticated";
   const authLabel =
@@ -761,6 +768,10 @@ export function ProviderInstanceCard({
     compatibility.status !== "supported" &&
     compatibility.status !== "unknown";
   const VersionAdvisoryIcon = hasCompatibilityWarning ? AlertTriangleIcon : ArrowUpCircleIcon;
+  // Version warnings never get a banner: the glyph carries the sentence and its popover the fix.
+  const versionAdvisoryLabel = versionAdvisory
+    ? `${versionAdvisory.title}. ${versionAdvisory.detail}`
+    : null;
   const onRunVersionAction = readOnly
     ? undefined
     : versionAdvisory?.targetVersion
@@ -911,8 +922,8 @@ export function ProviderInstanceCard({
           : (readConfigString(instance.config, "registryIconUrl") ?? undefined)
       }
       showBadge={Boolean(accentColor)}
-      className="size-5"
-      iconClassName="size-4 text-foreground/80"
+      className="size-4"
+      iconClassName="size-4 text-muted-foreground"
       badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 px-0.5 text-5xs"
     />
   );
@@ -922,15 +933,25 @@ export function ProviderInstanceCard({
   ) : null;
 
   const versionCodeNode = versionLabel ? (
-    <code className="text-xs text-muted-foreground">{versionLabel}</code>
+    <code className="font-mono text-meta text-dim-foreground">{versionLabel}</code>
   ) : null;
 
   const statusDotNode =
-    statusKey === "warning" || statusKey === "error" ? (
-      <span className={cn("size-1.5 shrink-0 rounded-full", statusStyle.dot)} aria-hidden />
-    ) : null;
+    statusKey === "warning" || statusKey === "error" ? <StatusDot tone={statusStyle.dot} /> : null;
   const needsAttention = statusKey === "warning" || statusKey === "error";
-  const statusDiagnostic = hasCompatibilityWarning && needsAttention ? summary.detail : null;
+  const statusDiagnostic = (
+    <>
+      {authLabel || summary.authLabel ? (
+        <span className="block">{authLabel ?? summary.authLabel}</span>
+      ) : null}
+      {hasCompatibilityWarning && needsAttention && summary.detail ? (
+        <span className="block">{summary.detail}</span>
+      ) : null}
+    </>
+  );
+  const hasStatusDiagnostic = Boolean(
+    authLabel || summary.authLabel || (hasCompatibilityWarning && needsAttention && summary.detail),
+  );
   const inlineStatusDetail = hasCompatibilityWarning
     ? compatibility?.status === "broken"
       ? "Incompatible"
@@ -944,9 +965,8 @@ export function ProviderInstanceCard({
         {needsAttention ? statusDotNode : null}
         <span>Authenticated as</span>
         <ProviderAuthEmail email={authEmail} />
-        {authLabel ? <span>· {authLabel}</span> : null}
         {inlineStatusDetail ? (
-          <span className="min-w-0 [overflow-wrap:anywhere]">· {inlineStatusDetail}</span>
+          <span className="min-w-0 basis-full [overflow-wrap:anywhere]">{inlineStatusDetail}</span>
         ) : null}
       </>
     ) : (
@@ -954,7 +974,7 @@ export function ProviderInstanceCard({
         {statusDotNode}
         <span>{summary.headline}</span>
         {inlineStatusDetail ? (
-          <span className="min-w-0 [overflow-wrap:anywhere]">· {inlineStatusDetail}</span>
+          <span className="min-w-0 basis-full [overflow-wrap:anywhere]">{inlineStatusDetail}</span>
         ) : null}
       </>
     );
@@ -978,7 +998,7 @@ export function ProviderInstanceCard({
                     <VersionAdvisoryIcon
                       className={cn(
                         mode === "list" && "size-3.5",
-                        hasCompatibilityWarning && "text-warning",
+                        hasCompatibilityWarning && "text-warning-foreground",
                       )}
                     />
                   )}
@@ -987,20 +1007,20 @@ export function ProviderInstanceCard({
             />
           }
         />
-        <TooltipPopup side="top">
-          {updateProgress ? "Updating" : versionAdvisory.title}
-        </TooltipPopup>
+        <TooltipPopup side="top">{updateProgress ? "Updating" : versionAdvisoryLabel}</TooltipPopup>
       </Tooltip>
       <PopoverPopup side="bottom" align="end" width="md" aria-label={versionAdvisory.title}>
         <div className="grid min-w-0 gap-3">
           <div className="grid gap-0.5">
-            <p className="text-sm font-semibold leading-tight text-foreground">
+            <p className="text-sm font-semibold leading-tight text-strong-foreground">
               {versionAdvisory.title}
             </p>
             <p
               className={cn(
                 "text-xs leading-snug [overflow-wrap:anywhere]",
-                versionAdvisory.emphasis === "strong" ? "text-warning" : "text-muted-foreground",
+                versionAdvisory.emphasis === "strong"
+                  ? "text-warning-foreground"
+                  : "text-muted-foreground",
               )}
             >
               {versionAdvisory.detail}
@@ -1010,7 +1030,7 @@ export function ProviderInstanceCard({
             <Button
               type="button"
               size="xs"
-              variant="outline"
+              variant="secondary"
               className="w-full"
               disabled={isUpdating}
               onClick={onRunVersionAction}
@@ -1035,14 +1055,14 @@ export function ProviderInstanceCard({
             </p>
           ) : null}
           {onRunVersionAction && updateCommand ? (
-            <div className="flex items-center gap-2 text-3xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="flex items-center gap-2 text-3xs font-medium text-muted-foreground">
               <span aria-hidden className="h-px flex-1 bg-border" />
               or, update manually using
               <span aria-hidden className="h-px flex-1 bg-border" />
             </div>
           ) : null}
           {updateCommand ? (
-            <div className="flex min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 py-0.5 pr-0.5 pl-2">
+            <div className="flex min-w-0 items-center gap-1 rounded-control surface-well py-0.5 pr-0.5 pl-2">
               <code className="min-w-0 flex-1 truncate font-mono text-2xs text-foreground">
                 {updateCommand}
               </code>
@@ -1071,77 +1091,86 @@ export function ProviderInstanceCard({
   ) : null;
 
   if (mode === "list") {
+    const statusLine = updateProgress ? (
+      <span aria-live="polite" className="line-clamp-2 [overflow-wrap:anywhere]">
+        <span>Updating</span>
+        <span className="block">{updateProgress}</span>
+      </span>
+    ) : isAuthenticated && authEmail ? (
+      <>
+        <span>Authenticated as</span>
+        <ProviderAuthEmail email={authEmail} />
+      </>
+    ) : (
+      <span className="line-clamp-2 [overflow-wrap:anywhere]">
+        {enabled ? summary.headline : "Disabled"}
+        {enabled && needsAttention && inlineStatusDetail ? (
+          <span className="block">{inlineStatusDetail}</span>
+        ) : null}
+      </span>
+    );
     return (
       <div
-        data-slot="settings-row"
+        data-slot="provider-card"
+        data-selected={selected ? "" : undefined}
         className={cn(
-          "group flex min-h-18 items-center gap-3 px-3 py-3 transition-colors sm:px-4",
-          selected ? "bg-foreground/[0.06]" : "hover:bg-muted/25",
+          "relative flex items-start gap-2.5 rounded-row p-2.5",
+          selected ? "surface-selected-soft" : "hover:surface-ghost-hover",
         )}
       >
-        <div
+        {/* The select button sits under the text rather than around it, so the
+            email, status and enable controls stay separate hit targets. */}
+        <button
+          type="button"
+          className="absolute inset-0 cursor-pointer rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          onClick={onConfigure}
+          aria-current={selected || undefined}
+          aria-label={`Configure ${displayName}`}
+        />
+        <span
           className={cn(
-            "pointer-events-none relative flex min-w-0 flex-1 items-start gap-3 rounded-md text-left transition-opacity",
-            !enabled && !selected && "opacity-60 group-hover:opacity-100",
+            "pointer-events-none relative mt-px flex h-4.5 shrink-0 items-center",
+            !enabled && "opacity-64",
           )}
         >
-          <button
-            type="button"
-            className="pointer-events-auto absolute inset-0 cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            onClick={onSelect}
-            aria-label={`Select ${displayName}`}
-            aria-pressed={selected}
-          />
           {titleIconNode}
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-medium text-foreground">{displayName}</span>
-              {versionLabel ? (
-                <code className="max-w-24 shrink-0 truncate text-xs text-muted-foreground">
-                  {versionLabel}
-                </code>
-              ) : null}
-              {versionAdvisoryNode}
-            </span>
-            <span className="mt-0.5 flex items-start gap-1.5 text-xs leading-normal text-muted-foreground/80">
-              {statusDotNode && !updateProgress ? (
-                <span className="flex h-[1.45em] shrink-0 items-center">{statusDotNode}</span>
-              ) : null}
-              <ProviderStatusDiagnostic detail={statusDiagnostic}>
-                <span
-                  tabIndex={statusDiagnostic ? 0 : undefined}
-                  aria-live="polite"
-                  className="pointer-events-auto line-clamp-2 [overflow-wrap:anywhere]"
-                >
-                  {updateProgress ? (
-                    `Updating · ${updateProgress}`
-                  ) : (
-                    <>
-                      {summary.headline}
-                      {needsAttention && inlineStatusDetail ? ` · ${inlineStatusDetail}` : null}
-                    </>
-                  )}
-                </span>
-              </ProviderStatusDiagnostic>
-            </span>
+        </span>
+        <div
+          className={cn("pointer-events-none relative min-w-0 flex-1", !enabled && "opacity-64")}
+        >
+          {/* Wraps instead of shrinking, so the name keeps its width and the
+              version and chips move to the next line in a narrow column. */}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <Text variant="label" truncate>
+              {displayName}
+            </Text>
+            {enabled && !updateProgress ? statusDotNode : null}
+            {versionLabel ? (
+              <code className="shrink-0 font-mono text-meta text-dim-foreground">
+                {versionLabel}
+              </code>
+            ) : null}
+            {enabled ? versionAdvisoryNode : null}
+            {driverOption?.badgeLabel ? (
+              <Badge variant="warning" size="sm">
+                {driverOption.badgeLabel}
+              </Badge>
+            ) : null}
           </span>
-        </div>
-        <span className="flex h-5 shrink-0 items-center gap-1">
-          {projectOverride?.value !== undefined ? (
-            <span className="flex items-center">
-              <ProjectOverrideInheritance
-                projectEnabled={projectOverride.value}
-                deviceEnabled={resolveProviderInstanceEnabled(instance)}
-              />
-              <SettingResetButton
-                label={`${displayName} enablement`}
-                tooltip="Reset to the device setting"
-                disabled={readOnly || !canWriteSettings}
-                onClick={projectOverride.onReset}
-              />
+          <ProviderStatusDiagnostic detail={hasStatusDiagnostic ? statusDiagnostic : null}>
+            <span
+              className={cn(
+                "mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1 text-meta leading-normal text-muted-foreground",
+                hasStatusDiagnostic &&
+                  "pointer-events-auto rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              )}
+              tabIndex={hasStatusDiagnostic ? 0 : undefined}
+            >
+              {statusLine}
             </span>
-          ) : null}
-          {/* The policy refuses switching it on; switching it off stays the user's call. */}
+          </ProviderStatusDiagnostic>
+        </div>
+        <span className="relative flex shrink-0 items-center">
           <ManagedControl reason={enabled ? undefined : managedDriverReason}>
             <Switch
               checked={enabled}
@@ -1171,6 +1200,20 @@ export function ProviderInstanceCard({
         className={cn("inline-flex items-center gap-1 empty:hidden", readOnly && "opacity-50")}
       >
         {titleTailNode}
+        {projectOverride?.value !== undefined ? (
+          <span className="flex items-center">
+            <ProjectOverrideInheritance
+              projectEnabled={projectOverride.value}
+              deviceEnabled={resolveProviderInstanceEnabled(instance)}
+            />
+            <SettingResetButton
+              label={`${displayName} enablement`}
+              tooltip="Reset to the device setting"
+              disabled={readOnly || !canWriteSettings}
+              onClick={projectOverride.onReset}
+            />
+          </span>
+        ) : null}
         {onDelete ? (
           <Button
             type="button"
@@ -1187,21 +1230,20 @@ export function ProviderInstanceCard({
     </div>
   );
 
-  // Provider status gets its own row instead of hanging under the name field.
   const statusContent = (
     <>
-      <ProviderStatusDiagnostic detail={statusDiagnostic}>
+      <ProviderStatusDiagnostic detail={hasStatusDiagnostic ? statusDiagnostic : null}>
         <div
-          tabIndex={statusDiagnostic ? 0 : undefined}
+          tabIndex={hasStatusDiagnostic ? 0 : undefined}
           className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
         >
           {editorStatusNode}
         </div>
       </ProviderStatusDiagnostic>
       {urlAuthAction && onAcceptUrlAuth ? (
-        <div className="grid max-w-xl gap-1.5 pt-1 text-xs">
+        <div className="grid max-w-xl gap-1.5 pt-1 text-meta">
           <p>{urlAuthAction.message}</p>
-          <code className="break-all text-2xs">{urlAuthAction.url}</code>
+          <code className="break-all text-caption">{urlAuthAction.url}</code>
           <Button
             render={
               <a
@@ -1212,7 +1254,7 @@ export function ProviderInstanceCard({
               />
             }
             size="xs"
-            variant="outline"
+            variant="secondary"
             className="w-fit"
             disabled={readOnly}
           >
@@ -1248,38 +1290,49 @@ export function ProviderInstanceCard({
 
   return (
     <>
-      <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
-        <SettingsRow title="Status" status={statusContent} />
-        <SettingsRow
-          title="Display name"
-          control={
-            <div
-              inert={readOnly}
-              aria-disabled={readOnly || undefined}
-              className={cn(
-                "flex w-full min-w-0 items-center justify-end gap-2 @min-[32rem]/settings-row:w-auto",
-                readOnly && "opacity-50 select-none",
-              )}
-            >
-              <ProviderAccentColorPicker
-                layout="inline"
-                displayName={displayName}
-                value={accentColor}
-                onCommit={updateAccentColor}
-              />
-              <DraftInput
-                id={`provider-instance-${instanceId}-display-name`}
-                size="sm"
-                className="min-w-0 flex-1 @min-[32rem]/settings-row:w-56"
-                value={instance.displayName ?? ""}
-                onCommit={updateDisplayName}
-                placeholder={driverOption?.label ?? "Instance label"}
-                spellCheck={false}
-              />
-            </div>
-          }
-        />
-      </SettingsSection>
+      <div className="space-y-4">
+        <div className="flex min-h-7 items-center justify-between gap-2">
+          <h2 className="flex min-w-0 items-center gap-2">
+            {titleIconNode}
+            <Text variant="label" truncate>
+              {displayName}
+            </Text>
+          </h2>
+          {editorHeaderAction}
+        </div>
+        <SettingsGroup>
+          <SettingsRow
+            title="Display name"
+            status={statusContent}
+            control={
+              <div
+                inert={readOnly}
+                aria-disabled={readOnly || undefined}
+                className={cn(
+                  "flex w-full min-w-0 items-center justify-end gap-2 @min-[26rem]/settings-row:w-auto",
+                  readOnly && "opacity-50 select-none",
+                )}
+              >
+                <ProviderAccentColorPicker
+                  layout="inline"
+                  displayName={displayName}
+                  value={accentColor}
+                  onCommit={updateAccentColor}
+                />
+                <DraftInput
+                  id={`provider-instance-${instanceId}-display-name`}
+                  size="sm"
+                  className="min-w-0 flex-1 @min-[26rem]/settings-row:w-50"
+                  value={instance.displayName ?? ""}
+                  onCommit={updateDisplayName}
+                  placeholder={driverOption?.label ?? "Instance label"}
+                  spellCheck={false}
+                />
+              </div>
+            }
+          />
+        </SettingsGroup>
+      </div>
 
       {setup || environmentFields.length > 0 ? (
         <SettingsSection title="Setup">
@@ -1375,7 +1428,7 @@ export function ProviderInstanceCard({
       {driverOption !== undefined ? (
         <SettingsSection title="Models">
           <div className="px-3 py-3 sm:px-4">
-            <p className="mb-3 text-xs text-muted-foreground">
+            <p className="mb-3 text-meta text-muted-foreground">
               Model preferences and custom models are saved on the selected environment and shared
               across connected devices.
             </p>

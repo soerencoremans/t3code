@@ -80,7 +80,6 @@ describe("searchSettings", () => {
 
   it("matches normalized title substrings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
-    expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
     expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["panel-animations"]);
     expect(searchSettings("thè\u{1ab0}mes")[0]?.id).toBe("theme");
     const localeLowerCase = vi.spyOn(String.prototype, "toLocaleLowerCase").mockReturnValue("gıt");
@@ -116,7 +115,6 @@ describe("searchSettings", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: false,
       hasProviderSettingsEnvironment: false,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       isWslSettingsRowVisible: false,
       hasThreadAutoSettlement: false,
@@ -128,7 +126,6 @@ describe("searchSettings", () => {
       "network-access",
       "publish-agent-activity",
       "provider-health-check-interval",
-      "cursor-keychain-usage",
       "source-control-writer-model",
       "review-guide-model",
       "review-guide-instructions",
@@ -150,7 +147,6 @@ describe("searchSettings", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       localEnvironmentDisabled: true,
       isWslSettingsRowVisible: false,
@@ -221,6 +217,22 @@ describe("settings search targets", () => {
     expect(isSettingsSearchScopeAvailable(target.scope, "environment")).toBe(true);
   });
 
+  it.each([
+    "layout-template",
+    "layout-terminal-placement",
+    "layout-side-pane-placement",
+    "layout-side-pane-opens-on",
+    "layout-new-tab-position",
+    "layout-when-no-room",
+    "layout-three-finger-swipe",
+  ])("keeps %s reachable from every settings scope", (id) => {
+    const setting = getSettingsSearchTargetScope(id)!;
+    expect(setting.scope).toBeNull();
+    for (const kind of ["all", "environment", "project", "checkout", "unavailable"] as const) {
+      expect(isSettingsSearchScopeAvailable(setting.scope, kind)).toBe(true);
+    }
+  });
+
   it("keeps environment-wide settings out of project scopes", () => {
     const updates = getSettingsSearchTargetScope("provider-update-checks")!;
     expect(updates.scope).toBe("environment-defaults");
@@ -265,7 +277,6 @@ describe("auto-settlement search availability", () => {
       hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
-      hasMacProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
       isWslSettingsRowVisible: false,
       hasThreadAutoSettlement: availability.eligibleEnvironmentIds.length > 0,

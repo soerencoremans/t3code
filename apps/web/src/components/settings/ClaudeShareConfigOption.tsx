@@ -40,10 +40,10 @@ export function ClaudeShareConfigOption({
             onCheckedChange={(checked) => onChange(checked === true ? first.instanceId : null)}
           />
           <span className="grid gap-0.5">
-            <span className="text-sm font-medium text-foreground">
+            <span className="text-label text-strong-foreground">
               Share config with my existing Claude setup
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-meta text-muted-foreground">
               Adds another account to “{label}” instead of a new provider. Chats and settings stay
               shared; you switch accounts in the model picker.
             </span>
@@ -83,7 +83,7 @@ export function ClaudeShareConfigOption({
         </SettingsGroup>
       ) : null}
       {value !== null ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-meta text-muted-foreground">
           No new provider is added. Next, you name the account and log in with it; the setup stays
           logged in as it is.
         </p>

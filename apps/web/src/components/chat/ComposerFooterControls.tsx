@@ -115,8 +115,6 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
                   ref={permissionsChipRef}
                   data-composer-shortcut="composer.mode"
                   size={size}
-                  // Mirrors the model trigger's trailing pe-1 so the gaps on both sides of the chip match.
-                  className="ps-1.5"
                   aria-label={`Permissions: ${runtimeModeOption.label}`}
                 />
               }
@@ -127,7 +125,7 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
             icon={RuntimeModeIcon}
             size={size}
             // Match the label, not full foreground: the chip's presence already marks the mode.
-            {...(props.emphasized ? { className: "text-current" } : {})}
+            className={props.emphasized ? "size-3 text-current" : "size-3"}
           />
           <span
             data-composer-control-label
@@ -138,7 +136,7 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
         </TooltipTrigger>
         <TooltipPopup side="top">{permissionsTooltip}</TooltipPopup>
       </Tooltip>
-      <MenuPopup align="start" {...composerFloatingLayerProps}>
+      <MenuPopup spacing="relaxed" align="start" {...composerFloatingLayerProps}>
         <ComposerPermissionsSection
           runtimeMode={props.runtimeMode}
           runtimeModeOptions={props.runtimeModeOptions}
@@ -176,14 +174,14 @@ export function ComposerPermissionsSection(props: {
   const descriptionId = useId();
   return (
     <div data-composer-permissions className="grid w-72 gap-1.5 px-2 py-1.5">
-      <div className="font-medium text-muted-foreground text-xs">Permissions</div>
+      <div className="text-caption text-muted-foreground">Permissions</div>
       <MenuPrimitive.RadioGroup
         aria-label="Permissions"
         value={props.runtimeMode}
         onValueChange={(value: RuntimeMode) => {
           if (value !== props.runtimeMode) props.onRuntimeModeChange(value);
         }}
-        className="flex rounded-lg bg-input/40 p-0.5"
+        className="flex rounded-lg surface-well p-0.5"
         // Menus navigate with Up/Down only; the row reads horizontally, so Left/Right move too.
         onKeyDown={(event) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -213,7 +211,7 @@ export function ComposerPermissionsSection(props: {
               onPointerLeave={() => setPreviewMode(null)}
               onFocus={() => setPreviewMode(option.mode)}
               onBlur={() => setPreviewMode(null)}
-              className="flex h-6 flex-1 cursor-pointer items-center justify-center text-muted-foreground outline-none first:rounded-l-md last:rounded-r-md data-disabled:cursor-not-allowed data-disabled:opacity-40 data-checked:bg-input/72 data-checked:text-foreground data-highlighted:text-foreground not-data-checked:data-highlighted:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              className="flex h-6 flex-1 cursor-pointer items-center justify-center text-muted-foreground outline-none data-disabled:cursor-not-allowed data-disabled:opacity-40 first:rounded-l-md last:rounded-r-md data-checked:surface-selected-soft data-checked:text-strong-foreground data-highlighted:text-foreground not-data-checked:data-highlighted:surface-ghost-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             >
               <OptionIcon aria-hidden="true" className="size-3.5" />
             </MenuPrimitive.RadioItem>
@@ -230,14 +228,14 @@ export function ComposerPermissionsSection(props: {
         <span
           className={
             shownMode === props.runtimeMode
-              ? "text-foreground text-sm"
-              : "text-muted-foreground text-sm"
+              ? "text-foreground text-label"
+              : "text-muted-foreground text-label"
           }
         >
           {shown.label}
         </span>
         {/* Two lines reserved so the menu does not shift while you preview modes. */}
-        <span className="min-h-8 text-muted-foreground text-xs leading-4">
+        <span className="min-h-8 text-muted-foreground text-meta leading-4">
           {shown.disabledReason ?? shown.description}
         </span>
       </div>
@@ -247,6 +245,7 @@ export function ComposerPermissionsSection(props: {
 
 export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
   children?: React.ReactNode;
+  renderSpeechAction?: ((inPill: boolean) => React.ReactNode) | undefined;
   compact: boolean;
   canOperateThread: boolean;
   activeContextWindow: ContextWindowSnapshot | null;
@@ -266,6 +265,7 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
   canSteer: boolean;
   alternateShortcutLabel: string | null;
   showPlanFollowUpPrompt: boolean;
+  onImplementPlanInNewThread?: () => void;
   promptHasText: boolean;
   voiceInputActive?: boolean;
   isSendBusy: boolean;
@@ -279,7 +279,6 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
   onResume: () => void;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
-  onImplementPlanInNewThread: () => void;
   onCompactContext?: (() => void) | undefined;
   compactDisabled: boolean;
   compactDisabledReason: string | null;
@@ -310,6 +309,7 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
         followUpBehavior={props.followUpBehavior}
         canSteer={props.canSteer}
         alternateShortcutLabel={props.alternateShortcutLabel}
+        onImplementPlanInNewThread={props.onImplementPlanInNewThread}
         showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
         promptHasText={props.promptHasText}
         voiceInputActive={props.voiceInputActive ?? false}
@@ -321,11 +321,11 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
         canResume={props.canResume}
         preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
         isEditingQueuedMessage={props.isEditingQueuedMessage}
+        renderSpeechAction={props.renderSpeechAction}
         onSubmitMessage={props.onSubmitMessage}
         onResume={props.onResume}
         onPreviousPendingQuestion={props.onPreviousPendingQuestion}
         onInterrupt={props.onInterrupt}
-        onImplementPlanInNewThread={props.onImplementPlanInNewThread}
         compactBeforeSendTokens={props.compactBeforeSendTokens}
         keepFullHistory={props.keepFullHistory}
         onToggleKeepFullHistory={props.onToggleKeepFullHistory}
