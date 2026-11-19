@@ -7,7 +7,10 @@ import type {
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { ChevronDownIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
+import { msg, T, useGT, Var } from "gt-react";
 import { useState } from "react";
+
+import { m } from "~/i18n/messages";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { Button } from "../ui/button";
@@ -29,6 +32,8 @@ import { PullRequestStackLayerContent } from "./PullRequestStackLayerContent";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import { readableFailure } from "./pullRequestDetail.logic";
 
+import { changeRequestTermKind } from "./changeRequestTerm";
+
 export function PullRequestStackMenu({
   hostLabel,
   terminology,
@@ -37,6 +42,7 @@ export function PullRequestStackMenu({
   environmentId,
   stale,
   canMerge,
+  conflictsWith = null,
   canRebase,
   mergeMethod,
   onSelect,
@@ -62,11 +68,14 @@ export function PullRequestStackMenu({
   environmentId: EnvironmentId;
   stale: boolean;
   canMerge: boolean;
+  /** The base branch this pull request conflicts with; the stack cannot merge through it. */
+  conflictsWith?: string | null;
   canRebase: boolean;
   mergeMethod: PullRequestMergeMethod;
   onSelect?: ((reference: PullRequestRef) => void) | undefined;
   onActed: () => void;
 }) {
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<"merge" | "update-branch" | null>(null);
   const [pending, setPending] = useState(false);
@@ -85,11 +94,13 @@ export function PullRequestStackMenu({
   const mergeDisabled =
     pending ||
     stale ||
+    conflictsWith !== null ||
     selectedLayer?.state !== "open" ||
     mergeLayers.some((layer) => !layer.headSha) ||
     mergeHasClosed ||
     mergeLayers.length === 0 ||
     mergeLayers.some((layer) => layer.isDraft);
+  const staleReason = notice ?? gt("Checking the stack with the host…");
   const rebaseDisabled = pending || stale || hasUnknownHead || hasClosed || unmerged.length === 0;
   const run = async () => {
     if (
@@ -108,7 +119,7 @@ export function PullRequestStackMenu({
     setConfirmation(null);
     const toastId = toastManager.add({
       type: "loading",
-      title: action === "merge" ? "Merging stack..." : "Rebasing stack...",
+      title: action === "merge" ? m(msg("Merging stack...")) : m(msg("Rebasing stack...")),
     });
     const result = await runAction({
       environmentId,
@@ -126,21 +137,33 @@ export function PullRequestStackMenu({
     if (result._tag === "Failure") {
       toastManager.update(toastId, {
         type: "error",
-        title: action === "merge" ? "Could not merge the stack" : "Could not rebase the stack",
+        title:
+          action === "merge"
+            ? m(msg("Could not merge the stack"))
+            : m(msg("Could not rebase the stack")),
         description: readableFailure(
           squashAtomCommandFailure(result),
           action === "merge"
-            ? "The host refused the merge. Check that you have write access, that the checks it requires have passed, and that the branch is not conflicting."
-            : "The host refused the rebase. A rebase stops at the first commit that does not apply cleanly.",
+            ? m(
+                msg(
+                  "The host refused the merge. Check that you have write access, that the checks it requires have passed, and that the branch is not conflicting.",
+                ),
+              )
+            : m(
+                msg(
+                  "The host refused the rebase. A rebase stops at the first commit that does not apply cleanly.",
+                ),
+              ),
         ),
       });
     } else {
       toastManager.update(toastId, {
         type: "success",
-        title: action === "merge" ? "Stack merge request completed" : "Stack rebased",
+        title:
+          action === "merge" ? m(msg("Stack merge request completed")) : m(msg("Stack rebased")),
         description:
           action === "merge"
-            ? `${hostLabel} merged the stack or added it to its merge queue.`
+            ? m(msg("{host} merged the stack or added it to its merge queue.", { host: hostLabel }))
             : undefined,
       });
     }
@@ -158,7 +181,11 @@ export function PullRequestStackMenu({
                     <Button
                       variant="success-outline"
                       size="chip"
-                      aria-label={`Stack ${stack.number}, layer ${position} of ${stack.layers.length}`}
+                      aria-label={gt("Stack {number}, layer {position} of {size}", {
+                        number: stack.number,
+                        position,
+                        size: stack.layers.length,
+                      })}
                     />
                   }
                 >
@@ -174,7 +201,10 @@ export function PullRequestStackMenu({
             <TooltipPopup>
               <span className="flex flex-col gap-0.5">
                 <span>
-                  View stack #{stack.number}, layer {position} of {stack.layers.length}
+                  <T>
+                    View stack #<Var>{stack.number}</Var>, layer <Var>{position}</Var> of{" "}
+                    <Var>{stack.layers.length}</Var>
+                  </T>
                 </span>
                 {notice ? <span>{notice}</span> : null}
               </span>
@@ -190,7 +220,11 @@ export function PullRequestStackMenu({
                 notice={notice}
                 stale={!!onRetry}
               />
-              {onRetry ? <MenuItem onClick={onRetry}>Retry stack refresh</MenuItem> : null}
+              {onRetry ? (
+                <MenuItem onClick={onRetry}>
+                  <T>Retry stack refresh</T>
+                </MenuItem>
+              ) : null}
               <PullRequestStackLayers
                 stack={stack}
                 terminology={terminology}
@@ -212,8 +246,12 @@ export function PullRequestStackMenu({
                 <MenuSeparator />
                 {canMerge ? (
                   <MenuItem disabled={mergeDisabled} onClick={() => setConfirmation("merge")}>
-                    <PullRequestGlyph.merged aria-hidden />
-                    Merge stack ({mergeLayers.length})
+                    <span className="flex size-4 shrink-0 items-center">
+                      <PullRequestGlyph.merged aria-hidden className="size-4" />
+                    </span>
+                    <T>
+                      Merge stack (<Var>{mergeLayers.length}</Var>)
+                    </T>
                   </MenuItem>
                 ) : null}
                 {canRebase ? (
@@ -221,13 +259,21 @@ export function PullRequestStackMenu({
                     disabled={rebaseDisabled}
                     onClick={() => setConfirmation("update-branch")}
                   >
-                    <RefreshCwIcon aria-hidden />
-                    Rebase stack
+                    <span className="flex size-4 shrink-0 items-center">
+                      <RefreshCwIcon aria-hidden className="size-4" />
+                    </span>
+                    <T>Rebase stack</T>
                   </MenuItem>
                 ) : null}
-                {mergeHasClosed || mergeLayers.some((layer) => layer.isDraft) ? (
+                {conflictsWith !== null ? (
                   <p className="px-2 py-1 text-meta text-muted-foreground">
-                    Every layer being merged must be open and ready for review.
+                    <T>
+                      Resolve the conflicts with <Var>{conflictsWith}</Var> before merging.
+                    </T>
+                  </p>
+                ) : mergeHasClosed || mergeLayers.some((layer) => layer.isDraft) ? (
+                  <p className="px-2 py-1 text-meta text-muted-foreground">
+                    <T>Every layer being merged must be open and ready for review.</T>
                   </p>
                 ) : null}
               </>
@@ -235,7 +281,10 @@ export function PullRequestStackMenu({
           </MenuPopup>
         </Menu>
       ) : null}
-      {display !== "trigger" && canMerge && selectedLayer?.state === "open" ? (
+      {display !== "trigger" &&
+      canMerge &&
+      conflictsWith === null &&
+      selectedLayer?.state === "open" ? (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -246,19 +295,27 @@ export function PullRequestStackMenu({
                   size={display === "merge-button" ? "sm" : "xs"}
                   disabled={mergeDisabled && !stale}
                   aria-disabled={mergeDisabled || undefined}
-                  aria-description={stale ? (notice ?? undefined) : undefined}
+                  aria-description={stale ? staleReason : undefined}
                   onClick={mergeDisabled ? undefined : () => setConfirmation("merge")}
                 >
                   <PullRequestGlyph.merged aria-hidden className="size-3.5" />
-                  Merge stack
+                  <T>Merge stack</T>
                 </Button>
               </span>
             }
           />
           <TooltipPopup>
             {stale
-              ? notice
-              : `Merge stack through #${reference.number} into ${stack.base} (${mergeLayers.length} ${mergeLayers.length === 1 ? terminology.singular : terminology.plural})`}
+              ? staleReason
+              : gt(
+                  "{count, plural, one {Merge stack through '#'{number} into {base} ({count} {term, select, mr {merge request} cr {change request} other {pull request}})} other {Merge stack through '#'{number} into {base} ({count} {term, select, mr {merge requests} cr {change requests} other {pull requests}})}}",
+                  {
+                    count: mergeLayers.length,
+                    number: reference.number,
+                    base: stack.base,
+                    term: changeRequestTermKind(terminology),
+                  },
+                )}
           </TooltipPopup>
         </Tooltip>
       ) : null}
@@ -272,13 +329,36 @@ export function PullRequestStackMenu({
           <DialogHeader>
             <DialogTitle>
               {confirmation === "merge"
-                ? `Merge ${mergeLayers.length} ${mergeLayers.length === 1 ? terminology.singular : terminology.plural}?`
-                : `Rebase ${unmerged.length} ${unmerged.length === 1 ? terminology.singular : terminology.plural}?`}
+                ? gt(
+                    "{count, plural, one {Merge {count} {term, select, mr {merge request} cr {change request} other {pull request}}?} other {Merge {count} {term, select, mr {merge requests} cr {change requests} other {pull requests}}?}}",
+                    {
+                      count: mergeLayers.length,
+                      term: changeRequestTermKind(terminology),
+                    },
+                  )
+                : gt(
+                    "{count, plural, one {Rebase {count} {term, select, mr {merge request} cr {change request} other {pull request}}?} other {Rebase {count} {term, select, mr {merge requests} cr {change requests} other {pull requests}}?}}",
+                    {
+                      count: unmerged.length,
+                      term: changeRequestTermKind(terminology),
+                    },
+                  )}
             </DialogTitle>
             <DialogDescription>
               {confirmation === "merge"
-                ? `Merge #${reference.number} and its unmerged layers below into ${stack.base} using ${mergeMethod}. ${hostLabel} checks their rules before merging or queueing them and rebases the remaining stack after merging.`
-                : `Rebase the remote branches from bottom to top onto ${stack.base}. This rewrites branch history and may restart checks. If a layer fails, earlier updates remain.`}
+                ? gt(
+                    "Merge #{number} and its unmerged layers below into {base} using {method}. {host} checks their rules before merging or queueing them and rebases the remaining stack after merging.",
+                    {
+                      number: reference.number,
+                      base: stack.base,
+                      method: mergeMethod,
+                      host: hostLabel,
+                    },
+                  )
+                : gt(
+                    "Rebase the remote branches from bottom to top onto {base}. This rewrites branch history and may restart checks. If a layer fails, earlier updates remain.",
+                    { base: stack.base },
+                  )}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -295,10 +375,10 @@ export function PullRequestStackMenu({
           </DialogPanel>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setConfirmation(null)}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button onClick={() => void run()}>
-              {confirmation === "merge" ? "Merge stack" : "Rebase stack"}
+              {confirmation === "merge" ? gt("Merge stack") : gt("Rebase stack")}
             </Button>
           </DialogFooter>
         </DialogPopup>

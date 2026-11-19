@@ -1,5 +1,6 @@
 import { type RuntimeRequestId, type ScopedThreadRef } from "@t3tools/contracts";
 import { markdownProseDirection, textDirection } from "~/textDirection";
+import { T, useGT } from "gt-react";
 import { memo, use, useEffect, useEffectEvent, useRef, useState } from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
 import { useStableCallback } from "~/hooks/useStableCallback";
@@ -133,6 +134,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onPrevious: (() => void) | undefined;
   onWriteAnswer: (() => void) | undefined;
 }) {
+  const gt = useGT();
   // Message-mode requests remain answerable after their provider turn ends.
   const canRespond = prompt.responseCapability !== "not_resumable";
   const responseDisabled = disabled || isResponding || !canRespond;
@@ -205,10 +207,18 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
 
   const selectOptionFromShortcut = useEffectEvent(handleOptionSelection);
   const backgroundThread = use(BackgroundThreadContext);
+  const handleWriteAnswer = () => {
+    if (responseDisabled) return;
+    if (autoAdvanceTimerRef.current !== null) {
+      window.clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    onWriteAnswer?.();
+  };
   const writeAnswerFromShortcut = useEffectEvent((event: globalThis.KeyboardEvent) => {
     if (!canWriteAnswer) return;
     event.preventDefault();
-    onWriteAnswer?.();
+    handleWriteAnswer();
   });
 
   // Only the layout-focused pane's prompt answers number-key shortcuts.
@@ -217,7 +227,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   useEffect(() => {
     if (!activeQuestion || responseDisabled || isCollapsed || backgroundThread) return;
     const handler = (event: globalThis.KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (!paneFocusedRef.current) return;
       const target = event.target;
       if (isInSideChatPane(target)) return;
@@ -226,7 +236,9 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
       }
       if (
         target instanceof HTMLElement &&
-        target.closest('[contenteditable]:not([contenteditable="false"])')
+        target.closest(
+          'select, [contenteditable]:not([contenteditable="false"]), [role="dialog"], [aria-modal="true"], [role="menu"], [role="combobox"], [data-slot$="popup"]',
+        )
       ) {
         return;
       }
@@ -264,17 +276,17 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   const writeOptionKey =
     activeQuestion.options.length < 9 ? activeQuestion.options.length + 1 : null;
   const hint = customAnswerActive
-    ? "Your answer is ready to submit."
+    ? gt("Your answer is ready to submit.")
     : activeQuestion.multiSelect
-      ? "Select one or more options."
-      : "Select one option.";
+      ? gt("Select one or more options.")
+      : gt("Select one option.");
   const primaryLabel = primaryAction?.isResponding
-    ? "Submitting…"
+    ? gt("Submitting…")
     : primaryAction && !primaryAction.isLastQuestion
-      ? "Next"
+      ? gt("Next", { $context: "button that goes to the next question" })
       : prompt.questions.length > 1
-        ? "Submit answers"
-        : "Answer";
+        ? gt("Submit answers")
+        : gt("Answer", { $context: "verb, submits the answer to a question" });
 
   return (
     <Collapsible
@@ -291,14 +303,14 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
             render={<button type="button" />}
             title={
               isCollapsed
-                ? "Show the question and its options"
-                : "Hide the question and its options"
+                ? gt("Show the question and its options")
+                : gt("Hide the question and its options")
             }
             data-pending-user-input-toggle={isCollapsed ? "collapsed" : "expanded"}
           />
         }
         icon={<MessageCircleQuestionMarkIcon className="text-ring" />}
-        title="Question"
+        title={gt("Question", { $context: "heading of a question the agent asks" })}
         sub={
           isCollapsed ? (
             <span
@@ -307,8 +319,10 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
             >
               {activeQuestion.question}
             </span>
+          ) : providerLabel ? (
+            gt("{provider} needs an answer", { provider: providerLabel })
           ) : (
-            `${providerLabel || "The agent"} needs an answer`
+            gt("The agent needs an answer")
           )
         }
         trailing={
@@ -320,8 +334,8 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
             {prompt.dismissible ? (
               <ComposerBanner.Dismiss
                 render={<span role="button" tabIndex={0} />}
-                aria-label="Dismiss question without answering"
-                title="Dismiss question without answering"
+                aria-label={gt("Dismiss question without answering")}
+                title={gt("Dismiss question without answering")}
                 disabled={isResponding}
                 data-pending-user-input-dismiss
                 onClick={(event) => {
@@ -348,6 +362,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                 text={activeQuestion.question}
                 cwd={cwd}
                 threadRef={threadRef}
+                lineBreaks
                 className={cn("text-foreground", questionTextAlign)}
               />
             </ComposerRequestCard.Body>
@@ -360,33 +375,44 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                 const isSelected =
                   isOptimisticallySelected || draftSelectedOptions?.[index] === true;
                 return (
-                  <QuestionOptionRow
-                    textAlign={questionTextAlign}
-                    key={`${activeQuestion.id}:${optionValue}`}
-                    label={option.label}
-                    description={
-                      option.description && option.description !== option.label
-                        ? option.description
-                        : null
-                    }
-                    multiSelect={activeQuestion.multiSelect === true}
-                    selected={isSelected}
-                    shortcutKey={index < 9 ? index + 1 : null}
-                    disabled={disabled || isResponding}
-                    onSelect={() => handleOptionSelection(activeQuestion.id, optionValue)}
-                  />
+                  // The preview sits outside the row: it can hold links, and a click on a single-select option advances.
+                  <div key={`${activeQuestion.id}:${optionValue}`}>
+                    <QuestionOptionRow
+                      textAlign={questionTextAlign}
+                      label={option.label}
+                      description={
+                        option.description && option.description !== option.label
+                          ? option.description
+                          : null
+                      }
+                      multiSelect={activeQuestion.multiSelect === true}
+                      selected={isSelected}
+                      shortcutKey={index < 9 ? index + 1 : null}
+                      disabled={disabled || isResponding}
+                      onSelect={() => handleOptionSelection(activeQuestion.id, optionValue)}
+                    />
+                    {option.preview ? (
+                      <ChatMarkdown
+                        text={option.preview}
+                        cwd={cwd}
+                        threadRef={threadRef}
+                        lineBreaks
+                        className="ps-8.5 pe-2 pb-1.5 text-meta text-foreground/70"
+                      />
+                    ) : null}
+                  </div>
                 );
               })}
               {canWriteAnswer ? (
                 <QuestionOptionRow
                   textAlign={questionTextAlign}
-                  label="Let me write an answer"
+                  label={gt("Let me write an answer")}
                   description={customAnswerActive ? progress.customAnswer.trim() : null}
                   multiSelect={activeQuestion.multiSelect === true}
                   selected={customAnswerActive}
                   shortcutKey={writeOptionKey}
-                  disabled={disabled || isResponding}
-                  onSelect={() => onWriteAnswer?.()}
+                  disabled={responseDisabled}
+                  onSelect={handleWriteAnswer}
                 />
               ) : null}
             </ComposerRequestCard.Well>
@@ -402,7 +428,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               disabled={isResponding}
               onClick={() => onDismiss(prompt.requestId)}
             >
-              Skip
+              <T>Skip</T>
             </Button>
           ) : null}
           {!actionsInComposer && onPrevious && questionIndex > 0 ? (
@@ -412,7 +438,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               disabled={primaryAction?.isResponding ?? isResponding}
               onClick={onPrevious}
             >
-              Previous
+              {gt("Previous", { $context: "button that goes to the previous question" })}
             </Button>
           ) : null}
           {!actionsInComposer && onSubmit ? (
@@ -454,7 +480,7 @@ function QuestionOptionRow({
 }) {
   const className = cn(
     textAlign,
-    "group flex w-full items-center gap-2.5 rounded-row px-2.5 py-2 text-foreground outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+    "group flex w-full items-center gap-2.5 rounded-row px-2.5 py-2 text-foreground outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
     selected ? "bg-selection-neutral" : "bg-transparent hover:surface-ghost-hover",
     disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
   );
@@ -489,7 +515,7 @@ function QuestionOptionRow({
         <span
           aria-hidden
           className={cn(
-            "flex size-4 shrink-0 items-center justify-center rounded-kbd",
+            "flex size-4 shrink-0 items-center justify-center rounded-kbd border border-foreground/55",
             selected ? "surface-gloss-on text-primary-foreground" : "surface-well",
           )}
         >

@@ -1,6 +1,8 @@
 import { workspaceAreaProps } from "../lib/workspaceFocus";
-import { Outlet, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect, useMatches, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
+import { T, useGT, useMessages, Var } from "gt-react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RestoreDeviceDefaultsButton } from "../components/settings/SettingsPanels";
 
 import { AppRouteModal, AppRouteModalClose } from "../components/AppRouteModal";
@@ -29,6 +31,8 @@ import {
 function SettingsScopeBoundary({ pathname, children }: { pathname: string; children: ReactNode }) {
   const { scope, connectedEnvironments } = useSettingsScope();
   const { environments } = useEnvironments();
+  const gt = useGT();
+  const m = useMessages();
   const { hash } = useLayoutPageLocation();
   const searchTarget = getSettingsSearchTargetScope(hash);
   const autoSettlementAvailability = searchTarget?.requiresThreadAutoSettlement
@@ -47,8 +51,13 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
         eligibleEnvironmentIds={autoSettlementAvailability.eligibleEnvironmentIds}
       >
         {autoSettlementAvailability.eligibleEnvironmentIds.length > 0
-          ? `${searchTarget.title} requires a supporting environment. Choose one to continue.`
-          : `${searchTarget.title} requires a supporting environment. Connect or update an environment to continue.`}
+          ? gt("{title} requires a supporting environment. Choose one to continue.", {
+              title: m(searchTarget.title),
+            })
+          : gt(
+              "{title} requires a supporting environment. Connect or update an environment to continue.",
+              { title: m(searchTarget.title) },
+            )}
       </SettingsScopeNotice>
     );
   }
@@ -65,7 +74,10 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
         : "all";
     return (
       <SettingsScopeNotice target={target} targetId={hash}>
-        {`${searchTarget.title} is not available for the selected target. Choose its owning scope to continue.`}
+        {gt(
+          "{title} is not available for the selected target. Choose its owning scope to continue.",
+          { title: m(searchTarget.title) },
+        )}
       </SettingsScopeNotice>
     );
   }
@@ -82,7 +94,9 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
     return (
       <SettingsPageContainer>
         <p className="text-body text-muted-foreground">
-          Reconnect {scope.label} to change its settings.
+          <T>
+            Reconnect <Var>{scope.label}</Var> to change its settings.
+          </T>
         </p>
       </SettingsPageContainer>
     );
@@ -91,29 +105,34 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
 }
 
 function SettingsContentLayout({ children }: { children: ReactNode }) {
-  const contentArea = workspaceAreaProps("settings", 1, "Settings content");
-  const location = useLayoutPageLocation();
+  const gt = useGT();
+  const isMobile = useMediaQuery("max-md");
+  const contentArea = workspaceAreaProps("settings", 1, gt("Settings content"));
+  const pathname = useMatches({ select: (matches) => matches.at(-1)!.pathname });
   const { search, environment } = useSettingsScope();
   const contentScopeKey =
-    location.pathname === "/settings/diagnostics" || location.pathname === "/settings/providers"
+    pathname === "/settings/diagnostics" || pathname === "/settings/providers"
       ? environment?.environmentId
       : JSON.stringify(search);
   const [restoreSignal, setRestoreSignal] = useState(0);
   return (
-    <AppRouteModal label="Settings" variant="app-panel">
+    <AppRouteModal label={gt("Settings")} variant="app-panel">
       <div className="relative flex min-h-0 flex-1">
-        <SettingsSidebarNav pathname={location.pathname} />
+        <SettingsSidebarNav pathname={pathname} />
         <div
           {...contentArea}
           data-app-modal-pane=""
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          className="pane-mobile-chrome flex min-h-0 min-w-0 flex-1 flex-col"
         >
-          <header className="flex h-13 shrink-0 items-center gap-3 ps-5 pe-3">
-            <SettingsBreadcrumb pathname={location.pathname} />
+          <header
+            data-pane-header=""
+            data-chrome-scope={isMobile ? "" : undefined}
+            className="flex h-13 shrink-0 items-center gap-3 ps-5 pe-3"
+          >
+            <SettingsBreadcrumb pathname={pathname} />
             <div className="relative z-20 ms-auto flex shrink-0 items-center gap-1">
-              {location.pathname === "/settings/general" ? (
+              {pathname === "/settings/general" ? (
                 <RestoreDeviceDefaultsButton
-                  compact
                   onRestored={() => setRestoreSignal((value) => value + 1)}
                 />
               ) : null}
@@ -121,8 +140,11 @@ function SettingsContentLayout({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <div key={`${contentScopeKey}:${restoreSignal}`} className="min-h-0 flex flex-1 flex-col">
-            <SettingsScopeBoundary pathname={location.pathname}>{children}</SettingsScopeBoundary>
+          <div
+            key={`${contentScopeKey}:${restoreSignal}`}
+            className="min-h-0 flex flex-1 flex-col max-md:overflow-hidden"
+          >
+            <SettingsScopeBoundary pathname={pathname}>{children}</SettingsScopeBoundary>
           </div>
         </div>
       </div>
@@ -140,6 +162,7 @@ function SettingsPage({ children }: { children?: ReactNode }) {
     <SettingsScopeProvider
       search={rawSearch}
       singleEnvironment={pathname === "/settings/providers" || pathname === "/settings/secrets"}
+      deviceOnly={SETTINGS_DEVICE_ONLY_PATHS.has(pathname)}
       onChange={(next) => {
         // Send every axis so retain middleware recognizes "all" as an explicit target.
         void navigate({

@@ -1,3 +1,4 @@
+import { useLocale, useMessages } from "gt-react";
 import { useState } from "react";
 import {
   computeStableMessagesTimelineRows,
@@ -47,19 +48,25 @@ export function useIncrementalTimelineRows(
   identity: string,
   input: MessagesTimelineRowsInput,
 ): MessagesTimelineRow[] {
+  // Keyed on the locale: without a GTProvider, useMessages() returns a new function every render.
+  const locale = useLocale();
+  const resolve = useMessages();
   const [state, setState] = useState(() => ({
     identity,
     input,
-    projection: deriveMessagesTimelineRowsWithState(input),
+    locale,
+    projection: deriveMessagesTimelineRowsWithState(input, null, resolve),
   }));
-  if (state.identity === identity && sameRowsInput(state.input, input)) {
+  const reusable = state.identity === identity && state.locale === locale;
+  if (reusable && sameRowsInput(state.input, input)) {
     return state.projection.rows;
   }
   const projection = deriveMessagesTimelineRowsWithState(
     input,
-    state.identity === identity ? state.projection : null,
+    reusable ? state.projection : null,
+    resolve,
   );
-  setState({ identity, input, projection });
+  setState({ identity, input, locale, projection });
   return projection.rows;
 }
 
@@ -94,6 +101,12 @@ export function useStableRows(
     }
   }
   const previous = state.identity === identity ? state.stable : { byId: new Map(), result: [] };
+  // Labs fold off: the running turn streams in place and wake-ups keep their rows, like main.
+  if (!input.turnWorkFold) {
+    const stable = computeStableMessagesTimelineRows(rows, previous);
+    setState({ identity, source: rows, input, stable });
+    return stable.result;
+  }
   const windowed = input.windowlessCitation
     ? rows
     : applyWorkingWindow(rows, input, input.workingHistoryKey);
@@ -123,6 +136,7 @@ type StableTimelineRowsInput = Parameters<typeof applyBackgroundActivityGroups>[
   readonly workingHistoryKey: string | null;
   readonly windowlessCitation: boolean;
   readonly activeFindEntryId: string | null;
+  readonly turnWorkFold: boolean;
 };
 
 export function useTimelineSlashCommandCatalog(

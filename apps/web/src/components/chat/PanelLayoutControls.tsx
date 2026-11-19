@@ -1,10 +1,12 @@
-import { ListFilterIcon } from "lucide-react";
-import { Maximize2, Minimize2 } from "lucide";
-import { MorphIcon } from "~/components/MorphIcon";
+import { ListFilterIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
+import { useGT } from "gt-react";
+
 import { memo } from "react";
 
 import type { ThreadPanelPresentation } from "../../rightPanelLayout";
+import { Button } from "../ui/button";
 import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
+import { useMobileSidebarSheetMounted } from "../ui/sidebar";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -28,22 +30,25 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   onToggleThreadPanel,
   disabledReason = null,
 }: PanelLayoutControlsProps) {
+  const gt = useGT();
+  const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
+  if (mobileSidebarSheetMounted) return null;
   const threadPanelToggle = (
-    <Toggle
+    <Button
       className="relative shrink-0 [-webkit-app-region:no-drag]"
-      pressed={threadPanelOpen}
-      onPressedChange={threadPanelPresentation === "popover" ? undefined : onToggleThreadPanel}
+      aria-expanded={threadPanelOpen}
+      onClick={threadPanelPresentation === "popover" ? undefined : onToggleThreadPanel}
       disabled={disabledReason !== null}
-      aria-label="Toggle thread details panel"
+      aria-label={gt("Toggle thread details panel")}
       variant="ghost"
-      size="sm"
+      size="icon-sm"
     >
       <ListFilterIcon className="size-3.5" />
-    </Toggle>
+    </Button>
   );
   const threadPanelControl = (
     <Tooltip>
-      <TooltipTrigger render={<span className="flex shrink-0" />}>
+      <TooltipTrigger render={<span className="flex shrink-0" data-thread-panel-toggle />}>
         {threadPanelPresentation === "popover" ? (
           <PopoverTrigger handle={threadPanelPopoverHandle} render={threadPanelToggle} />
         ) : (
@@ -51,12 +56,10 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
         )}
       </TooltipTrigger>
       <TooltipPopup side="bottom">
-        {disabledReason ?? (
-          <>
-            Toggle thread details
-            {threadPanelShortcutLabel ? ` (${threadPanelShortcutLabel})` : ""}
-          </>
-        )}
+        {disabledReason ??
+          (threadPanelShortcutLabel
+            ? gt("Toggle thread details ({shortcut})", { shortcut: threadPanelShortcutLabel })
+            : gt("Toggle thread details"))}
       </TooltipPopup>
     </Tooltip>
   );
@@ -79,7 +82,10 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
   maximized: boolean;
   onToggle: () => void;
 }) {
-  const label = maximized ? "Restore panel size" : "Maximize panel";
+  const gt = useGT();
+  const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
+  if (mobileSidebarSheetMounted) return null;
+  const label = maximized ? gt("Restore panel size") : gt("Maximize panel");
   return (
     <Tooltip>
       <TooltipTrigger
@@ -92,7 +98,11 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
             variant="ghost"
             size="sm"
           >
-            <MorphIcon className="size-3.5" icon={maximized ? Minimize2 : Maximize2} />
+            {maximized ? (
+              <Minimize2Icon className="size-3.5" />
+            ) : (
+              <Maximize2Icon className="size-3.5" />
+            )}
           </Toggle>
         }
       />

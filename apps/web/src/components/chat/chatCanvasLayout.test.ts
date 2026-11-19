@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
 import { resizePreviewMiniPlayer } from "../preview/previewMiniPlayerLayout";
 import {
+  THREAD_DETAILS_CARD_GAP,
   resolveThreadDetailsCardDensity,
   resolveThreadDetailsCardLayout,
 } from "./threadDetailsCardLayout";
@@ -356,5 +357,20 @@ describe("workspace card beside chat", () => {
       expect(chat.width).toBeGreaterThanOrEqual(640);
       expect(card.x - chat.left - chat.width).toBeGreaterThanOrEqual(32);
     }
+  });
+  it("stays out of a panel animation that ends or starts too narrow for it", () => {
+    const place = (width: number, narrowestWidth: number) =>
+      resolveThreadDetailsCardLayout({
+        container: { width, height: 900 },
+        narrowestWidth,
+        lane: { padding: 48, minChatWidth: 640 },
+        frame: null,
+      });
+    // The redesign's docked card is 272px wide.
+    expect(place(1344, 1344)).toMatchObject({ x: 1344 - 272 - THREAD_DETAILS_CARD_GAP });
+    expect(place(1344, 804)).toBeNull();
+    expect(place(1344, 1124)).toMatchObject({ x: 1344 - 272 - THREAD_DETAILS_CARD_GAP });
+    // A window resize mid-animation leaves the sampled ends wider than the canvas.
+    expect(place(900, 1344)).toBeNull();
   });
 });

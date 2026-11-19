@@ -38,6 +38,12 @@ const existingCeilings = (ceilings: Record<string, number>) =>
 
 const RESTRICTED_IMPORT_PATHS = [
   {
+    name: "react-native",
+    importNames: ["FlatList"],
+    message:
+      "Use LegendList from @legendapp/list/react-native, with renderScrollComponent={NativeScrollView} in a screen. Pass whatever renderItem reads through extraData: rows only re-render when their item or extraData changes.",
+  },
+  {
     name: "@t3tools/client-runtime",
     message:
       "Import from an explicit @t3tools/client-runtime/* subpath. The package has no root export.",
@@ -52,6 +58,12 @@ const RESTRICTED_IMPORT_PATHS = [
     importNames: ["ScrollViewMarker"],
     message:
       "Use NativeScrollViewMarker or NativeScrollView (src/native/NativeScrollViewMarker.tsx): they carry the header's scroll-edge blur under the Duo's vertical bar.",
+  },
+  {
+    name: "react-native",
+    importNames: ["RefreshControl"],
+    message:
+      "Use RefreshControl from src/components/ui/RefreshControl: Android bottom sheets own the pull at the top, so it steps aside there.",
   },
 ];
 
@@ -145,6 +157,7 @@ export default defineConfig({
       NodeURL.fileURLToPath(
         new URL("./packages/shared/src/testing/providerEnv.ts", import.meta.url),
       ),
+      NodeURL.fileURLToPath(new URL("./packages/shared/src/testing/gitEnv.ts", import.meta.url)),
     ],
     ...(isRepoRootTestRun
       ? {
@@ -328,6 +341,12 @@ export default defineConfig({
         rules: { "t3code/prefer-effect-fn": "off" },
       },
       {
+        files: ["apps/web/src/**", "apps/mobile/src/**", "apps/desktop/src/**"],
+        // Users still pick their own project icon from the full Lucide set.
+        excludeFiles: ["apps/web/src/projectIconOptions.ts"],
+        rules: { "t3code/no-sparkles-icon": "error" },
+      },
+      {
         files: ["apps/web/**/*.test.{ts,tsx}"],
         rules: { "t3code/require-disposable-render": "error" },
       },
@@ -433,27 +452,6 @@ export default defineConfig({
         },
       },
       {
-        files: ["apps/mobile/src/features/**"],
-        rules: {
-          "eslint/no-restricted-imports": [
-            "error",
-            {
-              paths: [...RESTRICTED_IMPORT_PATHS, RESTRICTED_PULL_REQUEST_GLYPH_IMPORTS],
-              patterns: [
-                {
-                  group: [
-                    "**/components/ui/AndroidScreenHeader",
-                    "**/components/ui/WorkspaceAppBar*",
-                  ],
-                  importNames: ["AndroidScreenHeader", "WorkspaceAppBar"],
-                  message: "Use AppBar, so every screen gets the same header and button metrics.",
-                },
-              ],
-            },
-          ],
-        },
-      },
-      {
         files: ["apps/web/src/components/pullRequest/pullRequestIcons.tsx"],
         rules: { "eslint/no-restricted-imports": ["error", { paths: RESTRICTED_IMPORT_PATHS }] },
       },
@@ -528,7 +526,7 @@ export default defineConfig({
         files: ["apps/mobile/src/**"],
         excludeFiles: [
           "apps/mobile/src/components/ui/AppSymbol.tsx",
-          "apps/mobile/src/components/ui/AppSymbol.ios.tsx",
+          "apps/mobile/src/components/ui/AppSymbol.android.tsx",
           "apps/mobile/src/features/pull-requests/pullRequestGlyphs.ts",
         ],
         rules: { "t3code/no-mobile-pull-request-glyph-literals": "error" },
@@ -622,6 +620,20 @@ export default defineConfig({
           ],
         },
       },
+      // Registered always so a disable comment for intentional English counts as used.
+      // `vp run i18n:untranslated` counts what it flags.
+      {
+        files: ["apps/web/src/**", "apps/mobile/src/**", "packages/client-runtime/src/**"],
+        excludeFiles: [
+          "**/*.{test,spec,bench}.{ts,tsx}",
+          "**/{test,testkit,testing,fixtures}/**",
+          "**/*.test-fixtures.ts",
+          "**/{test-fixtures,*TestFixtures}.ts",
+          "apps/mobile/src/features/development/**",
+          "packages/client-runtime/src/rpc/**",
+        ],
+        rules: { "t3code/no-untranslated-copy": "error" },
+      },
       {
         // React Compiler owns memoization; upstream rules do not ban redundant useMemo/useCallback.
         files: ["apps/web/src/**/*.{ts,tsx}"],
@@ -686,6 +698,7 @@ export default defineConfig({
           "apps/mobile/src/features/review/useNativeReviewDiffBridge.ts",
           "apps/mobile/src/features/settings/SettingsEnvironmentsRouteScreen.tsx",
           "apps/mobile/src/features/threads/ThreadComposer.tsx",
+          "apps/mobile/src/components/ComposerSurface.tsx",
           "apps/mobile/src/features/threads/ThreadFeed.tsx",
           "apps/mobile/src/features/threads/ThreadQueueControl.tsx",
           "apps/mobile/src/features/review/ReviewCommentCard.tsx",
@@ -732,7 +745,7 @@ export default defineConfig({
         "apps/web/src/components/pullRequest/PullRequestSummaryTab.tsx": 1,
         "apps/web/src/components/settings/AddProviderInstanceDialog.tsx": 2,
         "apps/web/src/components/sidebar/SidebarProviderUpdatePill.tsx": 2,
-        "apps/web/src/components/ThreadTerminalDrawer.tsx": 2,
+        "apps/web/src/components/ThreadTerminalDrawer.tsx": 1,
         "apps/web/src/components/chat/AssistantCitationCommentEditor.tsx": 1,
         "apps/web/src/components/chat/ComposerPendingUserInputPanel.tsx": 1,
         "apps/web/src/components/chat/ComposerStashMenu.tsx": 1,
@@ -822,7 +835,6 @@ export default defineConfig({
         "apps/web/src/components/settings/KeybindingsSettings.tsx": 1,
         "apps/web/src/components/settings/OpenSourceLicenses.tsx": 1,
         "apps/web/src/components/settings/ThemeEditorPanel.tsx": 6,
-        "apps/web/src/components/chat/ContextWindowMeter.tsx": 9,
         "apps/web/src/components/settings/CaptureShortcutConfig.tsx": 9,
         "apps/web/src/components/chat/WorktreeSetupCard.tsx": 1,
         "apps/web/src/components/ChatMarkdown.tsx": 4,
@@ -912,7 +924,7 @@ export default defineConfig({
         "apps/web/src/components/chat/DiffStatLabel.tsx": 2,
         "apps/web/src/components/chat/DraftHeroHeadline.tsx": 2,
         "apps/web/src/components/chat/ProposedPlanCard.tsx": 2,
-        "apps/web/src/components/chat/ProviderInstanceIcon.tsx": 2,
+        "apps/web/src/components/chat/ProviderInstanceIcon.tsx": 3,
         "apps/web/src/components/chat/ProviderSubagentBar.tsx": 2,
         "apps/web/src/components/chat/ThreadContextDragGhost.tsx": 1,
         "apps/web/src/components/chat/TimelineSystemDivider.tsx": 2,
@@ -966,6 +978,7 @@ export default defineConfig({
         "apps/web/src/components/sidebar/SidebarProviderUpdatePill.tsx": 1,
         "apps/web/src/components/ThreadCommandSubtitle.tsx": 1,
         "apps/web/src/components/settings/SecretsSettings.tsx": 1,
+        "apps/web/src/components/settings/CloudVoiceConfiguration.tsx": 8,
       }).map(([file, maxOccurrences]) => {
         const rule: ["error", { maxOccurrences: number }] = ["error", { maxOccurrences }];
         return { files: [file], rules: { "t3code/no-raw-type-classes": rule } };

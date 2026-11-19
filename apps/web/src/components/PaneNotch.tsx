@@ -3,8 +3,11 @@ import { useRender } from "@base-ui/react/use-render";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useTheme } from "../hooks/useTheme";
+import { useLayoutPane } from "../layout/layoutPaneContext";
 import { observeResize } from "../lib/observeResize";
 import { cn } from "../lib/utils";
+import { holdEndCornerWhileSliding } from "../motion/paneMotion";
 
 /**
  * A tab in the notch (pen N1JIfM): 28px, r8, 10px sides, 7px from the icon to
@@ -12,11 +15,16 @@ import { cn } from "../lib/utils";
  * tooltips keep working in Electron. The focus ring is inset because the tab
  * sits on the pane edge, where the pane clip would cut an outer ring.
  */
-export const PANE_TAB_CLASS =
+export const PANE_TAB_SHAPE_CLASS =
   "inline-flex h-7 min-w-0 max-w-80 items-center gap-1.75 rounded-control px-2.5 text-control text-strong-foreground outline-none [-webkit-app-region:no-drag] focus-visible:inset-ring-2 focus-visible:inset-ring-ring";
+export const PANE_TAB_CLASS = `${PANE_TAB_SHAPE_CLASS} surface-pane-tab`;
 
 export const PANE_TAB_TITLE_CLASS = "max-w-68 truncate";
-export const PANE_INACTIVE_TAB_TITLE_CLASS = "max-w-40 truncate";
+/** The connected pane tabs widen it to the active title's, so activating a tab moves nothing. */
+export const PANE_INACTIVE_TAB_TITLE_CLASS =
+  "max-w-[var(--pane-inactive-tab-title-max,10rem)] truncate";
+/** A ghost tab's title (`LayoutTab.ghostOf`): italic until the tab is kept, as preview tabs are. */
+export const PANE_GHOST_TAB_TITLE_CLASS = "italic pe-0.5 -me-0.5";
 
 /** The thread tab opens its action menu while keeping the notch's tab geometry. */
 export function PaneTabButton({ className, render, ...props }: useRender.ComponentProps<"button">) {
@@ -28,7 +36,7 @@ export function PaneTabButton({ className, render, ...props }: useRender.Compone
         type: render ? undefined : "button",
         className: cn(
           PANE_TAB_CLASS,
-          "cursor-pointer text-left hover:surface-ghost-hover",
+          "cursor-pointer text-left hover:surface-ghost-hover group-hover/tab:surface-ghost-hover",
           className,
         ),
       },
@@ -67,6 +75,9 @@ function markNotchHost(host: Element | null, side: "left" | "right"): () => void
   };
 }
 
+/* ── The notch: light, black chrome only. Elsewhere the row is a bar and the
+   tabs join the pane there (index.css, connected pane tabs). Close notches of
+   one header merge into one chrome row. ── */
 const PANE_NOTCH_MERGE_MARGIN_PX = 4;
 const notchHeaders = new WeakMap<
   HTMLElement,
@@ -128,6 +139,17 @@ function observeNotchGap(notch: HTMLDivElement, side: "left" | "right"): () => v
   };
 }
 
+/**
+ * Whether pane tabs sit on a bar and the active one joins its pane (index.css,
+ * connected pane tabs): from md up, except under light, black chrome, which
+ * keeps the notch.
+ */
+function useConnectedPaneTabs(): boolean {
+  const isMobile = useMediaQuery("max-md");
+  const { blackChrome, resolvedTheme } = useTheme();
+  return !isMobile && !(blackChrome && resolvedTheme === "light");
+}
+
 /** Render first inside a positioned pane header starting at the pane edge. Keep the plus last so the
  * notch includes its trailing padding. */
 export function PaneNotch({
@@ -145,11 +167,14 @@ export function PaneNotch({
   // The tab sits on the window chrome where the notch shows, so light, black
   // chrome gives it the dark tokens there (index.css).
   const isMobile = useMediaQuery("max-md");
+  // Only the notch has two ends that may merge; the bar spans the row.
+  const connected = useConnectedPaneTabs();
   const notchRef = useRef<HTMLDivElement>(null);
+  const { split, focused, visible } = useLayoutPane();
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Mark the mounted notch ancestors and remove those external DOM markers on cleanup.
   useLayoutEffect(() => {
     const notch = notchRef.current;
-    if (!notch || !marksHost) return;
+    if (!notch || !marksHost || !visible) return;
     const unmarkPane = markNotchHost(
       notch.closest(
         side === "right" ? "[data-layout-tab-id], [data-pane-notch-host]" : "[data-layout-tab-id]",
@@ -161,20 +186,36 @@ export function PaneNotch({
       unmarkPane();
       unmarkInset();
     };
-  }, [marksHost, side]);
+  }, [marksHost, side, visible]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Observe the notch DOM gap before paint and stop observing when its host changes.
   useLayoutEffect(() => {
     const notch = notchRef.current;
-    if (!notch || !marksHost || isMobile) return;
+    if (!notch || !marksHost || isMobile || connected) return;
     return observeNotchGap(notch, side);
-  }, [isMobile, marksHost, side]);
+  }, [connected, isMobile, marksHost, side]);
   return (
     <>
-      <span aria-hidden data-pane-notch-corner={side === "left" ? "" : side} />
+      <span
+        aria-hidden
+        ref={side === "right" ? holdEndCornerWhileSliding : undefined}
+        data-pane-notch-corner={side === "left" ? "" : side}
+      />
+      {side === "left" ? (
+        <>
+          <span aria-hidden data-pane-bar-corner="start" />
+          <span
+            aria-hidden
+            ref={holdEndCornerWhileSliding}
+            data-pane-bar-corner="end"
+            data-sidebar-slide-track="end"
+          />
+        </>
+      ) : null}
       <div
         ref={notchRef}
         data-pane-notch={side === "left" ? "" : side}
-        data-chrome-scope={isMobile ? undefined : ""}
+        data-chrome-scope=""
+        data-pane-notch-unfocused={side === "left" && split && !focused ? "" : undefined}
         className={cn(
           "relative isolate flex min-w-0 shrink items-center gap-1 self-stretch [--type-label:0.8125rem]",
           side === "left"

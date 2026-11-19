@@ -6,13 +6,13 @@ import {
   type EnvironmentId,
   type ModelSelection,
   type ProviderInstanceId,
-  type ProviderInteractionMode,
   type RuntimeMode,
   type ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
+import { useGT } from "gt-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -21,23 +21,37 @@ import {
   NO_PROJECTS_DRAFT_ID,
   useComposerDraftStore,
 } from "../../composerDraftStore";
+import { isElectron } from "../../env";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { useTheme } from "../../hooks/useTheme";
+import type { ShortcutMatchContext } from "../../keybindings";
 import { hasExplicitComposerModelSelection } from "../../lib/chatThreadActions";
+import { isEditableFocused } from "../../lib/editableFocus";
 import type { TerminalContextDraft } from "../../lib/terminalContext";
+import { isModelPickerOpen } from "../../modelPickerVisibility";
 import { resolveAppModelSelectionForInstance } from "../../modelSelection";
 import { useEnvironment } from "../../state/environments";
 import { useEnvironmentScope } from "../../state/session";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "../../state/server";
-import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
 import { ComposerSurface } from "./ComposerSurface";
 import { NoProjectChip } from "./NoProjectChip";
 
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_ENTRIES = [] as const;
-const NO_PROJECT_REASON = "Add a project first";
 const noop = () => {};
+// This page opens no terminal, preview or side pane, so only focus decides how Enter resolves.
+const getNoProjectsShortcutContext = (eventTarget: EventTarget | null): ShortcutMatchContext => ({
+  terminalFocus: false,
+  terminalOpen: false,
+  previewFocus: false,
+  previewOpen: false,
+  rightPanelOpen: false,
+  editableFocus: isEditableFocused(eventTarget),
+  modelPickerOpen: isModelPickerOpen(),
+  isWeb: !isElectron,
+  isDesktop: isElectron,
+});
 
 /** Sending needs a project or an environment that offers scratch threads. */
 export function NoProjectsComposer({
@@ -49,6 +63,7 @@ export function NoProjectsComposer({
   readonly onStartWithoutProject: (() => void) | null;
   readonly startUnavailableReason: string | null;
 }) {
+  const gt = useGT();
   const navigate = useNavigate();
   const settings = useEnvironmentSettings(environmentId);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -67,17 +82,10 @@ export function NoProjectsComposer({
   const draftRuntimeMode = useComposerDraftStore(
     (store) => store.getComposerDraft(NO_PROJECTS_DRAFT_ID)?.runtimeMode ?? null,
   );
-  const draftInteractionMode = useComposerDraftStore(
-    (store) => store.getComposerDraft(NO_PROJECTS_DRAFT_ID)?.interactionMode ?? null,
-  );
   const setModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const setStickyModelSelection = useComposerDraftStore((store) => store.setStickyModelSelection);
   const setRuntimeMode = useComposerDraftStore((store) => store.setRuntimeMode);
-  const setInteractionMode = useComposerDraftStore((store) => store.setInteractionMode);
   const runtimeMode = draftRuntimeMode ?? defaultRuntimeMode;
-  const interactionMode = settings.planModeEnabled
-    ? (draftInteractionMode ?? DEFAULT_INTERACTION_MODE)
-    : DEFAULT_INTERACTION_MODE;
 
   // Like a fresh draft, the composer starts on the last model picked anywhere.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Initialize this mounted composer from the external persisted sticky draft store.
@@ -134,11 +142,6 @@ export function NoProjectsComposer({
     setRuntimeMode(NO_PROJECTS_DRAFT_ID, mode);
     scheduleComposerFocus();
   };
-  const handleInteractionModeChange = (mode: ProviderInteractionMode) => {
-    if (mode === "plan" && !settings.planModeEnabled) return;
-    setInteractionMode(NO_PROJECTS_DRAFT_ID, mode);
-    scheduleComposerFocus();
-  };
   const openProviderSetup = (instanceId: ProviderInstanceId) => {
     void navigate({ to: "/settings/providers", search: { environmentId, instanceId } });
   };
@@ -152,7 +155,7 @@ export function NoProjectsComposer({
           environmentId={environmentId}
           canOperateThread={canOperateThread}
           // A first thread has no history to compact.
-          isCompacting={false}
+          canSteer={true}
           resumeCompactionTokens={null}
           keepFullHistory={false}
           onToggleKeepFullHistory={() => {}}
@@ -171,7 +174,7 @@ export function NoProjectsComposer({
           activeThreadId={null}
           activeProjectId={null}
           activeThread={undefined}
-          activeThreadShell={null}
+          activeThreadRuns={EMPTY_ENTRIES}
           promptHistoryEntries={EMPTY_ENTRIES}
           forceExpandedOnMobile={false}
           projectSelectionRequired={false}
@@ -180,7 +183,9 @@ export function NoProjectsComposer({
           isSendBusy={false}
           canResume={false}
           sendDisabledReason={
-            onStartWithoutProject === null ? (startUnavailableReason ?? NO_PROJECT_REASON) : null
+            onStartWithoutProject === null
+              ? (startUnavailableReason ?? gt("Add a project first"))
+              : null
           }
           isPreparingWorktree={false}
           bannerItems={[]}
@@ -189,34 +194,22 @@ export function NoProjectsComposer({
           pendingApprovals={[]}
           onHeldRequestIdsChange={noop}
           pendingUserInputs={[]}
-          activePendingProgress={null}
-          activePendingResolvedAnswers={null}
           activePendingIsResponding={false}
-          activePendingDraftAnswers={{}}
-          activePendingQuestionIndex={0}
           respondingRequestIds={[]}
-          showPlanFollowUpPrompt={false}
-          activeProposedPlan={null}
-          threadSyncPhase={null}
           workspaceFileDragActive={false}
           runtimeMode={runtimeMode}
           defaultRuntimeMode={defaultRuntimeMode}
-          permissionsShownInStrip={false}
-          interactionMode={interactionMode}
           lockedProvider={null}
           providerStatuses={providerStatuses as ServerProvider[]}
           providerCatalogKnown={serverConfig !== null}
           activeProjectDefaultModelSelection={defaultModelSelection}
           activeThreadModelSelection={undefined}
-          contextWindowEntries={EMPTY_ENTRIES}
-          contextWindowLiveUsage={null}
-          contextWindowProviderThread={null}
           compactThreadUnavailable
           compactDisabled
-          compactDisabledReason={NO_PROJECT_REASON}
           resolvedTheme={resolvedTheme}
           settings={settings}
           keybindings={keybindings}
+          getShortcutContext={getNoProjectsShortcutContext}
           terminalOpen={false}
           gitCwd={null}
           pullRequestProjectId={null}
@@ -237,7 +230,6 @@ export function NoProjectsComposer({
           onSend={onStartWithoutProject ?? noop}
           onResume={noop}
           onInterrupt={noop}
-          onImplementPlanInNewThread={noop}
           onSelectActivePendingUserInputOption={noop}
           onAdvanceActivePendingUserInput={noop}
           onDismissActivePendingUserInput={noop}
@@ -246,11 +238,7 @@ export function NoProjectsComposer({
           onProviderModelSelect={onProviderModelSelect}
           onOpenProviderSetup={openProviderSetup}
           getModelDisabledReason={() => null}
-          toggleInteractionMode={() =>
-            handleInteractionModeChange(interactionMode === "plan" ? "default" : "plan")
-          }
           handleRuntimeModeChange={handleRuntimeModeChange}
-          handleInteractionModeChange={handleInteractionModeChange}
           focusComposer={() => composerRef.current?.focusAtEnd()}
           scheduleComposerFocus={scheduleComposerFocus}
           setThreadError={noop}

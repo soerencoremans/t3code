@@ -1,4 +1,7 @@
-import { pullRequestFilterProjects } from "@t3tools/client-runtime/pull-request-project-filter";
+import {
+  pullRequestFilterProjects,
+  type PullRequestProjectFilterGroup,
+} from "@t3tools/client-runtime/pull-request-project-filter";
 import { parsePullRequestQuery } from "@t3tools/client-runtime/pull-request-query";
 import {
   ProjectId,
@@ -9,8 +12,12 @@ import {
   type PullRequestListInput,
   type PullRequestListResult,
   type PullRequestListStatsInput,
+  type ScopedProjectRef,
 } from "@t3tools/contracts";
+import { msg } from "gt-react-native";
 import type { PullRequestListControls } from "../../persistence/mobile-preferences";
+import { compareTimestamps } from "../../lib/time";
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export const PR_LIST_PAGE_SIZE = 30;
 export type { PullRequestListControls } from "../../persistence/mobile-preferences";
@@ -44,7 +51,7 @@ export function pullRequestProjectChoices<
   input: {
     readonly environmentId: string | null;
     readonly controls: PullRequestListControls;
-    readonly environmentLabels: ReadonlyMap<EnvironmentId, string>;
+    readonly groups: ReadonlyArray<PullRequestProjectFilterGroup>;
     readonly servesPullRequests: (environmentId: EnvironmentId) => boolean;
   },
 ) {
@@ -58,7 +65,7 @@ export function pullRequestProjectChoices<
         (input.environmentId === null || project.environmentId === input.environmentId) &&
         (input.servesPullRequests(project.environmentId) || isSelected(project)),
     ),
-    input.environmentLabels,
+    input.groups,
     projects.find(isSelected),
   );
 }
@@ -242,7 +249,7 @@ export function mergePullRequestListEntries(
     const held = entries.get(key);
     if (!held || (entry.observedAt ?? 0) >= (held.observedAt ?? 0)) entries.set(key, entry);
   }
-  return [...entries.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return [...entries.values()].sort((a, b) => compareTimestamps(b.updatedAt, a.updatedAt));
 }
 
 export interface PullRequestListPages {
@@ -405,6 +412,7 @@ export function filterPullRequestList<
   query: string,
   localSearchHosts: ReadonlySet<string>,
   connectedEnvironmentIds?: ReadonlySet<string>,
+  projectRefs?: ReadonlyArray<ScopedProjectRef>,
 ) {
   const normalize = (value: string) => value.toLowerCase();
   const parsed = parsePullRequestQuery(query);
@@ -412,9 +420,18 @@ export function filterPullRequestList<
   const filters = { ...controls.filters, ...parsed.filters };
   const filtered = entries.filter((entry) => {
     if (controls.state !== "all" && entry.state !== controls.state) return false;
-    if (controls.projectId && entry.projectId !== controls.projectId) return false;
-    if (controls.projectEnvironmentId && entry.environmentId !== controls.projectEnvironmentId)
-      return false;
+    if (projectRefs !== undefined) {
+      if (
+        !projectRefs.some(
+          (ref) => ref.projectId === entry.projectId && ref.environmentId === entry.environmentId,
+        )
+      )
+        return false;
+    } else {
+      if (controls.projectId && entry.projectId !== controls.projectId) return false;
+      if (controls.projectEnvironmentId && entry.environmentId !== controls.projectEnvironmentId)
+        return false;
+    }
     const viewerKey = entry.environmentId ? `${entry.environmentId} ${entry.host}` : entry.host;
     const viewer = viewers[viewerKey];
     if (controls.involvement === "reviewing" && !entry.viewerReviewRequested) return false;
@@ -455,41 +472,42 @@ export function filterPullRequestList<
   }
   return [...unique.values()].sort((a, b) =>
     controls.sort === "created"
-      ? b.createdAt.localeCompare(a.createdAt)
+      ? compareTimestamps(b.createdAt, a.createdAt)
       : controls.sort === "oldest"
-        ? a.updatedAt.localeCompare(b.updatedAt)
-        : b.updatedAt.localeCompare(a.updatedAt),
+        ? compareTimestamps(a.updatedAt, b.updatedAt)
+        : compareTimestamps(b.updatedAt, a.updatedAt),
   );
 }
 
 export function pullRequestListReviewStatus(
   entry: Pick<PullRequestListEntry, "reviewDecision" | "viewerReviewRequested">,
+  resolve: MessageResolver = m,
 ) {
   if (entry.reviewDecision === "changes-requested")
     return {
-      label: "Changes",
-      accessibleLabel: "Changes requested",
+      label: resolve(msg("Changes", { $context: "review status badge: changes requested" })),
+      accessibleLabel: resolve(msg("Changes requested")),
       icon: "person.fill.xmark",
       tint: "accent-danger-foreground",
     } as const;
   if (entry.reviewDecision === "approved")
     return {
-      label: "Approved",
-      accessibleLabel: "Reviews approved",
+      label: resolve(msg("Approved", { $context: "review status badge" })),
+      accessibleLabel: resolve(msg("Reviews approved")),
       icon: "person.fill.checkmark",
       tint: "accent-adaptive-emerald-600-400",
     } as const;
   if (entry.viewerReviewRequested)
     return {
-      label: "Your review",
-      accessibleLabel: "Your review requested",
+      label: resolve(msg("Your review")),
+      accessibleLabel: resolve(msg("Your review requested")),
       icon: "person.badge.clock",
       tint: "accent-warning-foreground",
     } as const;
   if (entry.reviewDecision === "review-required")
     return {
-      label: "Review",
-      accessibleLabel: "Review required",
+      label: resolve(msg("Review", { $context: "review status badge: review required" })),
+      accessibleLabel: resolve(msg("Review required")),
       icon: "person.badge.clock",
       tint: "accent-icon-muted",
     } as const;

@@ -3,25 +3,64 @@
  * Measure targets from current DOM geometry on each move.
  */
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ContextMenuItem, ScopedThreadRef } from "@t3tools/contracts";
+import type { ContextMenuItem, RunId, ScopedThreadRef } from "@t3tools/contracts";
 import { useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { msg } from "gt-react";
 
+import {
+  dropThreadContext,
+  endThreadContextDrag,
+  hoverThreadContextDrop,
+  threadContextDropTargets,
+} from "../components/chat/threadContextDrag";
 import {
   countLayoutTabs,
   findLayoutPane,
   findLayoutTab,
+  findLayoutTabByContent,
+  layoutTabContentKey,
+  THREAD_TERMINAL_SURFACE_ID,
   selectFocusedChatTab,
-  selectFocusedWorkspace,
   type LayoutDirection,
+  type LayoutLauncherContent,
   type LayoutState,
+  type LayoutTabContent,
   type LayoutTabDestination,
+  type LayoutTabLocation,
 } from "./layoutModel";
 import { isScrollingWorkspacesEnabled } from "./layoutBehavior";
+import { useDiffPanelStore } from "../diffPanelStore";
+import { useTerminalUiStateStore } from "../terminalUiStateStore";
+import { notePaneDrop } from "../motion/paneDrop";
+import { m, type MessageResolver } from "../i18n/messages";
+import {
+  rightPanelHostRef,
+  selectThreadRightPanelState,
+  useRightPanelStore,
+  type RightPanelSurface,
+} from "../rightPanelStore";
 import { saveLayoutNow, useLayoutStore } from "./layoutStore";
+import { requestLayoutSurfacePlacement } from "./surfaceSync";
+
+export type LayoutDragSurface =
+  | Exclude<RightPanelSurface, { kind: "diff" }>
+  | { id: "diff"; kind: "diff"; runId?: RunId; filePath?: string }
+  | { id: typeof THREAD_TERMINAL_SURFACE_ID; kind: "thread-terminal" };
 
 export type LayoutDragSource =
   | { kind: "tab"; tabId: string }
-  | { kind: "thread"; threadRef: ScopedThreadRef };
+  | { kind: "thread"; threadRef: ScopedThreadRef }
+  | { kind: "pull-requests" }
+  | { kind: "issues" }
+  | {
+      kind: "surface";
+      threadRef: ScopedThreadRef;
+      surface: LayoutDragSurface;
+      resolve?: () => Promise<LayoutDragSurface | null>;
+    }
+  | { kind: "new-tab"; content: LayoutLauncherContent };
+
+export type LayoutDragContentSource = Exclude<LayoutDragSource, { kind: "tab" }>;
 
 export type LayoutDropTarget =
   | { kind: "side"; paneId: string; side: LayoutDirection }
@@ -45,10 +84,15 @@ export interface LayoutDragPane {
 
 export interface LayoutDragState {
   source: LayoutDragSource;
+  sourceTabId: string | null;
   point: { x: number; y: number };
   panes: readonly LayoutDragPane[];
   strip: LayoutDragRect;
   target: LayoutDropTarget | null;
+  /** Composers that take this drag as a mention. They sit above the zones. */
+  composers: readonly LayoutDragRect[];
+  /** The composer under the pointer. It takes the drop, so there is no target. */
+  composer: LayoutDragRect | null;
 }
 
 /** The chrome row at the top of a pane: dropping there adds a tab (pen: zones start 48px down). */
@@ -160,15 +204,20 @@ export function resolveLayoutDropTarget(
 function layoutDropDestination(
   layout: LayoutState,
   target: LayoutDropTarget,
+  workspaceId = layout.focusedWorkspaceId,
 ): LayoutTabDestination | null {
-  if (target.kind === "side") return { kind: "split", paneId: target.paneId, side: target.side };
+  if (target.kind !== "extend" && !findLayoutPane(layout, target.paneId)) return null;
+  if (target.kind === "side") {
+    return { kind: "split", paneId: target.paneId, side: target.side, exact: true };
+  }
   if (target.kind === "into")
     return {
       kind: "pane",
       paneId: target.paneId,
       ...(target.index === undefined ? {} : { index: target.index }),
     };
-  const workspace = selectFocusedWorkspace(layout);
+  const workspace = layout.workspaces.find((candidate) => candidate.id === workspaceId);
+  if (!workspace) return null;
   if (target.edge === "left") return { kind: "column", workspaceId: workspace.id, index: 0 };
   if (target.edge === "right") {
     return { kind: "column", workspaceId: workspace.id, index: workspace.columns.length };
@@ -186,15 +235,16 @@ function layoutDropDestination(
  * when it is that pane's only tab, into the pane it already sits in, or out
  * to an edge when it is already alone there.
  */
-function isLayoutDropUseful(
+export function isLayoutDropUseful(
   layout: LayoutState,
   source: LayoutDragSource,
   target: LayoutDropTarget,
+  workspaceId = layout.focusedWorkspaceId,
 ): boolean {
-  if (layoutDropDestination(layout, target) === null) return false;
+  if (layoutDropDestination(layout, target, workspaceId) === null) return false;
   if (source.kind === "thread") return true;
-  const location = findLayoutTab(layout, (tab) => tab.id === source.tabId);
-  if (!location) return false;
+  const location = layoutDragSourceTab(layout, source);
+  if (!location) return source.kind !== "tab";
   const alone = location.pane.tabs.length === 1;
   if (target.kind === "into") {
     return (
@@ -203,15 +253,16 @@ function isLayoutDropUseful(
     );
   }
   if (target.kind === "side") return !(alone && target.paneId === location.pane.id);
-  const workspace = selectFocusedWorkspace(layout);
-  const paneCount = workspace.columns.reduce((sum, column) => sum + column.panes.length, 0);
   if (target.edge === "bottom") {
-    const tabCount = workspace.columns.reduce(
+    const tabCount = location.workspace.columns.reduce(
       (sum, column) => sum + column.panes.reduce((inner, pane) => inner + pane.tabs.length, 0),
       0,
     );
     return tabCount > 1;
   }
+  const workspace = layout.workspaces.find((candidate) => candidate.id === workspaceId);
+  if (!workspace || location.workspace.id !== workspace.id) return true;
+  const paneCount = workspace.columns.reduce((sum, column) => sum + column.panes.length, 0);
   if (!alone || paneCount > 1) {
     const columns = workspace.columns;
     const edgeColumn = target.edge === "left" ? columns[0] : columns.at(-1);
@@ -226,31 +277,85 @@ function isLayoutDropUseful(
 }
 
 /** The label on the pill under the pointer (pen MI18S "Side by side", nYpzc "Below"). */
-export function layoutDropLabel(target: LayoutDropTarget): string {
-  if (target.kind === "into") return "Add as tab";
+export function layoutDropLabel(
+  target: LayoutDropTarget,
+  reorder: boolean,
+  resolve: MessageResolver = m,
+): string {
+  if (target.kind === "into") {
+    return reorder ? resolve(msg("Move here")) : resolve(msg("Add as tab"));
+  }
   if (target.kind === "extend") {
-    return target.edge === "bottom" ? "New workspace" : "New column";
+    return target.edge === "bottom"
+      ? resolve(msg("New workspace"))
+      : resolve(msg("New column", { $context: "where a dragged pane lands" }));
   }
   switch (target.side) {
     case "left":
     case "right":
-      return "Side by side";
+      return resolve(msg("Side by side", { $context: "where a dragged pane lands" }));
     case "up":
-      return "Above";
+      return resolve(msg("Above", { $context: "where a dragged pane lands" }));
     case "down":
-      return "Below";
+      return resolve(msg("Below", { $context: "where a dragged pane lands" }));
   }
 }
 
+export function layoutDragContent(source: LayoutDragContentSource): LayoutTabContent {
+  if (source.kind === "thread") {
+    return { kind: "chat", target: { kind: "server", threadRef: source.threadRef } };
+  }
+  if (source.kind === "pull-requests") return { kind: "pull-requests" };
+  if (source.kind === "issues") return { kind: "issues" };
+  if (source.kind === "new-tab") return source.content;
+  return {
+    kind: "surface",
+    threadRef: layoutDragSurfaceOwner(source),
+    surfaceId: source.surface.id,
+  };
+}
+
+function layoutDragSurfaceOwner(source: Extract<LayoutDragSource, { kind: "surface" }>) {
+  return source.surface.kind === "thread-terminal"
+    ? source.threadRef
+    : rightPanelHostRef(source.threadRef);
+}
+
+function layoutDragSourceTab(
+  layout: LayoutState,
+  source: Exclude<LayoutDragSource, { kind: "thread" }>,
+): LayoutTabLocation | null {
+  return source.kind === "tab"
+    ? findLayoutTab(layout, (tab) => tab.id === source.tabId)
+    : findLayoutTabByContent(layout, layoutDragContent(source));
+}
+
+/** The thread a tab shows, which a composer can take as a mention. */
+function layoutTabThreadRef(layout: LayoutState, tabId: string): ScopedThreadRef | null {
+  const content = findLayoutTab(layout, (tab) => tab.id === tabId)?.tab.content;
+  return content?.kind === "chat" && content.target.kind === "server"
+    ? content.target.threadRef
+    : null;
+}
+
+/** A thread goes into any composer except its own dragged tab's. */
+function composerTakesDrag(source: LayoutDragSource, composer: HTMLElement): boolean {
+  return (
+    source.kind === "thread" ||
+    (source.kind === "tab" &&
+      composer.closest<HTMLElement>("[data-layout-tab-id]")?.dataset.layoutTabId !== source.tabId)
+  );
+}
+
 /**
- * Follow the pointer. `allowTarget: false` keeps the zones visible but
- * targets nothing, e.g. while a sidebar thread hovers a composer, which
- * takes it as context instead.
+ * Follow the pointer. Pass `composer` when the drag carries a thread: the
+ * composer under the pointer (or null) takes it as context, so the layout
+ * targets nothing there.
  */
 export function moveLayoutDrag(
   source: LayoutDragSource,
   point: { x: number; y: number },
-  options: { allowTarget?: boolean } = {},
+  options: { composer?: HTMLElement | null } = {},
 ): void {
   const measured = measure();
   if (!measured) {
@@ -258,15 +363,21 @@ export function moveLayoutDrag(
     return;
   }
   const layout = useLayoutStore.getState().layout;
-  let raw =
-    options.allowTarget === false
-      ? null
-      : resolveLayoutDropTarget(point, measured.panes, measured.strip);
+  const sourceTabId =
+    source.kind === "thread" ? null : (layoutDragSourceTab(layout, source)?.tab.id ?? null);
+  const composers =
+    options.composer === undefined
+      ? []
+      : threadContextDropTargets()
+          .filter((composer) => composerTakesDrag(source, composer))
+          .map((composer) => toRect(composer.getBoundingClientRect()));
+  const composer = options.composer ? toRect(options.composer.getBoundingClientRect()) : null;
+  let raw = composer ? null : resolveLayoutDropTarget(point, measured.panes, measured.strip);
   if (raw?.kind === "into") {
     const paneId = raw.paneId;
     const tabs = measured.panes
       .find((pane) => pane.paneId === paneId)
-      ?.tabs?.filter((tab) => source.kind !== "tab" || tab.id !== source.tabId);
+      ?.tabs?.filter((tab) => tab.id !== sourceTabId);
     if (tabs) {
       const before = tabs.findIndex((tab) => point.x < (tab.rect.left + tab.rect.right) / 2);
       raw = { ...raw, index: before === -1 ? tabs.length : before };
@@ -284,14 +395,23 @@ export function moveLayoutDrag(
   ) {
     return;
   }
-  setDragState({ source, point, panes: measured.panes, strip: measured.strip, target });
+  setDragState({
+    source,
+    sourceTabId,
+    point,
+    panes: measured.panes,
+    strip: measured.strip,
+    target,
+    composers,
+    composer,
+  });
 }
 
 function sameSource(a: LayoutDragSource, b: LayoutDragSource): boolean {
   if (a.kind === "tab" || b.kind === "tab") {
     return a.kind === "tab" && b.kind === "tab" && a.tabId === b.tabId;
   }
-  return scopedThreadKey(a.threadRef) === scopedThreadKey(b.threadRef);
+  return layoutTabContentKey(layoutDragContent(a)) === layoutTabContentKey(layoutDragContent(b));
 }
 
 function isKnownPane(layout: LayoutState, target: LayoutDropTarget): boolean {
@@ -311,28 +431,110 @@ export function dropLayoutDrag(): boolean {
   const current = dragState;
   setDragState(null);
   if (!current?.target) return false;
-  return commitLayoutDrop(current.source, current.target);
+  return commitLayoutDropWithMotion(current.source, current.target);
+}
+
+function commitLayoutDropWithMotion(
+  source: LayoutDragSource,
+  target: LayoutDropTarget,
+  workspaceId?: string,
+): boolean {
+  const before = useLayoutStore.getState().layout;
+  notePaneDrop(true);
+  const committed = commitLayoutDrop(source, target, workspaceId);
+  if (!committed || useLayoutStore.getState().layout === before) notePaneDrop(false);
+  return committed;
 }
 
 export function cancelLayoutDrag(): void {
   setDragState(null);
 }
 
-/** Apply a drop: move the tab, or place the dragged thread's chat. */
-function commitLayoutDrop(source: LayoutDragSource, target: LayoutDropTarget): boolean {
+/**
+ * Apply a drop: move the tab, or place the dragged content. A surface tab
+ * without its panel store entry closes on load, so a new one opens there.
+ */
+export function commitLayoutDrop(
+  source: LayoutDragSource,
+  target: LayoutDropTarget,
+  workspaceId = useLayoutStore.getState().layout.focusedWorkspaceId,
+): boolean {
   const store = useLayoutStore.getState();
-  const destination = layoutDropDestination(store.layout, target);
-  if (!destination || !isLayoutDropUseful(store.layout, source, target)) return false;
+  const destination = layoutDropDestination(store.layout, target, workspaceId);
+  if (!destination || !isLayoutDropUseful(store.layout, source, target, workspaceId)) return false;
+  if (source.kind === "surface" && source.resolve) {
+    const { resolve, ...resolving } = source;
+    void resolve().then((surface) => {
+      if (surface) commitLayoutDropWithMotion({ ...resolving, surface }, target, workspaceId);
+    });
+    return true;
+  }
   if (source.kind === "tab") {
     store.moveTab(source.tabId, destination);
+  } else if (
+    source.kind === "new-tab" &&
+    destination.kind === "column" &&
+    target.kind === "extend" &&
+    target.edge === "bottom"
+  ) {
+    store.focusWorkspace(destination.workspaceId);
+  } else if (source.kind === "surface") {
+    const owner = layoutDragSurfaceOwner(source);
+    const existing = layoutDragSourceTab(store.layout, source);
+    const panel = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, owner);
+    const reopensOthers =
+      !existing &&
+      source.surface.kind !== "thread-terminal" &&
+      !panel.isOpen &&
+      panel.surfaces.some((surface) => surface.id !== source.surface.id);
+    if (existing) store.moveTab(existing.tab.id, destination);
+    else if (!reopensOthers) requestLayoutSurfacePlacement(owner, destination);
+    openLayoutDragSurface(source.threadRef, source.surface);
+    if (reopensOthers) {
+      const layout = useLayoutStore.getState().layout;
+      const placed = layoutDragSourceTab(layout, source);
+      const landing = placed ? layoutDropDestination(layout, target, workspaceId) : null;
+      if (placed && landing) useLayoutStore.getState().moveTab(placed.tab.id, landing);
+    }
   } else {
-    store.placeContent(
-      { kind: "chat", target: { kind: "server", threadRef: source.threadRef } },
-      destination,
-    );
+    store.placeContent(layoutDragContent(source), destination);
   }
   saveLayoutNow();
   return true;
+}
+
+function openLayoutDragSurface(threadRef: ScopedThreadRef, surface: LayoutDragSurface): void {
+  const panels = useRightPanelStore.getState();
+  switch (surface.kind) {
+    case "thread-terminal":
+      return useTerminalUiStateStore.getState().setTerminalOpen(threadRef, true);
+    case "diff":
+      if (surface.runId !== undefined) {
+        useDiffPanelStore.getState().selectTurn(threadRef, surface.runId, surface.filePath);
+      }
+      return panels.open(threadRef, "diff");
+    case "files":
+    case "pull-requests":
+      return panels.open(threadRef, surface.kind);
+    case "device":
+      return surface.target
+        ? panels.openDevice(threadRef, surface.target)
+        : panels.open(threadRef, "device");
+    case "file":
+      return surface.attachment
+        ? panels.openAttachment(threadRef, surface.attachment)
+        : panels.openFile(threadRef, surface.relativePath, surface.revealLine ?? undefined);
+    case "preview":
+      return panels.openBrowser(threadRef, surface.resourceId);
+    case "terminal":
+      return panels.openTerminal(threadRef, surface.resourceId);
+    case "pull-request":
+      return panels.openPullRequest(threadRef, surface);
+    case "issue":
+      return panels.openIssue(threadRef, surface);
+    case "side-chat":
+      return panels.openSideChat(threadRef, surface.threadId);
+  }
 }
 
 export const OPEN_THREAD_TO_THE_SIDE_MENU_ID = "open-to-the-side" as const;
@@ -368,7 +570,7 @@ export function withOpenThreadToTheSideItem<T extends string>(
 ): ContextMenuItem<T | typeof OPEN_THREAD_TO_THE_SIDE_MENU_ID>[] {
   if (!canOpenThreadToTheSide(threadRef)) return [...items];
   return [
-    { id: OPEN_THREAD_TO_THE_SIDE_MENU_ID, label: "Open to the side", icon: "panel-right" },
+    { id: OPEN_THREAD_TO_THE_SIDE_MENU_ID, label: m(msg("Open to the side")), icon: "panel-right" },
     ...items.map((item, index) => (index === 0 ? { ...item, separatorBefore: true } : item)),
   ];
 }
@@ -378,9 +580,14 @@ export function withOpenThreadToTheSideItem<T extends string>(
  * the focused pane: its chat opens (or moves) beside it, side by side.
  */
 export function openThreadToTheSide(threadRef: ScopedThreadRef): void {
-  const paneId = sideAnchorPaneId(useLayoutStore.getState().layout, threadRef);
+  const store = useLayoutStore.getState();
+  const paneId = sideAnchorPaneId(store.layout, threadRef);
   if (paneId === null) return;
-  commitLayoutDrop({ kind: "thread", threadRef }, { kind: "side", paneId, side: "right" });
+  store.placeContent(
+    { kind: "chat", target: { kind: "server", threadRef } },
+    { kind: "split", paneId, side: "right" },
+  );
+  saveLayoutNow();
 }
 
 /**
@@ -389,12 +596,29 @@ export function openThreadToTheSide(threadRef: ScopedThreadRef): void {
  * click that ends the gesture is swallowed and Escape cancels.
  */
 export function beginLayoutTabDrag(event: ReactPointerEvent, tabId: string): void {
-  if (event.button !== 0 || event.pointerType === "touch") return;
   // A lone tab has nowhere to go.
   if (countLayoutTabs(useLayoutStore.getState().layout) < 2) return;
+  const threadRef = layoutTabThreadRef(useLayoutStore.getState().layout, tabId);
+  beginLayoutDrag(event, { kind: "tab", tabId }, threadRef);
+}
+
+export function beginLayoutContentDrag(
+  event: ReactPointerEvent,
+  source: LayoutDragContentSource,
+): void {
+  beginLayoutDrag(event, source, source.kind === "thread" ? source.threadRef : null);
+}
+
+function beginLayoutDrag(
+  event: ReactPointerEvent,
+  source: LayoutDragSource,
+  threadRef: ScopedThreadRef | null,
+): void {
+  if (event.button !== 0 || event.pointerType === "touch") return;
   const start = { x: event.clientX, y: event.clientY };
   const pointerId = event.pointerId;
-  const source = { kind: "tab", tabId } as const;
+  const takesDrag = (composer: HTMLElement) => composerTakesDrag(source, composer);
+  const clearSelection = () => document.getSelection()?.removeAllRanges();
   let started = false;
 
   const move = (moveEvent: PointerEvent) => {
@@ -404,20 +628,29 @@ export function beginLayoutTabDrag(event: ReactPointerEvent, tabId: string): voi
         return;
       }
       started = true;
+      clearSelection();
+      document.addEventListener("selectionchange", clearSelection);
     }
     moveEvent.preventDefault();
-    moveLayoutDrag(source, { x: moveEvent.clientX, y: moveEvent.clientY });
+    const point = { x: moveEvent.clientX, y: moveEvent.clientY };
+    moveLayoutDrag(
+      source,
+      point,
+      threadRef ? { composer: hoverThreadContextDrop(point, takesDrag) } : {},
+    );
   };
-  const finish = (commit: boolean) => {
+  const finish = (drop: { x: number; y: number } | null) => {
     window.removeEventListener("pointermove", move, true);
     window.removeEventListener("pointerup", up, true);
     window.removeEventListener("pointercancel", cancel, true);
     window.removeEventListener("keydown", key, true);
     window.removeEventListener("blur", cancel);
+    document.removeEventListener("selectionchange", clearSelection);
     if (!started) return;
-    if (commit) dropLayoutDrag();
+    endThreadContextDrag();
+    if (drop && !(threadRef && dropThreadContext(drop, [threadRef], takesDrag))) dropLayoutDrag();
     else cancelLayoutDrag();
-    // The release that ends a drag must not also open the tab's menu.
+    // The release that ends a drag must not also click what was pressed.
     const swallow = (clickEvent: MouseEvent) => {
       clickEvent.preventDefault();
       clickEvent.stopPropagation();
@@ -426,14 +659,14 @@ export function beginLayoutTabDrag(event: ReactPointerEvent, tabId: string): voi
     setTimeout(() => window.removeEventListener("click", swallow, true), 0);
   };
   const up = (upEvent: PointerEvent) => {
-    if (upEvent.pointerId === pointerId) finish(true);
+    if (upEvent.pointerId === pointerId) finish({ x: upEvent.clientX, y: upEvent.clientY });
   };
-  const cancel = () => finish(false);
+  const cancel = () => finish(null);
   const key = (keyEvent: KeyboardEvent) => {
     if (keyEvent.key !== "Escape" || !started) return;
     keyEvent.preventDefault();
     keyEvent.stopPropagation();
-    finish(false);
+    finish(null);
   };
   window.addEventListener("pointermove", move, true);
   window.addEventListener("pointerup", up, true);

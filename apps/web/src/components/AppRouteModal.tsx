@@ -1,8 +1,12 @@
+import { T, useGT } from "gt-react";
 import { XIcon } from "lucide-react";
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { getCommandPaletteOpener } from "../commandPaletteStore";
 import { useNativeTitlebarHeight } from "../lib/windowControlsOverlay";
+import { requestWorkspaceFocus } from "../lib/workspaceFocus";
 import { useCloseAppModal } from "./sidebar/mainAppLocation";
+import { GlobalVoiceInputIndicator } from "./chat/GlobalVoiceInputIndicator";
 import { useThemeEditorStore } from "./settings/themeEditorStore";
 import { cn } from "~/lib/utils";
 import { Button } from "./ui/button";
@@ -25,8 +29,14 @@ export function AppRouteModal({
   // Text selection that ends on the backdrop is not a dismissal.
   const backdropPressRef = useRef(false);
   // Focus the surface, not its first control: no stray focus ring, no phone keyboard.
-  // On close, leave focus alone; returning it to the opener paints a focus ring.
+  // On close, return focus to the opener only after a keyboard close; after a pointer close it
+  // would paint a focus ring.
   const popupRef = useRef<HTMLDivElement>(null);
+  const [opener] = useState(
+    () =>
+      getCommandPaletteOpener() ??
+      (document.activeElement instanceof HTMLElement ? document.activeElement : null),
+  );
   // Clear the native window controls (macOS traffic lights, the Windows and Linux caption
   // buttons). Below sm the modal fills the window and leaves that strip empty; up to lg its
   // 1.5rem inset is shorter than the strip.
@@ -39,8 +49,18 @@ export function AppRouteModal({
       modal={!themeEditorOpen}
       // Portaled layers outside this tree (toasts, Clerk, confirm dialogs) are not backdrop presses.
       disablePointerDismissal
-      onOpenChange={(nextOpen) => {
+      onOpenChange={(nextOpen, eventDetails) => {
         if (nextOpen) return;
+        // Esc from a layer outside Base UI (Clerk's modals) is that layer's to handle.
+        const target = eventDetails.event.target;
+        if (
+          eventDetails.reason === "escape-key" &&
+          target !== document.body &&
+          target instanceof Node &&
+          !popupRef.current?.contains(target)
+        ) {
+          return eventDetails.cancel();
+        }
         // Closing unmounts a focused field without a blur, so commit-on-blur rows would
         // drop what was typed. Blur first so they commit.
         const focused = document.activeElement;
@@ -57,7 +77,16 @@ export function AppRouteModal({
         bottomStickOnMobile={false}
         ref={popupRef}
         initialFocus={popupRef}
-        finalFocus={false}
+        finalFocus={(closeType) => {
+          if (closeType !== "keyboard" || !opener?.isConnected) return false;
+          if (!opener.closest("[inert]")) return opener;
+          // The thread behind the modal stays inert until the route closes, so its area
+          // takes focus once it is usable again.
+          const area = opener.closest<HTMLElement>("[data-workspace-area]");
+          if (area?.dataset.workspaceArea)
+            requestWorkspaceFocus({ area: area.dataset.workspaceArea });
+          return false;
+        }}
         aria-label={label}
         data-app-modal=""
         className={cn(
@@ -70,8 +99,8 @@ export function AppRouteModal({
         viewportProps={{
           style: {
             "--app-modal-titlebar-height": `${nativeTitlebarHeight}px`,
-            "--app-modal-top-extra": `max(0px, calc(${nativeTitlebarHeight}px - env(safe-area-inset-top)))`,
-            "--app-modal-sm-extra": `max(0px, calc(${nativeTitlebarHeight}px - 1.5rem))`,
+            "--app-modal-top-inset": `max(env(safe-area-inset-top), ${nativeTitlebarHeight}px)`,
+            "--app-modal-sm-top": `max(1.5rem, ${nativeTitlebarHeight}px)`,
           } as CSSProperties,
           onPointerDown: (event) => {
             backdropPressRef.current = event.target === event.currentTarget;
@@ -85,25 +114,32 @@ export function AppRouteModal({
         {/* The emptied strip still moves the window, as the titlebar it replaces does. */}
         <div
           aria-hidden
-          className="absolute inset-x-0 -top-(--app-modal-top-extra) hidden h-(--app-modal-titlebar-height) [-webkit-app-region:drag] max-sm:block"
+          className="absolute inset-x-0 top-0 hidden h-(--app-modal-titlebar-height) [-webkit-app-region:drag] max-sm:block"
         />
         {children}
+        <GlobalVoiceInputIndicator />
       </DialogPopup>
     </Dialog>
   );
 }
 
 export function AppRouteModalClose() {
+  const gt = useGT();
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <DialogClose aria-label="Close" render={<Button size="icon-sm" variant="ghost" />} />
+          <DialogClose
+            aria-label={gt("Close")}
+            render={<Button size="icon-sm" variant="ghost" />}
+          />
         }
       >
         <XIcon />
       </TooltipTrigger>
-      <TooltipPopup side="bottom">Close (Esc)</TooltipPopup>
+      <TooltipPopup side="bottom">
+        <T>Close (Esc)</T>
+      </TooltipPopup>
     </Tooltip>
   );
 }

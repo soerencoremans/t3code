@@ -13,16 +13,8 @@ import {
   type TerminalOutputUpdate,
   type TerminalSessionState,
 } from "@t3tools/client-runtime/state/terminal";
-import {
-  ChevronDown,
-  Copy,
-  MessageSquarePlus,
-  Plus,
-  SquareSplitHorizontal,
-  SquareSplitVertical,
-  SquareTerminal,
-  Trash2,
-} from "lucide-react";
+import { Plus, SquareTerminal } from "lucide-react";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   AuthPreviewOperateScope,
   AuthFilesystemReadScope,
@@ -34,7 +26,10 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import { getTerminalLabel } from "@t3tools/shared/terminalLabelsCopy";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { m, type MessageResolver } from "../i18n/messages";
 import { terminalTabTitle } from "../layout/surfaceTabLabels";
 import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
@@ -50,35 +45,32 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Button } from "~/components/ui/button";
 import { PanelTabCloseButton } from "~/components/ui/panel-tab-close-button";
 import { PaneNotch } from "~/components/PaneNotch";
 import { beginLayoutTabDrag } from "~/layout/layoutDrag";
+import { useLayoutStore } from "~/layout/layoutStore";
 import { useLayoutPane, useLayoutPaneFocusedRef } from "~/layout/layoutPaneContext";
 import { LayoutPaneTab, LayoutPaneTabStrip, useLayoutPaneSiblingTabs } from "~/layout/PaneTabs";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { readTextFromClipboard, writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { cn } from "~/lib/utils";
-import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
-import { type TerminalContextSelection } from "~/lib/terminalContext";
 import {
-  observeSelectionActions,
-  resolveSelectionActionPosition,
-  type SelectionActionPoint,
-} from "~/lib/selectionActions";
+  COLLAPSED_SIDEBAR_INSET_EASE_CLASS,
+  COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+} from "~/workspaceTitlebar";
+import { type TerminalContextSelection } from "~/lib/terminalContext";
 import {
   GhosttyTerminalSurface,
   type GhosttyTerminalSurfaceOptions,
 } from "~/terminal/ghostty/surface";
 import { type GhosttyColor, type GhosttyTheme } from "~/terminal/ghostty/core";
 import { useOpenInPreferredEditor } from "../editorPreferences";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
-import { isTerminalUrl } from "../terminal-links";
+import { useStableCallback } from "../hooks/useStableCallback";
+import { isTerminalUrl, resolveTerminalLinkTarget } from "../terminal-links";
 import {
   isDiffToggleShortcut,
   isTerminalClearShortcut,
@@ -86,6 +78,7 @@ import {
   isTerminalSplitShortcut,
   isTerminalSplitVerticalShortcut,
   isTerminalToggleShortcut,
+  isThreadNavigationShortcut,
   resolveShortcutCommand,
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
@@ -97,7 +90,7 @@ import {
 } from "../types";
 import { readLocalApi } from "~/localApi";
 import { confirmTerminalClose, isTerminalCloseConfirmPending } from "~/lib/terminalCloseConfirm";
-import { getTerminalFocusOwner } from "~/lib/terminalFocus";
+import { getTerminalFocusOwner, registerTerminalSplitTarget } from "~/lib/terminalFocus";
 import { useClientSettings } from "../hooks/useSettings";
 import { getFileMetadataQueryAtom } from "../hooks/useFileMetadata";
 import { FileMetadataThreadContext } from "../hooks/FileMetadataThreadProvider";
@@ -105,16 +98,17 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { attachedTerminalSessionAtom } from "../state/terminalSessions";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useRevealActiveTab } from "../hooks/useRevealActiveTab";
-import { FOLDED_TAB_CLASS, usePaneTabStripFit } from "../hooks/usePaneTabStripFit";
 import { serverEnvironment } from "../state/server";
 import { previewEnvironment } from "../state/preview";
 import { readEnvironmentScope } from "../state/session";
 import { terminalEnvironment } from "../state/terminal";
 import { useEnvironmentScope } from "../state/session";
 import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
+import { terminalInputWriter } from "./terminal/terminalInputWriter";
 import { useAtomCommand } from "../state/use-atom-command";
 import { preventTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import { observeResize } from "../lib/observeResize";
+import { threadShortcutContext } from "./Sidebar.logic";
 import {
   consumePendingTerminalFocus,
   focusTerminal,
@@ -214,7 +208,7 @@ export function synchronizeTerminalOutput(
   return update.cursor;
 }
 
-/** Writes what changed between two session notifications: new output, then a new error. */
+/** Writes what changed between two session notifications: new output, then the error, again after a reset. */
 export function synchronizeTerminalSession(
   terminal: Parameters<typeof synchronizeTerminalOutput>[0],
   previous: Pick<TerminalSessionState, "output" | "version" | "error">,
@@ -226,7 +220,12 @@ export function synchronizeTerminalSession(
       ? cursor
       : synchronizeTerminalOutput(terminal, session, cursor);
   // An attach failure can change only the error, keeping the last buffer.
-  if (session.error !== null && session.error !== previous.error) {
+  if (
+    session.error !== null &&
+    (session.error !== previous.error ||
+      nextCursor.generation !== cursor.generation ||
+      nextCursor.resetVersion !== cursor.resetVersion)
+  ) {
     writeSystemMessage(terminal, session.error);
   }
   return nextCursor;
@@ -430,8 +429,10 @@ function terminalSelectionMenuItems(options?: {
   return [
     ...(options?.canAddToChat === false
       ? []
-      : ([{ id: "add-to-chat", label: "Add to chat" }] satisfies ContextMenuItem<"add-to-chat">[])),
-    { id: "copy", label: "Copy" },
+      : ([
+          { id: "add-to-chat", label: m(msg("Add to chat")) },
+        ] satisfies ContextMenuItem<"add-to-chat">[])),
+    { id: "copy", label: m(msg("Copy")) },
   ];
 }
 
@@ -446,19 +447,10 @@ function terminalContextMenuItems(options: {
       ...item,
       disabled: !hasSelection,
     })),
-    { id: "paste", label: "Paste", ...(options.readOnly ? { disabled: true } : {}) },
-    { id: "select-all", label: "Select all" },
-    { id: "scroll-to-bottom", label: "Jump to latest" },
+    { id: "paste", label: m(msg("Paste")), ...(options.readOnly ? { disabled: true } : {}) },
+    { id: "select-all", label: m(msg("Select all", { $context: "select all terminal text" })) },
+    { id: "scroll-to-bottom", label: m(msg("Jump to latest")) },
   ];
-}
-
-/** A superseded popup's unsettled promise must not cancel the newer right-click flow. */
-export function shouldClearTerminalSelectionAction(options: {
-  actionPending: boolean;
-  openMenuRequestId: number | null;
-  currentRequestId: number;
-}): boolean {
-  return options.actionPending || options.openMenuRequestId === options.currentRequestId;
 }
 
 /**
@@ -556,11 +548,14 @@ function TerminalSessionViewport({
   const canReadFilesystem = useEnvironmentScope(environmentId, AuthFilesystemReadScope);
   const [linkPath, setLinkPath] = useState<string | null>(null);
   const metadataThreadRef = useContext(FileMetadataThreadContext);
+  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const hostname = serverConfig?.hostname;
+  const readHostname = useEffectEvent(() => hostname);
   const linkMetadataQuery =
     linkPath !== null && canOpenHostEditor && canReadFilesystem
       ? getFileMetadataQueryAtom(
           environmentId,
-          resolvePathLinkTarget(linkPath, cwd),
+          resolveTerminalLinkTarget(linkPath, cwd, hostname),
           cwd,
           metadataThreadRef,
         )
@@ -581,7 +576,7 @@ function TerminalSessionViewport({
       return false;
     const query = getFileMetadataQueryAtom(
       environmentId,
-      resolvePathLinkTarget(text, cwd),
+      resolveTerminalLinkTarget(text, cwd, hostname),
       cwd,
       metadataThreadRef,
     );
@@ -592,10 +587,10 @@ function TerminalSessionViewport({
       (result.value?.kind === "file" || result.value?.kind === "directory")
     );
   });
-  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const openInPreferredEditor = useOpenInPreferredEditor(
     environmentId,
     serverConfig?.availableEditors ?? [],
+    worktreePath ?? cwd,
   );
   const openTerminalPath = useEffectEvent((target: string) => openInPreferredEditor(target));
   const openPreview = useAtomCommand(previewEnvironment.open, {
@@ -604,17 +599,15 @@ function TerminalSessionViewport({
   const runTerminalWrite = useAtomCommand(terminalEnvironment.write, {
     reportFailure: false,
   });
+  // Recovery keeps the original registry-bound command after this viewport unmounts.
+  const retainedTerminalWrite = useRef(runTerminalWrite);
   const runTerminalResize = useAtomCommand(terminalEnvironment.resize, {
     reportFailure: false,
   });
   const hasHandledExitRef = useRef(false);
   const selectionActionRequestIdRef = useRef(0);
-  const openSelectionMenuRequestIdRef = useRef<number | null>(null);
   const readKeybindings = useEffectEvent(() => keybindings);
-  const [selectionToolbar, setSelectionToolbar] = useState<TerminalSelectionToolbarState | null>(
-    null,
-  );
-  const selectionToolbarRef = useRef<HTMLDivElement>(null);
+  const readThreadShortcutContext = useEffectEvent(() => threadShortcutContext(threadRef));
   const handleSessionExited = useEffectEvent(() => {
     if (hasTerminalWriteAccess()) onSessionExited();
   });
@@ -655,20 +648,22 @@ function TerminalSessionViewport({
     (listener: (session: TerminalSessionState) => void) =>
       appAtomRegistry.subscribe(terminalSessionAtom, listener),
   );
-  const writeTerminal = useEffectEvent((data: string) =>
-    runTerminalWrite({
-      environmentId,
-      input: { threadId, terminalId, data },
-    }),
-  );
-  const resizeTerminal = useEffectEvent((cols: number, rows: number) => {
-    if (writableSessionGeneration(readTerminalSession(), hasTerminalWriteAccess()) === null) {
-      return;
-    }
-    return runTerminalResize({
+  // The surface reports a resent grid like any other, so the next report is the retry.
+  const resizeRetryGenerationRef = useRef<number | null>(null);
+  const resizeTerminal = useEffectEvent(async (cols: number, rows: number) => {
+    const generation = writableSessionGeneration(readTerminalSession(), hasTerminalWriteAccess());
+    const retry = generation !== null && generation === resizeRetryGenerationRef.current;
+    resizeRetryGenerationRef.current = null;
+    if (generation === null) return;
+    const result = await runTerminalResize({
       environmentId,
       input: { threadId, terminalId, cols, rows },
     });
+    // Resend the current grid, not this one: a newer resize may already be queued behind it.
+    if (!retry && result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      resizeRetryGenerationRef.current = generation;
+      terminalRef.current?.resendSize();
+    }
   });
   const outputCursorRef = useRef<TerminalOutputCursor>(INITIAL_TERMINAL_OUTPUT_CURSOR);
   const synchronizedStatusRef = useRef<TerminalSessionState["status"]>("closed");
@@ -681,7 +676,10 @@ function TerminalSessionViewport({
         shouldHandleTerminalExit(status, synchronized, hasHandledExitRef.current, version)
       ) {
         hasHandledExitRef.current = true;
-        writeSystemMessage(terminal, status === "closed" ? "Terminal closed" : "Process exited");
+        writeSystemMessage(
+          terminal,
+          status === "closed" ? m(msg("Terminal closed")) : m(msg("Process exited")),
+        );
         window.setTimeout(() => {
           if (hasHandledExitRef.current) {
             handleSessionExited();
@@ -742,7 +740,6 @@ function TerminalSessionViewport({
     let teardown: (() => void) | null = null;
     let setupTerminal: GhosttyTerminalSurface | null = null;
     let setupCleanups: Array<() => void> = [];
-    let selectionActions: ReturnType<typeof observeSelectionActions> | null = null;
 
     const setup = async (): Promise<(() => void) | null> => {
       const setupFont = terminalFontRef.current;
@@ -750,8 +747,10 @@ function TerminalSessionViewport({
         theme: terminalThemeFromApp(mount),
         font: terminalFontOptions(setupFont.family, setupFont.size),
         onData: (data) => handleData(data),
+        onBinary: (data) => void sendTerminalInput(data, m(msg("Terminal write failed")), "binary"),
+        onReply: (data) => void sendTerminalInput(data, m(msg("Terminal write failed")), "reply"),
         onResize: (cols, rows) => void resizeTerminal(cols, rows),
-        onSelectionChange: () => handleSelectionChange(),
+        onSelectionChange: () => {},
         beforeKey: (event) => handleBeforeKey(event),
         onLinkActivate: (text, event) => handleLinkActivate(text, event),
         canActivateLink: (text) => canActivateTerminalLink(text),
@@ -824,29 +823,17 @@ function TerminalSessionViewport({
         terminal.focus();
       }
 
-      const dismissSelectionAction = (supersede = false) => {
-        const ownsMenu =
-          openSelectionMenuRequestIdRef.current === selectionActionRequestIdRef.current;
-        if (supersede || ownsMenu) selectionActionRequestIdRef.current += 1;
-        openSelectionMenuRequestIdRef.current = null;
-        setSelectionToolbar(null);
-      };
       const clearSelectionAction = () => {
-        selectionActions?.cancel();
-        dismissSelectionAction(true);
+        selectionActionRequestIdRef.current += 1;
       };
       setupCleanups.push(clearSelectionAction);
 
-      const readSelectionAction = (
-        pointer: SelectionActionPoint | null = null,
-      ): {
-        position: { x: number; y: number };
+      const readSelectionAction = (): {
         clipboardText: string;
         selection: TerminalContextSelection;
       } | null => {
         const activeTerminal = terminalRef.current;
-        const mountElement = containerRef.current;
-        if (!activeTerminal || !mountElement || !activeTerminal.hasSelection()) {
+        if (!activeTerminal || !activeTerminal.hasSelection()) {
           return null;
         }
         const selectionText = activeTerminal.getSelection();
@@ -856,15 +843,7 @@ function TerminalSessionViewport({
           return null;
         }
         const { lineStart, lineEnd } = terminalSelectionLineRange(selectionPosition);
-        const bounds = mountElement.getBoundingClientRect();
-        const position = resolveSelectionActionPosition({
-          bounds,
-          selectionRect: activeTerminal.getSelectionEndClientRect(),
-          pointer,
-          viewport: { width: window.innerWidth, height: window.innerHeight },
-        });
         return {
-          position,
           clipboardText: selectionText,
           selection: {
             terminalId,
@@ -897,7 +876,7 @@ function TerminalSessionViewport({
         if (requestId !== selectionActionRequestIdRef.current) return;
         const activeTerminal = terminalRef.current;
         if (activeTerminal) {
-          writeSystemMessage(activeTerminal, error instanceof Error ? error.message : fallback);
+          writeSystemMessage(activeTerminal, thrownErrorMessage(error, m) ?? fallback);
         }
       };
 
@@ -909,9 +888,15 @@ function TerminalSessionViewport({
 
       const copySelection = async (text: string, requestId: number) => {
         try {
-          await writeTextToClipboard(text, "terminal selection");
+          await writeTextToClipboard(text, {
+            target: "terminal selection",
+            unavailableMessage: msg(
+              "Clipboard API is unavailable while copying terminal selection.",
+            ),
+            failureMessage: msg("Failed to copy terminal selection to the clipboard."),
+          });
         } catch (error) {
-          reportIfCurrent(requestId, error, "Unable to copy terminal selection");
+          reportIfCurrent(requestId, error, m(msg("Unable to copy terminal selection")));
         }
         focusIfCurrent(requestId);
       };
@@ -923,11 +908,18 @@ function TerminalSessionViewport({
         try {
           // Let the surface own clipboard reads so paste shortcuts can supersede an in-flight menu paste.
           await activeTerminal.pasteFromClipboard(
-            () => readTextFromClipboard("terminal input"),
+            () =>
+              readTextFromClipboard({
+                target: "terminal input",
+                unavailableMessage: msg(
+                  "Clipboard API is unavailable while reading terminal input.",
+                ),
+                failureMessage: msg("Failed to read terminal input from the clipboard."),
+              }),
             () => requestId === selectionActionRequestIdRef.current,
           );
         } catch (error) {
-          reportIfCurrent(requestId, error, "Unable to read the clipboard");
+          reportIfCurrent(requestId, error, m(msg("Unable to read the clipboard")));
           return;
         }
         focusIfCurrent(requestId);
@@ -951,7 +943,7 @@ function TerminalSessionViewport({
             { x: event.clientX, y: event.clientY },
           );
         } catch (error) {
-          reportIfCurrent(requestId, error, "Unable to open the terminal context menu");
+          reportIfCurrent(requestId, error, m(msg("Unable to open the terminal context menu")));
           focusIfCurrent(requestId);
           return;
         }
@@ -981,50 +973,74 @@ function TerminalSessionViewport({
         }
       };
 
-      // The floating selection toolbar: Add to chat, or Copy where the
-      // terminal has no chat to add to. Copy also stays in the context menu.
-      const showSelectionAction = (pointer: SelectionActionPoint | null) => {
-        if (openSelectionMenuRequestIdRef.current === selectionActionRequestIdRef.current) {
-          return;
-        }
-        const nextAction = readSelectionAction(pointer);
-        if (!nextAction) {
-          clearSelectionAction();
-          return;
-        }
-        const requestId = ++selectionActionRequestIdRef.current;
-        openSelectionMenuRequestIdRef.current = requestId;
-        const isCurrent = () =>
-          requestId === selectionActionRequestIdRef.current &&
-          openSelectionMenuRequestIdRef.current === requestId;
-        setSelectionToolbar({
-          position: nextAction.position,
-          action: canAddSelectionToChat() ? "add-to-chat" : "copy",
-          run: () => {
-            if (!isCurrent()) return;
-            openSelectionMenuRequestIdRef.current = null;
-            setSelectionToolbar(null);
-            if (canAddSelectionToChat()) {
-              void addSelectionToChat(nextAction.clipboardText);
-            } else {
-              void copySelection(nextAction.clipboardText, requestId);
-            }
-          },
+      const readInputSession = () => appAtomRegistry.get(terminalSessionAtom);
+      const canWriteInput = () => readEnvironmentScope(environmentId, AuthTerminalOperateScope);
+      const writeInputChunk = (data: string, kind?: "binary" | "reply") =>
+        retainedTerminalWrite.current({
+          environmentId,
+          input: kind
+            ? { threadId, terminalId, data, [kind]: true }
+            : { threadId, terminalId, data },
         });
-      };
-
-      const sendTerminalInput = async (data: string, fallbackError: string) => {
-        if (!hasTerminalWriteAccess()) return;
-        const activeTerminal = terminalRef.current;
-        if (!activeTerminal) return;
-        const result = await writeTerminal(data);
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          const error = squashAtomCommandFailure(result);
-          writeSystemMessage(
-            activeTerminal,
-            error instanceof Error ? error.message : fallbackError,
-          );
-        }
+      const sendTerminalInput = (
+        data: string,
+        fallbackError: string,
+        kind?: "binary" | "reply",
+      ) => {
+        // The server rejects input until the shell runs, and each rejection would print an error.
+        // Input belongs to the shell and surface it was typed into; a restart the client has seen drops what is left.
+        const session = readTerminalSession();
+        const generation = writableSessionGeneration(session, hasTerminalWriteAccess());
+        const lifecycleVersion = session.lifecycleVersion;
+        if (generation === null) return;
+        const writeInput = terminalInputWriter(
+          JSON.stringify([environmentId, threadId, terminalId]),
+          () => appAtomRegistry.mount(terminalSessionAtom),
+        );
+        let reported = false;
+        const report = (message: string) => {
+          if (reported || terminalRef.current !== terminal) return;
+          reported = true;
+          writeSystemMessage(terminal, message);
+        };
+        return writeInput(
+          data,
+          async (chunk) => {
+            const currentSession = readInputSession();
+            if (
+              terminalRef.current !== terminal ||
+              currentSession.lifecycleVersion !== lifecycleVersion ||
+              writableSessionGeneration(currentSession, canWriteInput()) !== generation
+            ) {
+              return "not-dispatched";
+            }
+            const result = await writeInputChunk(chunk, kind);
+            if (result._tag === "Success") return true;
+            if (terminalRef.current === terminal && !isAtomCommandInterrupted(result)) {
+              const error = squashAtomCommandFailure(result);
+              report(thrownErrorMessage(error, m) ?? fallbackError);
+            }
+            return false;
+          },
+          // Close the bracket only for the process that saw it open; wait while its pid is unknown.
+          async () => {
+            const pid = session.summary?.pid ?? null;
+            const current = readInputSession();
+            const currentPid = current.summary?.pid ?? null;
+            if (currentPid === null) return false;
+            if (pid !== null && currentPid !== pid) return true;
+            if (writableSessionGeneration(current, canWriteInput()) === null) return false;
+            const result = await writeInputChunk("\x1b[201~");
+            if (result._tag === "Success") return true;
+            if (!isAtomCommandInterrupted(result)) {
+              const error = squashAtomCommandFailure(result);
+              report(thrownErrorMessage(error, m) ?? m(msg("Failed to close interrupted paste")));
+            }
+            return false;
+          },
+          () =>
+            report(m(msg("Terminal paste interrupted. Paste again when the terminal is ready."))),
+        );
       };
 
       function handleBeforeKey(event: KeyboardEvent): boolean {
@@ -1038,7 +1054,11 @@ function TerminalSessionViewport({
           isTerminalSplitShortcut(event, currentKeybindings, options) ||
           isTerminalSplitVerticalShortcut(event, currentKeybindings, options) ||
           isTerminalNewShortcut(event, currentKeybindings, options) ||
-          isDiffToggleShortcut(event, currentKeybindings, options)
+          isDiffToggleShortcut(event, currentKeybindings, options) ||
+          // Match Sidebar's context, or a key it will reject skips the shell.
+          isThreadNavigationShortcut(event, currentKeybindings, {
+            context: { ...readThreadShortcutContext(), terminalFocus: true },
+          })
         ) {
           return false;
         }
@@ -1050,7 +1070,7 @@ function TerminalSessionViewport({
         if (navigationData !== null) {
           event.preventDefault();
           event.stopPropagation();
-          void sendTerminalInput(navigationData, "Failed to move cursor");
+          void sendTerminalInput(navigationData, m(msg("Failed to move cursor")));
           return false;
         }
 
@@ -1058,14 +1078,14 @@ function TerminalSessionViewport({
         if (deleteData !== null) {
           event.preventDefault();
           event.stopPropagation();
-          void sendTerminalInput(deleteData, "Failed to delete terminal input");
+          void sendTerminalInput(deleteData, m(msg("Failed to delete terminal input")));
           return false;
         }
 
         if (!isTerminalClearShortcut(event)) return true;
         event.preventDefault();
         event.stopPropagation();
-        void sendTerminalInput("\u000c", "Failed to clear terminal");
+        void sendTerminalInput("\u000c", m(msg("Failed to clear terminal")));
         return false;
       }
 
@@ -1079,14 +1099,17 @@ function TerminalSessionViewport({
         if (!latestTerminal) return;
         if (isTerminalUrl(text)) {
           if (!localApi) {
-            writeSystemMessage(latestTerminal, "Opening links is unavailable in this browser.");
+            writeSystemMessage(
+              latestTerminal,
+              m(msg("Opening links is unavailable in this browser.")),
+            );
             return;
           }
           const fallbackToBrowser = () => {
             void localApi.shell.openExternal(text).catch((error: unknown) => {
               writeSystemMessage(
                 latestTerminal,
-                error instanceof Error ? error.message : "Unable to open link",
+                thrownErrorMessage(error, m) ?? m(msg("Unable to open link")),
               );
             });
           };
@@ -1099,15 +1122,15 @@ function TerminalSessionViewport({
               toastManager.add(
                 stackedThreadToast({
                   type: "error",
-                  title: "Unable to open link",
-                  description: error instanceof Error ? error.message : "An error occurred.",
+                  title: m(msg("Unable to open link")),
+                  description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
                 }),
               );
             },
           );
           return;
         }
-        const target = resolvePathLinkTarget(text, cwd);
+        const target = resolveTerminalLinkTarget(text, cwd, readHostname());
         void (async () => {
           const result = await openTerminalPath(target);
           if (result._tag === "Success" || isAtomCommandInterrupted(result)) {
@@ -1116,46 +1139,14 @@ function TerminalSessionViewport({
           const error = squashAtomCommandFailure(result);
           writeSystemMessage(
             latestTerminal,
-            error instanceof Error ? error.message : "Unable to open path",
+            thrownErrorMessage(error, m) ?? m(msg("Unable to open path")),
           );
         })();
       }
 
       function handleData(data: string): void {
-        if (!hasTerminalWriteAccess()) return;
-        void (async () => {
-          const result = await writeTerminal(data);
-          if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
-          const error = squashAtomCommandFailure(result);
-          writeSystemMessage(
-            terminal,
-            error instanceof Error ? error.message : "Terminal write failed",
-          );
-        })();
+        void sendTerminalInput(data, m(msg("Terminal write failed")));
       }
-
-      function handleSelectionChange(): void {
-        if (terminalRef.current?.hasSelection()) {
-          return;
-        }
-        const shouldClear = shouldClearTerminalSelectionAction({
-          actionPending: selectionActions?.pending ?? false,
-          openMenuRequestId: openSelectionMenuRequestIdRef.current,
-          currentRequestId: selectionActionRequestIdRef.current,
-        });
-        if (!shouldClear) return;
-        clearSelectionAction();
-      }
-
-      selectionActions = observeSelectionActions({
-        element: mount,
-        getActionElement: () => selectionToolbarRef.current,
-        onSelection: (pointer) => {
-          showSelectionAction(pointer);
-        },
-        onDismiss: (reason) => dismissSelectionAction(reason === "interaction"),
-      });
-      setupCleanups.push(() => selectionActions?.dispose());
 
       const themeObserver = new MutationObserver(() => {
         const activeTerminal = terminalRef.current;
@@ -1205,8 +1196,10 @@ function TerminalSessionViewport({
         setupTerminal = null;
         if (cancelled) return;
         const message =
-          error instanceof Error ? error.message : "Unable to initialize libghostty-vt";
-        mount.textContent = `${message}. Close and reopen the terminal to retry.`;
+          thrownErrorMessage(error, m) ?? m(msg("Unable to initialize libghostty-vt"));
+        mount.textContent = m(
+          msg("{message}. Close and reopen the terminal to retry.", { message }),
+        );
       });
 
     return () => {
@@ -1217,17 +1210,7 @@ function TerminalSessionViewport({
         mount.focus({ preventScroll: true });
       }
     };
-  }, [cwd, environmentId, terminalId]);
-
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the mounted selection toolbar and keeps its DOM position inside the viewport before paint
-  useLayoutEffect(() => {
-    const toolbar = selectionToolbarRef.current;
-    if (!toolbar || !selectionToolbar) return;
-    const rect = toolbar.getBoundingClientRect();
-    const { x, y } = selectionToolbar.position;
-    toolbar.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
-    toolbar.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
-  }, [selectionToolbar]);
+  }, [cwd, environmentId, terminalId, terminalSessionAtom, threadId]);
 
   const attachContainer = (mount: HTMLDivElement) => {
     containerRef.current = mount;
@@ -1249,6 +1232,7 @@ function TerminalSessionViewport({
     const unregister = registerTerminalFocusTarget({
       threadRef,
       terminalId,
+      element: mount,
       focus,
     });
     return () => {
@@ -1258,51 +1242,12 @@ function TerminalSessionViewport({
   };
 
   return (
-    <>
-      <div
-        ref={attachContainer}
-        tabIndex={-1}
-        className="relative h-full w-full overflow-hidden bg-(--terminal-background)"
-      />
-      {selectionToolbar && visible
-        ? createPortal(
-            <div
-              ref={selectionToolbarRef}
-              className="fixed z-50 flex rounded-control surface-popover p-0.75"
-              style={{ left: selectionToolbar.position.x, top: selectionToolbar.position.y }}
-              data-terminal-selection-toolbar
-              // Keep the terminal's selection and focus while pressing the action.
-              onPointerDown={(event) => event.preventDefault()}
-            >
-              <button
-                type="button"
-                className="flex h-5.5 cursor-pointer items-center gap-1.5 rounded-row surface-selected px-2 text-caption text-foreground outline-none hover:text-strong-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
-                onClick={selectionToolbar.run}
-              >
-                {selectionToolbar.action === "add-to-chat" ? (
-                  <>
-                    <MessageSquarePlus aria-hidden className="size-3.25" />
-                    Add to chat
-                  </>
-                ) : (
-                  <>
-                    <Copy aria-hidden className="size-3.25" />
-                    Copy
-                  </>
-                )}
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
+    <div
+      ref={attachContainer}
+      tabIndex={-1}
+      className="relative h-full w-full overflow-hidden bg-(--terminal-background)"
+    />
   );
-}
-
-interface TerminalSelectionToolbarState {
-  readonly position: SelectionActionPoint;
-  readonly action: "add-to-chat" | "copy";
-  readonly run: () => void;
 }
 
 interface ThreadTerminalDrawerProps {
@@ -1325,8 +1270,6 @@ interface ThreadTerminalDrawerProps {
   onSplitTerminal: () => void;
   onSplitTerminalVertical: () => void;
   onNewTerminal: () => void;
-  splitShortcutLabel?: string | undefined;
-  splitVerticalShortcutLabel?: string | undefined;
   newShortcutLabel?: string | undefined;
   closeShortcutLabel?: string | undefined;
   onActiveTerminalChange: (terminalId: string) => void;
@@ -1375,6 +1318,7 @@ function TerminalSplitPanes({
   visible: boolean;
   keybindings: ResolvedKeybindingsConfig;
 }) {
+  const gt = useGT();
   return (
     <div
       className="grid h-full w-full min-w-0 gap-0 overflow-hidden"
@@ -1410,7 +1354,7 @@ function TerminalSplitPanes({
                 threadRef={threadRef}
                 threadId={threadId}
                 terminalId={terminalId}
-                terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
+                terminalLabel={terminalLabelById.get(terminalId) ?? gt("Terminal")}
                 cwd={terminalLaunchLocation.cwd}
                 {...(terminalLaunchLocation.worktreePath !== undefined
                   ? { worktreePath: terminalLaunchLocation.worktreePath }
@@ -1434,15 +1378,15 @@ function TerminalSplitPanes({
 interface TerminalActionButtonProps {
   label: string;
   onClick: () => void;
-  /** Keeps the tooltip reachable (it explains the limit), unlike `disabled`. */
   unavailable?: boolean;
   children: ReactNode;
-  disabled?: boolean;
+  /** "bare" for the notch's "+", which matches the chat tab strip's. */
+  variant?: "ghost-muted" | "bare";
 }
 
 /**
  * The terminal pane's tabs: in a layout pane they sit in the pane's notch with
- * "+" as its last child, like a chat's tabs; the drawer keeps a plain row.
+ * "+" as its last child, like a chat's tabs. The drawer keeps a plain row.
  */
 function TerminalTabsNotch({
   notch,
@@ -1464,10 +1408,6 @@ function TerminalTabsNotch({
   );
 }
 
-/**
- * The terminal tabs' row: in a pane's notch it clips and the tabs fit it
- * (usePaneTabStripFit); the drawer's row scrolls.
- */
 function TerminalTabStrip({
   notch,
   ref,
@@ -1477,15 +1417,16 @@ function TerminalTabStrip({
   ref: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }) {
+  const gt = useGT();
   const { tabId } = useLayoutPane();
   if (notch) {
     return (
       <div
         ref={ref}
         data-layout-pane-tab={tabId ?? undefined}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+        className="flex shrink-0 items-center gap-1"
         role="tablist"
-        aria-label="Terminals"
+        aria-label={gt("Terminals")}
       >
         {children}
       </div>
@@ -1496,7 +1437,7 @@ function TerminalTabStrip({
       <div
         className="flex h-full w-max min-w-full items-center gap-1"
         role="tablist"
-        aria-label="Terminals"
+        aria-label={gt("Terminals")}
       >
         {children}
       </div>
@@ -1509,6 +1450,7 @@ function TerminalActionButton({
   onClick,
   unavailable,
   children,
+  variant = "ghost-muted",
 }: TerminalActionButtonProps) {
   return (
     <Popover>
@@ -1517,7 +1459,7 @@ function TerminalActionButton({
         render={
           <Button
             size="icon-xs"
-            variant="ghost-muted"
+            variant={variant}
             onClick={() => {
               if (!unavailable) onClick();
             }}
@@ -1559,8 +1501,6 @@ export default function ThreadTerminalDrawer({
   onSplitTerminal,
   onSplitTerminalVertical,
   onNewTerminal,
-  splitShortcutLabel,
-  splitVerticalShortcutLabel,
   newShortcutLabel,
   closeShortcutLabel,
   onActiveTerminalChange,
@@ -1573,13 +1513,15 @@ export default function ThreadTerminalDrawer({
   terminalLaunchLocationsById,
   attaching = false,
 }: ThreadTerminalDrawerProps) {
+  const gt = useGT();
+  const messages = useMessages();
   const canOperateTerminal = useEnvironmentScope(threadRef.environmentId, AuthTerminalOperateScope);
-  const terminalArea = workspaceAreaProps("terminal", 5, "Terminal");
+  const terminalArea = workspaceAreaProps("terminal", 5, gt("Terminal"));
   const isPanel = mode === "panel";
   const fillsContainer = mode !== "drawer";
   const terminalOwner = mode === "panel" ? "right-panel" : "drawer";
   // As a pane, this is a layout tab: dragging one of its terminals moves it.
-  const { tabId: layoutTabId, leadingEdge } = useLayoutPane();
+  const { tabId: layoutTabId, leadingEdge, trailingEdge } = useLayoutPane();
   const siblingTabs = useLayoutPaneSiblingTabs();
   const [advancedTypography] = useLocalStorage(
     TYPOGRAPHY_ADVANCED_STORAGE_KEY,
@@ -1694,7 +1636,10 @@ export default function ThreadTerminalDrawer({
   const terminalLabelById = (() => {
     const next = new Map<string, string>();
     for (const terminalId of normalizedTerminalIds) {
-      next.set(terminalId, terminalLabelsById?.get(terminalId) ?? getTerminalLabel(terminalId));
+      next.set(
+        terminalId,
+        terminalLabelsById?.get(terminalId) ?? getTerminalLabel(terminalId, messages),
+      );
     }
     return next;
   })();
@@ -1722,53 +1667,22 @@ export default function ThreadTerminalDrawer({
   const isSplitView = visibleTerminalIds.length > 1;
   const tabStripRef = useRef<HTMLDivElement>(null);
   useRevealActiveTab(tabStripRef, resolvedActiveTerminalId);
-  const fitTabs = resolvedTerminalGroups.flatMap((group) =>
-    group.terminalIds.map((terminalId) => ({
-      key: terminalId,
-      title: terminalLabelById.get(terminalId) ?? "Terminal",
-    })),
-  );
-  // In a pane's notch the tabs fold and overflow into a menu instead of scrolling.
-  const tabFit = usePaneTabStripFit(tabStripRef, fitTabs, resolvedActiveTerminalId);
-  const hiddenTerminalTabs = fitTabs.filter((tab) => tabFit.hidden.has(tab.key));
   const resolveTerminalLaunchLocation = (terminalId: string): TerminalLaunchLocation =>
     terminalLaunchLocationsById?.get(terminalId) ?? {
       cwd,
       ...(worktreePath !== undefined ? { worktreePath } : {}),
       ...(runtimeEnv ? { runtimeEnv } : {}),
     };
-  const hasReachedSplitLimit = visibleTerminalIds.length >= MAX_TERMINALS_PER_GROUP;
-  const splitTerminalActionLabel = hasReachedSplitLimit
-    ? `Split Terminal Horizontally (max ${MAX_TERMINALS_PER_GROUP} per group)`
-    : splitShortcutLabel
-      ? `Split Terminal Horizontally (${splitShortcutLabel})`
-      : "Split Terminal Horizontally";
-  const splitTerminalVerticalActionLabel = hasReachedSplitLimit
-    ? `Split Terminal Vertically (max ${MAX_TERMINALS_PER_GROUP} per group)`
-    : splitVerticalShortcutLabel
-      ? `Split Terminal Vertically (${splitVerticalShortcutLabel})`
-      : "Split Terminal Vertically";
-  const onSplitTerminalAction = () => {
-    if (!canOperateTerminal || hasReachedSplitLimit) return;
-    onSplitTerminal();
-  };
-  const onSplitTerminalVerticalAction = () => {
-    if (!canOperateTerminal || hasReachedSplitLimit) return;
-    onSplitTerminalVertical();
-  };
   const newTerminalActionLabel = newShortcutLabel
-    ? `New Terminal (${newShortcutLabel})`
-    : "New Terminal";
-  const closeTerminalActionLabel = closeShortcutLabel
-    ? `Close Terminal (${closeShortcutLabel})`
-    : "Close Terminal";
+    ? gt("New Terminal ({shortcut})", { shortcut: newShortcutLabel })
+    : gt("New Terminal");
   const onNewTerminalAction = () => {
     if (!canOperateTerminal) return;
     onNewTerminal();
   };
   const confirmCloseTerminal = (terminalId: string) => {
     if (!canOperateTerminal) return;
-    const label = terminalLabelById.get(terminalId) ?? getTerminalLabel(terminalId);
+    const label = terminalTabTitle(terminalId, terminalLabelById.get(terminalId));
     void confirmTerminalClose([label]).then((confirmed) => {
       if (confirmed && readEnvironmentScope(threadRef.environmentId, AuthTerminalOperateScope)) {
         onCloseTerminal(terminalId, threadRef);
@@ -1800,6 +1714,52 @@ export default function ThreadTerminalDrawer({
       confirmCloseTerminal(resolvedActiveTerminalId);
     }
   };
+
+  const hasTerminal = useStableCallback(() => visibleTerminalIds.length > 0);
+  const canSplitTerminal = useStableCallback(
+    () => canOperateTerminal && visibleTerminalIds.length < MAX_TERMINALS_PER_GROUP,
+  );
+  const paneFocusedRef = useLayoutPaneFocusedRef();
+  const threadKey = scopedThreadKey(threadRef);
+  const splitTerminalFromPalette = useStableCallback((direction: "horizontal" | "vertical") => {
+    if (direction === "vertical") onSplitTerminalVertical();
+    else onSplitTerminal();
+  });
+  // A terminal takes focus only in the focused pane, so a terminal pane claims it first.
+  const focusActiveTerminalNow = useStableCallback(() => {
+    if (resolvedActiveTerminalId) focusTerminal(threadRef, resolvedActiveTerminalId);
+  });
+  const focusActiveTerminal = useStableCallback(() => {
+    if (layoutTabId === null || paneFocusedRef.current) {
+      focusActiveTerminalNow();
+      return;
+    }
+    useLayoutStore.getState().focusTab(layoutTabId);
+    window.requestAnimationFrame(focusActiveTerminalNow);
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- The command palette reaches this pane's split, the one its keys run, while the pane is mounted.
+  useEffect(
+    () =>
+      registerTerminalSplitTarget({
+        threadKey,
+        contains: (element) => drawerRef.current?.contains(element) ?? false,
+        inFocusedPane: () => visible && paneFocusedRef.current,
+        visible: () => visible,
+        hasTerminal,
+        canSplit: canSplitTerminal,
+        split: splitTerminalFromPalette,
+        focusActive: focusActiveTerminal,
+      }),
+    [
+      canSplitTerminal,
+      focusActiveTerminal,
+      hasTerminal,
+      paneFocusedRef,
+      splitTerminalFromPalette,
+      threadKey,
+      visible,
+    ],
+  );
 
   const handleResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -1895,7 +1855,7 @@ export default function ThreadTerminalDrawer({
 
   const resizeHandle = fillsContainer ? null : (
     <div
-      className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+      className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize touch-none any-pointer-coarse:h-4"
       onPointerDown={handleResizePointerDown}
       onPointerMove={handleResizePointerMove}
       onPointerUp={handleResizePointerEnd}
@@ -1925,7 +1885,9 @@ export default function ThreadTerminalDrawer({
         {resizeHandle}
         {attaching ? null : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 py-6 text-center text-sm text-muted-foreground">
-            <p>No terminal sessions for this thread yet.</p>
+            <p>
+              <T>No terminal sessions for this thread yet.</T>
+            </p>
             <Button
               size="xs"
               variant="secondary"
@@ -1950,34 +1912,6 @@ export default function ThreadTerminalDrawer({
     </TerminalActionButton>
   );
 
-  // Keep every terminal action in the header so controls never cover shell output.
-  const terminalActions = (
-    <div className="flex items-center gap-0.5">
-      <TerminalActionButton
-        label={splitTerminalActionLabel}
-        onClick={onSplitTerminalAction}
-        unavailable={!canOperateTerminal || hasReachedSplitLimit}
-      >
-        <SquareSplitHorizontal className="size-3.5" />
-      </TerminalActionButton>
-      <TerminalActionButton
-        label={splitTerminalVerticalActionLabel}
-        onClick={onSplitTerminalVerticalAction}
-        unavailable={!canOperateTerminal || hasReachedSplitLimit}
-      >
-        <SquareSplitVertical className="size-3.5" />
-      </TerminalActionButton>
-      {newTerminalButton}
-      <TerminalActionButton
-        label={closeTerminalActionLabel}
-        onClick={() => confirmCloseTerminal(resolvedActiveTerminalId)}
-        unavailable={!canOperateTerminal}
-      >
-        <Trash2 className="size-3.5" />
-      </TerminalActionButton>
-    </div>
-  );
-
   return (
     <aside
       ref={drawerRef}
@@ -1990,60 +1924,71 @@ export default function ThreadTerminalDrawer({
     >
       {resizeHandle}
 
-      {isPanel ? (
-        <div className="flex h-8 shrink-0 items-center justify-end border-b border-border surface-card px-1.5">
-          {terminalActions}
-        </div>
-      ) : (
+      {isPanel ? null : (
         // The terminal pane's header (pen bKxd4): one tab per terminal, "+"
         // after the last tab.
         <div
           className={cn(
             "flex h-11 shrink-0 items-center gap-1",
-            // A layout pane's tabs sit in its notch (pen hRbzg), from the pane's
-            // edge; the notch stops short of the pane's top-right corner.
-            mode === "pane" ? "relative pe-10 ps-1.5 md:ps-0" : "px-1.5 pt-1",
+            mode === "pane"
+              ? cn("relative ps-1.5 pe-2 md:ps-0", COLLAPSED_SIDEBAR_INSET_EASE_CLASS)
+              : "px-1.5 pt-1",
             mode === "pane" && leadingEdge && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+            mode === "pane" && trailingEdge && "wco:pr-(--workspace-native-controls-inset)",
           )}
           data-terminal-tab-strip
           // In a pane the strip is the pane's header: the shared rule centers its tabs on
           // the chrome row's line like every other pane header.
           data-pane-header={mode === "pane" ? "" : undefined}
         >
-          <TerminalTabsNotch notch={mode === "pane"} newTerminalButton={terminalActions}>
+          <TerminalTabsNotch
+            notch={mode === "pane"}
+            newTerminalButton={
+              <TerminalActionButton
+                label={newTerminalActionLabel}
+                onClick={onNewTerminalAction}
+                unavailable={!canOperateTerminal}
+                variant="bare"
+              >
+                <Plus />
+              </TerminalActionButton>
+            }
+          >
             {mode === "pane"
               ? siblingTabs.before.map((tab) => <LayoutPaneTab key={tab.id} tab={tab} />)
               : null}
             <TerminalTabStrip notch={mode === "pane"} ref={tabStripRef}>
               {resolvedTerminalGroups.flatMap((terminalGroup, groupIndex) =>
                 terminalGroup.terminalIds.map((terminalId) => {
-                  if (tabFit.hidden.has(terminalId)) return null;
                   const isActive = terminalId === resolvedActiveTerminalId;
-                  const folded = tabFit.folded && !isActive;
                   // Split siblings of the active tab are on screen too.
                   const isOnScreen = isSplitView && groupIndex === resolvedActiveGroupIndex;
-                  const terminalLabel = terminalLabelById.get(terminalId) ?? "Terminal";
+                  const terminalLabel = terminalLabelById.get(terminalId) ?? gt("Terminal");
                   const status = terminalStatusById?.get(terminalId) ?? "idle";
-                  const statusLabel = terminalActivityStatusLabel(status);
-                  const tabTitle = terminalTabTitle(terminalId, terminalLabel);
+                  const statusLabel = terminalActivityStatusLabel(status, messages);
+                  const tabTitle = terminalTabTitle(terminalId, terminalLabel, messages);
                   const splitLabel =
                     terminalGroup.terminalIds.length < 2
                       ? null
                       : terminalGroup.splitDirection === "vertical"
-                        ? "Stacked"
-                        : "Side by side";
+                        ? gt("Stacked", { $context: "terminals split vertically" })
+                        : gt("Side by side", { $context: "terminals split horizontally" });
                   const tooltip = [
                     terminalLabel,
                     threadTitle,
                     terminalLaunchLocationsById?.get(terminalId)?.cwd ?? worktreePath ?? cwd,
-                    statusLabel ?? "Idle",
+                    statusLabel ?? gt("Idle", { $context: "terminal status" }),
                     splitLabel,
                   ]
                     .filter(Boolean)
                     .join("\n");
-                  const closeTerminalLabel = `Close ${terminalLabel}${
-                    isActive && closeShortcutLabel ? ` (${closeShortcutLabel})` : ""
-                  }`;
+                  const closeTerminalLabel =
+                    isActive && closeShortcutLabel
+                      ? gt("Close {terminal} ({shortcut})", {
+                          terminal: terminalLabel,
+                          shortcut: closeShortcutLabel,
+                        })
+                      : gt("Close {terminal}", { terminal: terminalLabel });
                   return (
                     <div
                       key={terminalId}
@@ -2056,9 +2001,7 @@ export default function ThreadTerminalDrawer({
                           : undefined
                       }
                       className={cn(
-                        "group/tab flex h-7 items-center gap-1.75 rounded-control px-2.5 text-label",
-                        isActive && tabFit.squeezed ? "min-w-0" : "shrink-0",
-                        folded && FOLDED_TAB_CLASS,
+                        "group/tab flex h-7 shrink-0 items-center gap-1.75 rounded-control px-2.5 text-label",
                         isActive
                           ? "text-strong-foreground"
                           : isOnScreen
@@ -2066,102 +2009,47 @@ export default function ThreadTerminalDrawer({
                             : "text-muted-foreground hover:surface-ghost-hover hover:text-foreground",
                       )}
                     >
-                      {folded ? (
-                        // A folded tab is its icon alone, so a click shows it
-                        // rather than turning the icon into its close button.
+                      <>
+                        {/* The terminal icon turns into the close button on hover, like the panel tabs. */}
+                        <PanelTabCloseButton
+                          label={closeTerminalLabel}
+                          onClick={() => confirmCloseTerminal(terminalId)}
+                        >
+                          <SquareTerminal
+                            aria-hidden
+                            className={cn(
+                              "size-3.5 shrink-0",
+                              status === "running"
+                                ? "text-success-foreground"
+                                : isActive && "text-foreground",
+                            )}
+                          />
+                        </PanelTabCloseButton>
                         <Tooltip>
                           <TooltipTrigger
                             render={
                               <button
                                 type="button"
                                 role="tab"
-                                aria-selected={false}
-                                aria-label={
-                                  statusLabel ? `${terminalLabel}, ${statusLabel}` : terminalLabel
-                                }
-                                className="flex size-full cursor-pointer items-center justify-center rounded-[inherit] outline-none focus-visible:inset-ring-2 focus-visible:inset-ring-ring"
+                                aria-selected={isActive}
+                                aria-label={[tabTitle, threadTitle, statusLabel]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                                className="flex min-w-0 cursor-pointer items-center rounded-kbd outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
                                 onClick={() => onActiveTerminalChange(terminalId)}
                               />
                             }
                           >
-                            <SquareTerminal
-                              aria-hidden
-                              className={cn(
-                                "size-3.5 shrink-0",
-                                status === "running" && "text-success-foreground",
-                              )}
-                            />
+                            <span className="max-w-40 truncate">{tabTitle}</span>
                           </TooltipTrigger>
                           <TooltipPopup className="whitespace-pre-line">{tooltip}</TooltipPopup>
                         </Tooltip>
-                      ) : (
-                        <>
-                          {/* The terminal icon turns into the close button on hover, like the panel tabs. */}
-                          <PanelTabCloseButton
-                            label={closeTerminalLabel}
-                            onClick={() => confirmCloseTerminal(terminalId)}
-                          >
-                            <SquareTerminal
-                              aria-hidden
-                              className={cn(
-                                "size-3.5 shrink-0",
-                                status === "running"
-                                  ? "text-success-foreground"
-                                  : isActive && "text-foreground",
-                              )}
-                            />
-                          </PanelTabCloseButton>
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  role="tab"
-                                  aria-selected={isActive}
-                                  className="flex min-w-0 cursor-pointer items-center rounded-kbd outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
-                                  onClick={() => onActiveTerminalChange(terminalId)}
-                                />
-                              }
-                            >
-                              <span className="max-w-40 truncate">{tabTitle}</span>
-                              {statusLabel ? (
-                                <span className="sr-only">, {statusLabel}</span>
-                              ) : null}
-                            </TooltipTrigger>
-                            <TooltipPopup className="whitespace-pre-line">{tooltip}</TooltipPopup>
-                          </Tooltip>
-                        </>
-                      )}
+                      </>
                     </div>
                   );
                 }),
               )}
-              {hiddenTerminalTabs.length > 0 ? (
-                <Menu>
-                  <MenuTrigger
-                    render={
-                      <Button
-                        aria-label="More terminals"
-                        className="shrink-0"
-                        data-tab-overflow=""
-                        size="icon-xs"
-                        variant="ghost-muted"
-                      />
-                    }
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </MenuTrigger>
-                  <MenuPopup align="start" side="bottom" sideOffset={6} className="max-w-64">
-                    {hiddenTerminalTabs.map((tab) => (
-                      <MenuItem key={tab.key} onClick={() => onActiveTerminalChange(tab.key)}>
-                        <SquareTerminal aria-hidden />
-                        <span className="min-w-0 truncate">{tab.title}</span>
-                      </MenuItem>
-                    ))}
-                  </MenuPopup>
-                </Menu>
-              ) : null}
-              {mode === "pane" ? null : terminalActions}
+              {mode === "pane" ? null : newTerminalButton}
             </TerminalTabStrip>
             {mode === "pane"
               ? siblingTabs.after.map((tab) => <LayoutPaneTab key={tab.id} tab={tab} />)
@@ -2174,9 +2062,10 @@ export default function ThreadTerminalDrawer({
         <div
           className={cn(
             "flex h-full min-h-0 bg-(--terminal-background)",
-            // Text sits 16px in from the pane's edge, in line with its tabs; a
-            // panel terminal's starts below its floating actions.
-            mode === "panel" ? "px-4 pt-1" : "px-4 pt-1 pb-1",
+            // A pane's text starts right under its notch, 10px in (with the
+            // surface's own 4px) in line with the tab icons; a panel terminal's
+            // starts below its floating actions.
+            mode === "pane" ? "px-1.5" : mode === "panel" ? "px-4 pt-1" : "px-4 pt-1 pb-1",
           )}
         >
           <div className="min-w-0 flex-1">
@@ -2202,8 +2091,11 @@ export default function ThreadTerminalDrawer({
   );
 }
 
-function terminalActivityStatusLabel(status: TerminalActivityStatus): string | null {
-  if (status === "running") return "Process running";
-  if (status === "failed") return "Last command failed";
+function terminalActivityStatusLabel(
+  status: TerminalActivityStatus,
+  resolve: MessageResolver,
+): string | null {
+  if (status === "running") return resolve(msg("Process running"));
+  if (status === "failed") return resolve(msg("Last command failed"));
   return null;
 }

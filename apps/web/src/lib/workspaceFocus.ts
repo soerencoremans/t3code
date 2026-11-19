@@ -1,8 +1,9 @@
 import type { AnyRouter } from "@tanstack/react-router";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { dismissContextMenu } from "../contextMenuFallback";
-import { findLayoutTab } from "../layout/layoutModel";
-import { useLayoutStore } from "../layout/layoutStore";
+import { findLayoutTab, selectFocusedTab } from "../layout/layoutModel";
+import { selectIntendedLayout, useLayoutStore } from "../layout/layoutStore";
 import { useRightPanelStore } from "../rightPanelStore";
 
 const AREA_SELECTOR = "[data-workspace-area]";
@@ -13,12 +14,11 @@ const FOCUSABLE_SELECTOR =
   'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"], [tabindex]';
 
 /** Props that make an element one stop in the F6 cycle; `order` sets its place in the cycle. */
-export function workspaceAreaProps(name: string, order: number, label: string) {
+export function workspaceAreaProps(name: string, order: number, label?: string) {
   return {
     "data-workspace-area": name,
     "data-workspace-order": order,
-    "aria-label": label,
-    role: "region",
+    ...(label ? { "aria-label": label, role: "region" } : {}),
     tabIndex: -1,
   } as const;
 }
@@ -46,6 +46,34 @@ function workspaceAreaKey(area: HTMLElement) {
 
 function paneId(element: Element | null | undefined): string | undefined {
   return element?.closest<HTMLElement>(PANE_SELECTOR)?.dataset.layoutTabId;
+}
+
+/** The message box of the main chat a side chat area belongs to, when that chat is on screen. */
+function sideChatParentComposer(area: HTMLElement, areas: HTMLElement[]) {
+  if (!area.closest("[data-side-chat-pane]")) return undefined;
+  const { layout } = useLayoutStore.getState();
+  const tabContent = (element: HTMLElement) => {
+    const id = paneId(element);
+    return id === undefined
+      ? undefined
+      : findLayoutTab(layout, (tab) => tab.id === id)?.tab.content;
+  };
+  const sideChat = tabContent(area);
+  if (sideChat?.kind !== "surface") return undefined;
+  const parentKey = scopedThreadKey(sideChat.threadRef);
+  return areas.find((candidate) => {
+    if (
+      candidate.dataset.workspaceArea !== "composer" ||
+      candidate.closest("[data-side-chat-pane]")
+    )
+      return false;
+    const content = tabContent(candidate);
+    return (
+      content?.kind === "chat" &&
+      content.target.kind === "server" &&
+      scopedThreadKey(content.target.threadRef) === parentKey
+    );
+  });
 }
 
 function claimWorkspacePane(area: HTMLElement) {
@@ -107,6 +135,68 @@ function isInScrollView(target: HTMLElement) {
 }
 
 /**
+ * Whether focus can go back to an element without surprising the user: it is still in a
+ * visible workspace area (a closing drawer drops its area) and in view, so no list scrolls.
+ */
+export function canReturnFocusTo(element: HTMLElement) {
+  return (
+    workspaceArea(element) !== null && isWorkspaceElementVisible(element) && isInScrollView(element)
+  );
+}
+
+let returnedSurfaceFocus: HTMLElement | null = null;
+
+export function isReturnedSurfaceFocus() {
+  return returnedSurfaceFocus !== null && document.activeElement === returnedSurfaceFocus;
+}
+
+export function holdSurfaceFocusOrigin(host: HTMLElement, initialOrigin: Element | null) {
+  const doc = host.ownerDocument;
+  let origin = initialOrigin instanceof HTMLElement ? initialOrigin : null;
+  // A pane's tab strip is portalled outside its content slot.
+  const contains = (target: EventTarget | null) =>
+    target instanceof Element &&
+    (host.contains(target) ||
+      (host.dataset.layoutTabId !== undefined &&
+        target.closest<HTMLElement>("[data-layout-pane-tab]")?.dataset.layoutPaneTab ===
+          host.dataset.layoutTabId));
+  let ownsFocus = contains(doc.activeElement);
+  const remember = (event: FocusEvent) => {
+    const entered = contains(event.target);
+    const from = event.relatedTarget;
+    if (
+      entered &&
+      !ownsFocus &&
+      from instanceof HTMLElement &&
+      !contains(from) &&
+      canReturnFocusTo(from)
+    ) {
+      origin = from;
+    }
+    ownsFocus = entered;
+  };
+  doc.addEventListener("focusin", remember);
+  return () => {
+    doc.removeEventListener("focusin", remember);
+    if (!ownsFocus || !origin || !canReturnFocusTo(origin)) {
+      return;
+    }
+    const tabId = paneId(origin);
+    if (tabId) useLayoutStore.getState().focusTab(tabId);
+    const target = origin;
+    returnedSurfaceFocus = target;
+    target.addEventListener(
+      "blur",
+      () => {
+        if (returnedSurfaceFocus === target) returnedSurfaceFocus = null;
+      },
+      { once: true },
+    );
+    origin.focus({ preventScroll: true });
+  };
+}
+
+/**
  * Brings a restored control into view, innermost scrolling list first.
  * scrollIntoView would also scroll overflow-hidden layout containers out of place.
  */
@@ -124,10 +214,32 @@ export function createWorkspaceFocusController(doc: Document) {
   const lastFocused = new Map<string, HTMLElement>();
   let lastArea: HTMLElement | undefined;
   let lastAreaKey: string | undefined;
+  // An area that took focus itself from the keyboard, or the non-tabbable default (the
+  // conversation's scroller) standing in for it. Chromium's :focus-visible also matches a
+  // clicked area after any later key press, so the ring and window return read this mark.
+  let keyboardArea: HTMLElement | undefined;
+  let previousTarget: EventTarget | null = null;
+  const unmarkKeyboardArea = () => {
+    keyboardArea?.removeAttribute("data-workspace-keyboard-focus");
+    keyboardArea = undefined;
+  };
+  const standsInFor = (element: HTMLElement, area: HTMLElement) =>
+    element === area ||
+    (element.tabIndex < 0 && element.hasAttribute("data-workspace-focus-default"));
+  const markKeyboardArea = (target: HTMLElement) => {
+    if (!target.matches(":focus-visible")) return;
+    keyboardArea = target;
+    target.setAttribute("data-workspace-keyboard-focus", "");
+  };
   const remember = (event: FocusEvent) => {
+    if (event.target !== keyboardArea) unmarkKeyboardArea();
+    // Window activation refocuses the same element; only focus arriving from elsewhere counts.
+    const arrived = event.target !== previousTarget;
+    previousTarget = event.target;
     if (!(event.target instanceof HTMLElement)) return;
     const area = workspaceArea(event.target);
     if (!area?.dataset.workspaceArea) return;
+    if (arrived && standsInFor(event.target, area)) markKeyboardArea(event.target);
     lastArea = area;
     const key = workspaceAreaKey(area);
     lastAreaKey = key;
@@ -140,18 +252,22 @@ export function createWorkspaceFocusController(doc: Document) {
   };
   doc.addEventListener("focusin", remember);
 
-  const focusArea = (area: HTMLElement, restore = true) => {
+  const focusArea = (area: HTMLElement, restore = true, nested = true) => {
     const key = workspaceAreaKey(area);
     const previous = restore ? lastFocused.get(key) : undefined;
-    const belongs = (element: HTMLElement) =>
-      workspaceArea(element) === area &&
-      isWorkspaceElementVisible(element) &&
-      !element.matches(":disabled");
+    const usable = (element: HTMLElement) =>
+      isWorkspaceElementVisible(element) && !element.matches(":disabled");
+    const belongs = (element: HTMLElement) => workspaceArea(element) === area && usable(element);
+    // A side chat's message input sits in its own area inside the panel. Opening the
+    // panel focuses it, but F6 visits that area on its own, so it moves past it here.
+    // A nested timeline stands in only for its own area, never ahead of that input.
     const preferred = Array.from(
       area.querySelectorAll<HTMLElement>(
-        '[data-workspace-focus-default], [data-sidebar-row][aria-current="page"], [data-settings-section][tabindex="0"], .xterm-helper-textarea, [contenteditable="true"]',
+        '[data-workspace-focus-default], [data-sidebar-row][aria-current="page"], [data-settings-section][aria-current="page"], .xterm-helper-textarea, [contenteditable="true"]',
       ),
-    ).find(belongs);
+    ).find((element) =>
+      nested && !standsInFor(element, area) ? usable(element) : belongs(element),
+    );
     const fallback = Array.from(area.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).find(
       (element) => element.tabIndex >= 0 && belongs(element),
     );
@@ -178,10 +294,14 @@ export function createWorkspaceFocusController(doc: Document) {
         )
       : undefined;
     // Moving the timeline to an old control would also stop it following a running turn,
-    // so the conversation reuses a control only while it is still in view.
+    // so the conversation reuses a control only while it is still in view. A remembered
+    // area is only the fallback it was then, so controls mounted since take precedence.
     const isConversation = area.dataset.workspaceArea === "conversation";
     const targets = new Set([
-      previous && belongs(previous) && (!isConversation || isInScrollView(previous))
+      previous &&
+      previous !== area &&
+      belongs(previous) &&
+      (!isConversation || isInScrollView(previous))
         ? previous
         : undefined,
       isConversation ? undefined : restored,
@@ -198,6 +318,8 @@ export function createWorkspaceFocusController(doc: Document) {
       if (active === target || (active && target.contains(active))) {
         claimWorkspacePane(area);
         if (target !== area && !isConversation) revealInScrollers(target);
+        // Focusing the already focused area fires no focusin, as when F6 has nowhere else to go.
+        if (standsInFor(target, area)) markKeyboardArea(target);
         return true;
       }
     }
@@ -218,7 +340,9 @@ export function createWorkspaceFocusController(doc: Document) {
         ? (candidates.find((element) => element.dataset.workspaceArea === "composer") ??
           candidates.find(
             (element) =>
-              element.dataset.workspaceArea === "pull-requests" || element.matches("main"),
+              element.dataset.workspaceArea === "pull-requests" ||
+              element.dataset.workspaceArea === "issues" ||
+              element.matches("main"),
           ) ??
           candidates.find((element) => element.dataset.workspaceArea === "conversation") ??
           candidates.find((element) => element.dataset.workspaceArea === "panel") ??
@@ -309,9 +433,18 @@ export function createWorkspaceFocusController(doc: Document) {
         ) ?? areas.find((area) => area.dataset.workspaceArea === fromArea))
       : (activeArea ?? lastArea);
     const currentKey = activeArea ? workspaceAreaKey(activeArea) : lastAreaKey;
-    const current = areas.findIndex(
-      (area) => area === currentArea || (!fromArea && workspaceAreaKey(area) === currentKey),
-    );
+    // A side chat nests areas with the main chat's names, so the focused area itself wins.
+    const exact = currentArea ? areas.indexOf(currentArea) : -1;
+    const current =
+      exact === -1
+        ? areas.findIndex((area) => !fromArea && workspaceAreaKey(area) === currentKey)
+        : exact;
+    // Shift+F6 leaves a side chat for its main chat's message box in one press, as on main.
+    const parentComposer =
+      direction === -1 && current !== -1
+        ? sideChatParentComposer(areas[current]!, areas)
+        : undefined;
+    if (parentComposer && focusArea(parentComposer, true, false)) return true;
     const index =
       current === -1
         ? direction === 1
@@ -319,20 +452,33 @@ export function createWorkspaceFocusController(doc: Document) {
           : areas.length - 1
         : (current + direction + areas.length) % areas.length;
     const area = areas[index]!;
-    return focusArea(area);
+    return focusArea(area, true, false);
   };
 
-  // Focus that drops to the body because its element was hidden, made inert, or removed
-  // returns to the same control when React remounted it, else to its area, else the content.
+  // Focus that drops to the body because its element was hidden, made inert, disabled, or removed
+  // returns to a remounted control, else its area, or the composer for a finished timeline prompt.
   const recover = (event: FocusEvent) => {
     const lost = event.target;
     if (!(lost instanceof HTMLElement) || event.relatedTarget) return;
     const lostArea = workspaceArea(lost);
     const lostAreaKey = lostArea ? workspaceAreaKey(lostArea) : undefined;
+    // Focus lost inside the timeline goes back to that pane's composer, as on main.
+    const toComposer = lostArea?.dataset.workspaceArea === "conversation";
     const tabId = lost.closest<HTMLElement>(PANE_SELECTOR)?.dataset.layoutTabId;
     const label = lost.getAttribute("aria-label");
     requestAnimationFrame(() => {
-      if (doc.activeElement !== doc.body || !doc.hasFocus() || isWorkspaceElementVisible(lost))
+      if (
+        doc.activeElement !== doc.body ||
+        !doc.hasFocus() ||
+        (isWorkspaceElementVisible(lost) && !lost.matches(":disabled"))
+      )
+        return;
+      const layout = selectIntendedLayout();
+      if (
+        tabId &&
+        findLayoutTab(layout, (tab) => tab.id === tabId) &&
+        selectFocusedTab(layout)?.id !== tabId
+      )
         return;
       const remounted = Array.from(doc.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).find(
         (element) =>
@@ -340,10 +486,13 @@ export function createWorkspaceFocusController(doc: Document) {
           element.tagName === lost.tagName &&
           ((lost.id && element.id === lost.id) ||
             (label && element.getAttribute("aria-label") === label)) &&
-          isWorkspaceElementVisible(element),
+          isWorkspaceElementVisible(element) &&
+          !element.matches(":disabled"),
       );
       if (remounted) remounted.focus({ preventScroll: true });
-      else {
+      else if (toComposer) {
+        if (!focus("composer", true, undefined, tabId)) focus("content");
+      } else {
         const area = lostAreaKey
           ? Array.from(doc.querySelectorAll<HTMLElement>(AREA_SELECTOR)).find(
               (candidate) =>
@@ -404,7 +553,11 @@ export function createWorkspaceFocusController(doc: Document) {
   const onUserInput = () => {
     if (cancelOnInput) cancelRequest();
   };
-  doc.addEventListener("pointerdown", onUserInput, true);
+  const onPointerDown = () => {
+    unmarkKeyboardArea();
+    onUserInput();
+  };
+  doc.addEventListener("pointerdown", onPointerDown, true);
   doc.addEventListener("keydown", onUserInput, true);
 
   return {
@@ -416,9 +569,10 @@ export function createWorkspaceFocusController(doc: Document) {
     request,
     dispose: () => {
       cancelRequest();
+      unmarkKeyboardArea();
       doc.removeEventListener("focusin", remember);
       doc.removeEventListener("focusout", recover);
-      doc.removeEventListener("pointerdown", onUserInput, true);
+      doc.removeEventListener("pointerdown", onPointerDown, true);
       doc.removeEventListener("keydown", onUserInput, true);
     },
   };
@@ -455,6 +609,8 @@ export function startWorkspaceFocus(router: AnyRouter): () => void {
   const stopRoute = router.subscribe("onResolved", ({ fromLocation, toLocation }) => {
     if (toLocation.pathname === "/pull-requests" && fromLocation?.pathname !== "/pull-requests")
       requestWorkspaceFocus({ area: "pull-requests" });
+    if (toLocation.pathname === "/issues" && fromLocation?.pathname !== "/issues")
+      requestWorkspaceFocus({ area: "issues" });
   });
   return () => {
     stopPanels();
@@ -473,6 +629,15 @@ export function moveWorkspaceFocus(direction: 1 | -1, fromArea?: string): boolea
 export function requestWorkspaceFocus(target: WorkspaceFocusTarget) {
   focusRequestVersion++;
   controller?.request(target);
+}
+
+/** Puts the keyboard in the message box of the side chat a surface tab shows. */
+export function requestSideChatComposerFocus(threadRef: ScopedThreadRef, surfaceId: string) {
+  requestWorkspaceFocus({
+    area: "panel",
+    surface: { threadKey: scopedThreadKey(threadRef), surfaceId },
+    selector: `[data-side-chat-pane="${CSS.escape(surfaceId.slice("side-chat:".length))}"] [data-workspace-area="composer"] [contenteditable="true"]`,
+  });
 }
 
 export function requestWorkspaceContentFocus() {

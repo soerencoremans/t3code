@@ -12,6 +12,7 @@ import {
   findLayoutTabByContent,
   selectFocusedChatTab,
   selectFocusedTab,
+  type LayoutLauncherContent,
   type LayoutOpenPlacement,
   type LayoutTabContent,
 } from "./layoutModel";
@@ -83,12 +84,22 @@ export function closeLayoutProject(
 
 /**
  * Open a launcher tab: in the focused pane (cmd+T, "+"), in a new column
- * after it (cmd+D), or in a new pane below it (cmd+shift+D). Focus moves to
+ * after it (cmd+\), or in a new pane below it (cmd+shift+D). Focus moves to
  * it. Its surfaces open for the thread focus was on.
  */
 export function openLayoutNewTab(placement: LayoutOpenPlacement = "active-pane"): void {
-  const store = useLayoutStore.getState();
-  const from = selectFocusedChatTab(store.layout)?.tab.content;
+  useLayoutStore.getState().openTab(createLayoutNewTabContent(), {
+    placement,
+    position: getLayoutBehavior().newTabPosition,
+  });
+}
+
+/** The launcher a new tab opened from `tabId`, or from the focused tab, shows. */
+export function createLayoutNewTabContent(tabId: string | null = null): LayoutLauncherContent {
+  const layout = useLayoutStore.getState().layout;
+  const from = (
+    tabId === null ? selectFocusedChatTab(layout) : findLayoutTab(layout, (tab) => tab.id === tabId)
+  )?.tab.content;
   // A surface's launcher offers that surface's thread, as its "+" did.
   const context: ThreadRouteTarget | null =
     from?.kind === "chat"
@@ -98,10 +109,7 @@ export function openLayoutNewTab(placement: LayoutOpenPlacement = "active-pane")
         : from?.kind === "surface"
           ? { kind: "server", threadRef: from.threadRef }
           : null;
-  store.openTab(createLayoutLauncherContent(context), {
-    placement,
-    position: getLayoutBehavior().newTabPosition,
-  });
+  return createLayoutLauncherContent(context);
 }
 
 /**
@@ -155,7 +163,10 @@ export function closeLayoutTabByUser(tabId: string, options: { bulk?: boolean } 
         index: location.tabIndex,
         ...(target.kind === "draft" ? { draftId: target.draftId } : {}),
       });
-    const lineage = threadRef && !options.bulk ? readThreadLineage(threadRef) : null;
+    const lineage =
+      threadRef && !options.bulk && selectFocusedTab(store.layout)?.id === tabId
+        ? readThreadLineage(threadRef)
+        : null;
     if (threadRef && lineage?.relationshipToParent === "subagent" && lineage.parentThreadId) {
       const parent: LayoutTabContent = {
         kind: "chat",
@@ -212,8 +223,8 @@ let openBesideAction: OpenBesideAction | null = null;
 
 /**
  * The focused chat registers what it can open beside itself, so "Open
- * beside…" in the palette and its notch's "+" can open its surfaces and
- * terminal as tabs of its pane.
+ * beside…" in the palette can open its surfaces and terminal as tabs of
+ * its pane.
  */
 export function registerLayoutOpenBesideAction(action: OpenBesideAction): () => void {
   openBesideAction = action;

@@ -35,7 +35,9 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
+import { resolveEventKeys } from "@t3tools/shared/keybindings";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { T, useGT, useMessages } from "gt-react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -54,12 +56,13 @@ import {
   searchSettings,
   revealSettingsSearchTarget,
   SETTINGS_NAV_GROUPS,
+  SETTINGS_NAV_LABELS,
   SETTINGS_SECTION_LABELS,
   type SettingsPath,
   type SettingsSearchItem,
 } from "./settingsSearch";
 import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
-import { useSettingsSectionNavigation } from "./useSettingsSectionNavigation";
+import { handleSettingsSectionKeyDown } from "./settingsSectionNavigation";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 
 const T3ConnectSidebarSignIn = lazy(() =>
@@ -119,23 +122,19 @@ function SettingsSectionIcon({ to }: { to: SettingsPath }) {
 }
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
-  const navArea = workspaceAreaProps("settings-nav", 0, "Settings sections");
+  const gt = useGT();
+  const m = useMessages();
+  const navArea = workspaceAreaProps("settings-nav", 0, gt("Settings sections"));
   const navigate = useNavigate();
   const currentHash = useLocation({ select: (location) => location.hash });
   const activePath = SETTINGS_DETAIL_PAGE_PARENTS[pathname] ?? pathname;
-  const navPaths = SETTINGS_NAV_GROUPS.flatMap((group) => group.paths);
-  const sectionNavigation = useSettingsSectionNavigation(
-    navPaths.find((to) => activePath === to || activePath.startsWith(`${to}/`)) ??
-      navPaths[0] ??
-      "",
-  );
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   // Below md the nav is an icon rail; searching expands it over the page.
   const [compactSearchOpen, setCompactSearchOpen] = useState(false);
   const [activeResultIndex, setActiveResultIndex] = useState(0);
   const searchableItems = useAvailableSettingsSearchItems();
-  const results = searchSettings(query, searchableItems);
+  const results = searchSettings(query, searchableItems, m);
   const isSearching = query.trim().length > 0;
   const hasResults = results.length > 0;
   const maxResultIndex = Math.max(results.length - 1, 0);
@@ -148,13 +147,17 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
+      const eventKeys = resolveEventKeys(event);
       const isFindShortcut =
-        event.key.toLowerCase() === "f" &&
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        !event.shiftKey;
+        eventKeys.has("f") && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
+      // Shift is allowed only when the layout types "/" with it (German Shift+7); Shift on
+      // the physical Slash key types "?" or "," instead.
       const isSlashShortcut =
-        event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey;
+        eventKeys.has("/") &&
+        (event.key === "/" || !event.shiftKey) &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey;
       if (!isFindShortcut && !isSlashShortcut) return;
 
       const target = event.target;
@@ -247,7 +250,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       data-chrome-scope
       {...navArea}
       role="navigation"
-      aria-label="Settings sections"
+      aria-label={gt("Settings sections")}
       data-settings-nav=""
       className={cn(
         "flex w-[231px] shrink-0 flex-col border-e text-foreground max-md:w-14",
@@ -263,7 +266,8 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
           >
             {/* Pen EV7oi: a search field with a trailing slash hint. */}
             <div className={compactSearchOpen ? undefined : "max-md:hidden"}>
-              <InputGroup>
+              {/* A search landmark, so the nav holds no group without a heading. */}
+              <InputGroup role="search">
                 <InputGroupAddon>
                   <SearchIcon className="size-3.5" />
                 </InputGroupAddon>
@@ -271,7 +275,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                   ref={searchInputRef}
                   nativeInput
                   size="compact"
-                  placeholder="Search settings"
+                  placeholder={gt("Search settings")}
                   // Native search inputs clear on Escape even during IME composition.
                   type="text"
                   value={query}
@@ -284,7 +288,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                   onBlur={() => {
                     if (!isSearching) setCompactSearchOpen(false);
                   }}
-                  aria-label="Search settings"
+                  aria-label={gt("Search settings")}
                   role="combobox"
                   aria-autocomplete="list"
                   aria-expanded={isSearching && hasResults}
@@ -304,7 +308,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                       size="icon-micro"
                       variant="ghost-muted"
                       className="me-0.5"
-                      aria-label="Clear settings search"
+                      aria-label={gt("Clear settings search")}
                       onClick={() => {
                         clearSearch();
                         searchInputRef.current?.focus();
@@ -330,14 +334,14 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 role="status"
                 className="px-2 py-6 text-center text-caption text-sidebar-muted-foreground"
               >
-                No settings found
+                <T>No settings found</T>
               </p>
             ) : null}
             {isSearching ? (
               <SidebarMenu
                 id={hasResults ? "settings-search-results" : undefined}
                 role={hasResults ? "listbox" : undefined}
-                aria-label={hasResults ? "Settings search results" : undefined}
+                aria-label={hasResults ? gt("Settings search results") : undefined}
               >
                 {results.map((item, index) => (
                   <SidebarMenuItem
@@ -358,11 +362,16 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     >
                       <SettingsSectionIcon to={item.to} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-label text-sidebar-foreground">
-                          {item.title}
+                        <span className="block truncate text-label text-inherit">
+                          {m(item.title)}
                         </span>
-                        <span className="block truncate text-caption text-dim-foreground">
-                          {SETTINGS_SECTION_LABELS[item.to]}
+                        <span
+                          className={cn(
+                            "block truncate text-caption",
+                            index === activeResultIndex ? "text-inherit" : "text-dim-foreground",
+                          )}
+                        >
+                          {m(SETTINGS_SECTION_LABELS[item.to])}
                         </span>
                       </span>
                     </SidebarMenuButton>
@@ -376,7 +385,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         size="compact"
-                        aria-label="Search settings"
+                        aria-label={gt("Search settings")}
                         onClick={() => setCompactSearchOpen(true)}
                       >
                         <SearchIcon className="size-3.5" />
@@ -384,58 +393,51 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     </SidebarMenuItem>
                   </SidebarMenu>
                 )}
-                <div
-                  {...sectionNavigation.containerProps}
-                  role="tree"
-                  aria-label="Settings sections"
-                  className="flex flex-col"
-                >
+                <div onKeyDown={handleSettingsSectionKeyDown} className="flex flex-col">
                   {SETTINGS_NAV_GROUPS.map((group, index) => (
                     <div
-                      key={group.heading ?? index}
-                      role="group"
-                      aria-label={group.heading ?? undefined}
+                      key={group.heading}
                       className="flex flex-col max-md:border-t max-md:border-sidebar-border max-md:pt-4 max-md:first:border-t-0 max-md:first:pt-0"
                     >
-                      {group.heading ? (
-                        // The group carries this label; a heading is not a valid tree child.
-                        <h3
-                          aria-hidden="true"
-                          className={cn(
-                            "px-2 pt-3 pb-1.5 text-caption text-sidebar-muted-foreground",
-                            !compactSearchOpen && "max-md:hidden",
-                          )}
-                        >
-                          {group.heading}
-                        </h3>
-                      ) : null}
-                      <SidebarMenu role="presentation" size="compact">
-                        {group.paths.map((to) => {
-                          const Icon = SETTINGS_SECTION_ICONS[to];
-                          const isActive = activePath === to || activePath.startsWith(`${to}/`);
-                          return (
-                            <SidebarMenuItem key={to} role="presentation">
-                              <SidebarMenuButton
-                                size="compact"
-                                data-settings-section={to}
-                                role="treeitem"
-                                tabIndex={sectionNavigation.tabIndexFor(to)}
-                                aria-selected={isActive}
-                                aria-current={isActive ? "page" : undefined}
-                                isActive={isActive}
-                                onClick={() => handleSectionClick(to)}
-                              >
-                                <Icon className="size-3.5" />
-                                <span
-                                  className={cn("truncate", !compactSearchOpen && "max-md:sr-only")}
+                      <h3
+                        id={`settings-nav-group-${index}`}
+                        className={cn(
+                          "px-2 pt-3 pb-1.5 text-caption text-sidebar-muted-foreground",
+                          group.headingHidden ? "sr-only" : !compactSearchOpen && "max-md:sr-only",
+                        )}
+                      >
+                        {m(group.heading)}
+                      </h3>
+                      {/* The heading stays outside the group it names so NVDA does not read the name twice. */}
+                      <div role="group" aria-labelledby={`settings-nav-group-${index}`}>
+                        <SidebarMenu size="compact">
+                          {group.paths.map((to) => {
+                            const Icon = SETTINGS_SECTION_ICONS[to];
+                            const isActive = activePath === to || activePath.startsWith(`${to}/`);
+                            return (
+                              <SidebarMenuItem key={to}>
+                                <SidebarMenuButton
+                                  size="compact"
+                                  data-settings-section={to}
+                                  aria-current={isActive ? "page" : undefined}
+                                  isActive={isActive}
+                                  onClick={() => handleSectionClick(to)}
                                 >
-                                  {SETTINGS_SECTION_LABELS[to]}
-                                </span>
-                              </SidebarMenuButton>
-                            </SidebarMenuItem>
-                          );
-                        })}
-                      </SidebarMenu>
+                                  <Icon className="size-3.5" />
+                                  <span
+                                    className={cn(
+                                      "truncate",
+                                      !compactSearchOpen && "max-md:sr-only",
+                                    )}
+                                  >
+                                    {m(SETTINGS_NAV_LABELS[to])}
+                                  </span>
+                                </SidebarMenuButton>
+                              </SidebarMenuItem>
+                            );
+                          })}
+                        </SidebarMenu>
+                      </div>
                     </div>
                   ))}
                 </div>

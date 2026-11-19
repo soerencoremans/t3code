@@ -1,5 +1,6 @@
 import type { ServerProviderUsageLimits, ServerProviderUsageWindow } from "@t3tools/contracts";
-import { formatResetsIn } from "@t3tools/shared/usageLimits";
+import { formatResetsIn } from "@t3tools/shared/usageLimitsCopy";
+import { useMessages } from "gt-react";
 import { useState } from "react";
 
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
@@ -49,11 +50,12 @@ function UsageBar({ percent, tone }: { readonly percent: number; readonly tone: 
  * data, so every update remounts it) and again when the tooltip opens. No timer.
  */
 function LimitWindowItem({ window }: { readonly window: ServerProviderUsageWindow }) {
+  const m = useMessages();
   const [now, setNow] = useState(Date.now);
   const pace = statuslinePace(window, now);
   const tone = pace?.tone ?? "early";
   const percent = Math.round(window.usedPercent);
-  const resetsIn = formatResetsIn(window, now);
+  const resetsIn = formatResetsIn(window, now, m);
   return (
     <Tooltip onOpenChange={(open) => open && setNow(Date.now())}>
       <TooltipTrigger

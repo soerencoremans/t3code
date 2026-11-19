@@ -44,7 +44,6 @@ vi.mock(import("../../hooks/useSettings"), async (original) => ({
 }));
 
 import { AddCodexAccountDialog } from "./AddCodexAccountDialog";
-import { CodexSetupSection } from "./CodexSetupSection";
 
 const environmentId = EnvironmentId.make("local");
 
@@ -75,7 +74,13 @@ function createdInstanceId(): ProviderInstanceId {
   return ProviderInstanceId.make(Object.keys(call[0].input.patch.providerInstances)[0]!);
 }
 
-function Owner({ onClose }: { readonly onClose: () => void }) {
+function Owner({
+  onClose,
+  onAccountCreated,
+}: {
+  readonly onClose: () => void;
+  readonly onAccountCreated: (instanceId: ProviderInstanceId) => void;
+}) {
   const [shown, setShown] = useState(true);
   return shown ? (
     <AddCodexAccountDialog
@@ -84,42 +89,18 @@ function Owner({ onClose }: { readonly onClose: () => void }) {
         onClose();
         setShown(false);
       }}
+      onAccountCreated={onAccountCreated}
       renderSetup={() => <p>Sign in to ChatGPT</p>}
     />
   ) : null;
 }
-
-describe("Codex onboarding", () => {
-  it("lets a fresh onboarding account enter managed setup with ChatGPT", async () => {
-    function SetupChoice() {
-      const [mode, setMode] = useState<"managed" | "existing">("existing");
-      return (
-        <CodexSetupSection
-          environmentId={environmentId}
-          instanceId={ProviderInstanceId.make("codex")}
-          provider={undefined}
-          mode={mode}
-          enabled
-          onboarding
-          onModeChange={setMode}
-        />
-      );
-    }
-    await using screen = await render(<SetupChoice />);
-    await expect.element(screen.getByRole("button", { name: "Use existing CLI" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
-    await expect.element(screen.getByText("Preparing sign-in.")).toBeVisible();
-    await expect
-      .element(screen.getByRole("button", { name: "Use existing CLI" }))
-      .not.toBeInTheDocument();
-  });
-});
 
 describe("AddCodexAccountDialog", () => {
   it("plays its close animation before the owner unmounts it once the account connects", async () => {
     const atom = Atom.make<ReadonlyArray<ServerProvider> | null>([]).pipe(Atom.keepAlive);
     providersAtom.current = atom;
     const onClose = vi.fn();
+    const onAccountCreated = vi.fn();
     // A long exit transition that the test finishes by hand, so the close is
     // observable mid-animation without waiting on real time.
     const style = document.createElement("style");
@@ -129,13 +110,14 @@ describe("AddCodexAccountDialog", () => {
     using _style = { [Symbol.dispose]: () => style.remove() };
     await using _screen = await render(
       <AppAtomRegistryProvider>
-        <Owner onClose={onClose} />
+        <Owner onClose={onClose} onAccountCreated={onAccountCreated} />
       </AppAtomRegistryProvider>,
     );
 
     await userEvent.click(page.getByRole("button", { name: "Continue" }));
     const instanceId = createdInstanceId();
     await act(() => registry.set(atom, [codexProvider(instanceId, { status: "unauthenticated" })]));
+    // Telling the owner about the account does not skip the dialog's own sign-in.
     await expect.element(page.getByText("Sign in to ChatGPT")).toBeVisible();
 
     await act(() =>

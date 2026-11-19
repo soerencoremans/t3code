@@ -6,6 +6,8 @@ type ConfirmDialogRequest = {
   readonly variant: ConfirmDialogVariant;
   readonly title?: string | undefined;
   readonly confirmLabel?: string | undefined;
+  readonly initialFocus: ConfirmDialogOptions["initialFocus"];
+  readonly deleteIcon?: true | undefined;
 };
 
 export type ConfirmDialogState =
@@ -23,7 +25,18 @@ function requestOf(confirmation: ConfirmDialogRequest): ConfirmDialogRequest {
     variant: confirmation.variant,
     title: confirmation.title,
     confirmLabel: confirmation.confirmLabel,
+    initialFocus: confirmation.initialFocus,
+    deleteIcon: confirmation.deleteIcon,
   };
+}
+
+// The options type is shared with desktop IPC, so a delete confirm is marked here instead.
+const deleteConfirmOptions = new WeakSet<ConfirmDialogOptions>();
+
+/** Marks a destructive confirm as a delete, so its button carries the trash icon. */
+export function deleteConfirm(options: ConfirmDialogOptions): ConfirmDialogOptions {
+  deleteConfirmOptions.add(options);
+  return options;
 }
 
 const idleState: ConfirmDialogState = { status: "idle" };
@@ -76,8 +89,10 @@ export function requestConfirmDialog(
     const pending = {
       message,
       variant: options?.variant ?? "default",
+      initialFocus: options?.initialFocus,
       title: options?.title,
       confirmLabel: options?.confirmLabel,
+      deleteIcon: options && deleteConfirmOptions.has(options) ? true : undefined,
       resolve,
     } satisfies PendingConfirmation;
     if (activeConfirmation || state.status === "closing") {

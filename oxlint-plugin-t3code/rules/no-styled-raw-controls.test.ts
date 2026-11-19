@@ -67,9 +67,9 @@ const ICON_ACTION_CLASS = \`rounded-md \${"hover:surface-ghost-hover"}\`;`,
   );
 
   rule.invalid(
-    "reads appearance from the left side of nullish coalescing",
-    `const el = <button className={"bg-red-500" ?? "flex"} />;`,
-    (output) => assert.match(output, /<button> is styled by hand \(bg-red-500\)/),
+    "reads appearance from both sides of a string concatenation",
+    `const el = <button className={"rounded-md px-2 " + extraClasses} />;`,
+    (output) => assert.match(output, /<button> is styled by hand \(rounded-md px-2\)/),
   );
 
   rule.invalid(

@@ -24,13 +24,14 @@ export interface PullRequestListPreferences {
   readonly state: PullRequestListState;
   readonly environmentId?: EnvironmentId;
   readonly projectId?: ProjectId;
-  readonly host?: string;
+  readonly projectEnvironmentId?: EnvironmentId;
+  readonly host?: string | undefined;
   readonly q?: string | undefined;
   readonly draft?: "only" | "hide";
   readonly review?: NonNullable<PullRequestListFilters["review"]>;
   readonly checks?: NonNullable<PullRequestListFilters["checks"]>;
-  readonly author?: string;
-  readonly labels?: ReadonlyArray<string>;
+  readonly author?: string | undefined;
+  readonly labels?: ReadonlyArray<string> | undefined;
   readonly sort?: PullRequestListSort;
 }
 
@@ -44,11 +45,12 @@ const DEFAULT_PULL_REQUEST_LIST_PREFERENCES = {
 } as const satisfies PullRequestListPreferences;
 
 const BoundedPreference = Schema.String.check(Schema.isMaxLength(200));
-const PullRequestListPreferencesSchema = Schema.Struct({
+export const PullRequestListPreferencesSchema = Schema.Struct({
   involvement: PullRequestInvolvement,
   state: PullRequestListState,
   environmentId: Schema.optional(EnvironmentId),
   projectId: Schema.optional(ProjectId),
+  projectEnvironmentId: Schema.optional(EnvironmentId),
   host: Schema.optional(BoundedPreference),
   q: Schema.optional(BoundedPreference),
   draft: PullRequestListFilters.fields.draft,
@@ -79,6 +81,7 @@ export function pullRequestListPreferences(
     state: search.state,
     ...(search.environmentId ? { environmentId: search.environmentId } : {}),
     ...(search.projectId ? { projectId: search.projectId } : {}),
+    ...(search.projectEnvironmentId ? { projectEnvironmentId: search.projectEnvironmentId } : {}),
     ...(search.host ? { host: search.host } : {}),
     ...(search.q ? { q: search.q } : {}),
     ...(search.draft ? { draft: search.draft } : {}),

@@ -1,5 +1,7 @@
-import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { type RefObject, useEffect, useEffectEvent, useSyncExternalStore } from "react";
+
+import type { ThreadContextDropRef } from "./threadContextDrop.logic";
 
 export const THREAD_CONTEXT_DROP_EVENT = "t3-thread-context-drop";
 
@@ -7,7 +9,7 @@ export function useThreadContextDrop(
   targetRef: RefObject<EventTarget | null>,
   environmentId: EnvironmentId,
   targetKey: string,
-  onDrop: (refs: ReadonlyArray<ScopedThreadRef>, isActive: () => boolean) => void,
+  onDrop: (refs: ReadonlyArray<ThreadContextDropRef>, isActive: () => boolean) => void,
 ) {
   const handleDrop = useEffectEvent(onDrop);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes the target element to thread-context drop events and marks old drops inactive
@@ -16,7 +18,7 @@ export function useThreadContextDrop(
     if (!target) return;
     let active = true;
     const listener = (event: Event) =>
-      handleDrop((event as CustomEvent<ReadonlyArray<ScopedThreadRef>>).detail, () => active);
+      handleDrop((event as CustomEvent<ReadonlyArray<ThreadContextDropRef>>).detail, () => active);
     target.addEventListener(THREAD_CONTEXT_DROP_EVENT, listener);
     return () => {
       active = false;
@@ -38,7 +40,8 @@ export interface ThreadContextDragGhost {
   readonly y: number;
   readonly count: number;
   /** The sidebar row's width, so the lifted row keeps its size. */
-  readonly width: number;
+  readonly width?: number;
+  readonly title?: string;
 }
 
 let ghost: ThreadContextDragGhost | null = null;
@@ -63,31 +66,50 @@ export function useThreadContextDragGhost(): ThreadContextDragGhost | null {
 
 let overTarget: HTMLElement | null = null;
 
+type AcceptsDropTarget = (target: HTMLElement) => boolean;
+
 // A layout drag covers the window with its own overlay while a thread is out
 // of the list; the composer is the first element under it.
-function findDropTarget(point: { x: number; y: number }): HTMLElement | null {
+function findDropTarget(
+  point: { x: number; y: number },
+  accepts?: AcceptsDropTarget,
+): HTMLElement | null {
   const element = document
     .elementsFromPoint(point.x, point.y)
     .find((candidate) => !candidate.closest("[data-layout-drag-overlay]"));
-  return element?.closest<HTMLElement>(`[${DROP_TARGET_ATTRIBUTE}]`) ?? null;
+  const target = element?.closest<HTMLElement>(`[${DROP_TARGET_ATTRIBUTE}]`) ?? null;
+  return target && accepts?.(target) !== false ? target : null;
 }
 
-/**
- * Tracks the ghost and the highlighted drop target while the pointer is
- * outside the list. True while a composer is under the pointer.
- */
-export function moveThreadContextDrag(
+/** Every composer on screen that takes a dropped thread. */
+export function threadContextDropTargets(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>(`[${DROP_TARGET_ATTRIBUTE}]`)];
+}
+
+/** Highlights the composer under the pointer and returns it. */
+export function hoverThreadContextDrop(
   point: { x: number; y: number },
-  label: { count: number; width: number },
-): boolean {
-  const target = findDropTarget(point);
+  accepts?: AcceptsDropTarget,
+): HTMLElement | null {
+  const target = findDropTarget(point, accepts);
   if (target !== overTarget) {
     overTarget?.removeAttribute(DROP_OVER_ATTRIBUTE);
     target?.setAttribute(DROP_OVER_ATTRIBUTE, "true");
     overTarget = target;
   }
+  return target;
+}
+
+/**
+ * Tracks the ghost and the highlighted drop target while the pointer is
+ * outside the list. Returns the composer under the pointer.
+ */
+export function moveThreadContextDrag(
+  point: { x: number; y: number },
+  label: { count: number; width?: number; title?: string },
+): HTMLElement | null {
   setGhost({ x: point.x, y: point.y, ...label });
-  return target !== null;
+  return hoverThreadContextDrop(point);
 }
 
 export function endThreadContextDrag() {
@@ -98,9 +120,10 @@ export function endThreadContextDrag() {
 
 export function dropThreadContext(
   point: { x: number; y: number },
-  threads: ReadonlyArray<ScopedThreadRef>,
+  threads: ReadonlyArray<ThreadContextDropRef>,
+  accepts?: AcceptsDropTarget,
 ): boolean {
-  const target = findDropTarget(point);
+  const target = findDropTarget(point, accepts);
   if (!target || threads.length === 0) return false;
   target.dispatchEvent(new CustomEvent(THREAD_CONTEXT_DROP_EVENT, { detail: threads }));
   return true;

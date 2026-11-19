@@ -1,14 +1,13 @@
+import { useMessages } from "gt-react";
 import { type ReactNode, type ComponentProps, useLayoutEffect, useRef } from "react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
-import { TerminalIcon } from "lucide-react";
+import { TerminalIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { ContextChip, ContextChipLabel } from "../ContextChip";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
-import { ChevronDown, ChevronRight } from "lucide";
-import { MorphIcon } from "../MorphIcon";
 
 export const MESSAGE_HEADING_LEVEL = 3;
 
@@ -19,8 +18,18 @@ const fadesInFlight = new Map<string, { opacity: number; at: number }>();
  * A message's text moves from the answer row into the work window when a tool call follows,
  * which remounts it. The new copy resumes the fade the old one was in the middle of.
  */
-export function useCarriedTextFade(messageId: string) {
+export function useCarriedTextFade(messageId: string, streaming: boolean) {
   const ref = useRef<HTMLDivElement>(null);
+  // Blocks fade only while streaming (see index.css). Settled rows skip the opacity read, which
+  // forces a style recalc for every row a thread switch unmounts.
+  const fadingUntil = useRef(streaming ? Infinity : 0);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks when the last streamed block's fade can still be running, read by the unmount below
+  useLayoutEffect(() => {
+    if (streaming) fadingUntil.current = Infinity;
+    else if (fadingUntil.current === Infinity) {
+      fadingUntil.current = performance.now() + TEXT_FADE_MS;
+    }
+  }, [streaming]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads and resumes the old copy's computed opacity across a remount
   useLayoutEffect(() => {
     const root = ref.current;
@@ -34,6 +43,7 @@ export function useCarriedTextFade(messageId: string) {
       );
     }
     return () => {
+      if (performance.now() > fadingUntil.current) return;
       const block = lastBlock();
       const opacity = block ? Number(getComputedStyle(block).opacity) : 1;
       if (opacity < 1) fadesInFlight.set(messageId, { opacity, at: performance.now() });
@@ -57,6 +67,7 @@ export function TimelineRowTimestamp({
   className?: string;
   alwaysVisible?: boolean;
 }) {
+  const m = useMessages();
   return (
     <Tooltip>
       <TooltipTrigger
@@ -70,21 +81,29 @@ export function TimelineRowTimestamp({
           />
         }
       >
-        {formatDayAwareTimestamp(createdAt, timestampFormat)}
+        {formatDayAwareTimestamp(createdAt, timestampFormat, undefined, undefined, m)}
       </TooltipTrigger>
-      <TooltipPopup>{formatChatTimestampTooltip(createdAt, timestampFormat)}</TooltipPopup>
+      <TooltipPopup>{formatChatTimestampTooltip(createdAt, timestampFormat, m)}</TooltipPopup>
     </Tooltip>
   );
 }
 
-export function ActivityShimmerOverlay({ children }: { children: ReactNode }) {
+export function ActivityShimmerOverlay({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <span
       aria-hidden
       className="live-activity-focus pointer-events-none absolute inset-y-0 select-none"
     >
       <span className="live-activity-focus-counter block">
-        <span className="live-activity-focus-aligned block text-foreground">{children}</span>
+        <span className={cn("live-activity-focus-aligned block text-foreground", className)}>
+          {children}
+        </span>
       </span>
     </span>
   );
@@ -114,7 +133,7 @@ export function WorkingBarChip({
  * The label starts on the assistant text's edge, 4px into the lane.
  */
 export const WORKING_BAR_CLASS_NAME =
-  "timeline-work-row group/timeline-row relative flex h-8 min-w-0 items-center gap-2.5 border-b border-(--timeline-working-rule,var(--border)) ps-1.25 pe-1";
+  "group/timeline-row relative flex h-8 min-w-0 items-center gap-2.5 border-b border-(--timeline-working-rule,var(--border)) ps-1.25 pe-1 min-[640px]:[--type-body:0.8125rem] min-[640px]:[--type-label:0.8125rem]";
 
 /** A provider command in the timeline: in a work row's trailing slot, or opening a prompt. */
 export function SlashCommandChip({ name }: { name: string }) {
@@ -135,15 +154,23 @@ export function WorkFoldCaret({
   hidden?: boolean;
   fade?: boolean;
 }) {
-  return (
-    <MorphIcon
+  return expanded ? (
+    <ChevronDownIcon
       aria-hidden
       className={cn(
         "size-3 shrink-0 text-dim-foreground",
         fade && "transition-opacity duration-200 ease-out motion-reduce:transition-none",
         hidden && "opacity-0",
       )}
-      icon={expanded ? ChevronDown : ChevronRight}
+    />
+  ) : (
+    <ChevronRightIcon
+      aria-hidden
+      className={cn(
+        "size-3 shrink-0 text-dim-foreground",
+        fade && "transition-opacity duration-200 ease-out motion-reduce:transition-none",
+        hidden && "opacity-0",
+      )}
     />
   );
 }

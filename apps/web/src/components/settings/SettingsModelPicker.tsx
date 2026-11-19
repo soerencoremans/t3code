@@ -3,6 +3,7 @@ import type {
   ProviderOptionSelection,
   ServerProviderModel,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import type { ComponentProps } from "react";
 
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
@@ -36,17 +37,18 @@ export function SettingsModelPicker({
     provider: ProviderDriverKind;
     models: ReadonlyArray<ServerProviderModel>;
     modelOptions: ProviderOptions | null | undefined;
-    planModeEnabled: boolean;
+    includePlanAgent?: boolean | undefined;
     onModelOptionsChange: (options: ProviderOptions | undefined) => void;
   } | null;
 }) {
+  const gt = useGT();
   const traitsLabel = traits
     ? resolveTraitsTriggerLabel({
         provider: traits.provider,
         models: traits.models,
         model: pickerProps.model,
         modelOptions: traits.modelOptions,
-        planModeEnabled: traits.planModeEnabled,
+        includePlanAgent: traits.includePlanAgent,
       })
     : null;
   return (
@@ -60,14 +62,16 @@ export function SettingsModelPicker({
       popupFooter={
         traits && traitsLabel ? (
           <div className="flex items-center justify-between gap-3 border-t border-divider px-3 py-2">
-            <span className="text-meta text-muted-foreground">Options</span>
+            <span className="text-meta text-muted-foreground">
+              {gt("Options", { $context: "heading for model options" })}
+            </span>
             <TraitsPicker
               provider={traits.provider}
               models={traits.models}
               model={pickerProps.model}
               modelOptions={traits.modelOptions ?? []}
               allowPromptInjectedEffort={false}
-              planModeEnabled={traits.planModeEnabled}
+              includePlanAgent={traits.includePlanAgent}
               triggerVariant="settings"
               triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
               onModelOptionsChange={traits.onModelOptionsChange}

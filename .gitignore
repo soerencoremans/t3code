@@ -38,6 +38,7 @@ apps/mobile/.android-cache/
 artifacts/app-store/screenshots/
 artifacts/mobile-e2e/
 artifacts/mobile-behavior/
+scripts/.e2e/
 .github/pr-assets/
 native/**/target/
 node_modules/
@@ -52,3 +53,4 @@ node_modules/
 # Loop-Forge: ticket worktrees and the per-machine config override
 .loop-forge/worktrees
 .loop-forge/config.json
+/packages/ssh/.ssh-launcher-test-*/

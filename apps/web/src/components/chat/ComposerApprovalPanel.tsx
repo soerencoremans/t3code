@@ -1,3 +1,6 @@
+import { cn } from "../../lib/utils";
+import { formatWorkspaceRelativeDetail, formatWorkspaceRelativePath } from "../../filePathDisplay";
+import { useGT } from "gt-react";
 import { ShieldIcon } from "lucide-react";
 import { use, useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
@@ -37,19 +40,26 @@ const approvalKeysAvailable = () => !keepsApprovalKeys(document.activeElement);
 export function ComposerApprovalPanel({
   approval,
   count,
+  workspaceRoot,
   disabled,
   isResponding,
   onRespond,
 }: {
   approval: PendingApproval;
   count: number;
+  workspaceRoot?: string | undefined;
   disabled: boolean;
   isResponding: boolean;
   onRespond: (requestId: RuntimeRequestId, decision: ProviderApprovalDecision) => Promise<unknown>;
 }) {
+  const gt = useGT();
   const backgroundThread = use(BackgroundThreadContext);
   const paneFocusedRef = useLayoutPaneFocusedRef();
   const showShortcutHints = useSyncExternalStore(subscribeApprovalFocus, approvalKeysAvailable);
+  const detail =
+    approval.requestKind === "file-change"
+      ? formatWorkspaceRelativeDetail(approval.detail, workspaceRoot)
+      : approval.detail;
   const [expanded, setExpanded] = useState(true);
   const [alwaysAllow, setAlwaysAllow] = useState(false);
   const canRespond =
@@ -86,10 +96,10 @@ export function ComposerApprovalPanel({
   }, [canRespond, primary, decline, backgroundThread, paneFocusedRef]);
   const title =
     approval.requestKind === "command"
-      ? "Command approval"
+      ? gt("Command approval")
       : approval.requestKind === "file-change"
-        ? "File change approval"
-        : "Permission approval";
+        ? gt("File change approval")
+        : gt("Permission approval");
   return (
     <Collapsible
       open={expanded}
@@ -100,14 +110,14 @@ export function ComposerApprovalPanel({
         render={<CollapsibleTrigger render={<button type="button" />} />}
         icon={<ShieldIcon />}
         title={title}
-        sub={expanded ? null : approval.detail}
+        sub={expanded ? null : detail}
         trailing={
           <>
             {count > 1 ? <ComposerRequestCard.Counter index={1} total={count} /> : null}
             <ComposerBanner.ToggleIcon expanded={expanded} />
             <ComposerBanner.Dismiss
               render={<span role="button" tabIndex={0} />}
-              aria-label="Cancel approval"
+              aria-label={gt("Cancel approval")}
               disabled={disabled || isResponding}
               onClick={(event) => {
                 event.preventDefault();
@@ -129,12 +139,19 @@ export function ComposerApprovalPanel({
       />
       <CollapsiblePanel>
         <ComposerRequestCard.Well>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap p-2 font-mono text-meta text-foreground wrap-anywhere">
-            {approval.detail}
-          </pre>
+          <div
+            className={cn(
+              "max-h-40 overflow-auto whitespace-pre-wrap p-2 text-meta text-muted-foreground wrap-anywhere",
+              approval.requestKind === "command" && "font-mono text-foreground",
+            )}
+          >
+            {detail}
+          </div>
           {approval.files?.map((file) => (
             <div key={file.path} className="flex min-w-0 items-center gap-2 px-2 pb-1 text-meta">
-              <span className="truncate">{file.path}</span>
+              <span className="truncate text-muted-foreground">
+                {formatWorkspaceRelativePath(file.path, workspaceRoot)}
+              </span>
               <span className="text-success-foreground">
                 {file.additions !== undefined ? `+${file.additions}` : null}
               </span>

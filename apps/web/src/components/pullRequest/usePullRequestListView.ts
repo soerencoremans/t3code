@@ -1,3 +1,4 @@
+import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { parsePullRequestQuery } from "@t3tools/client-runtime/pull-request-query";
 import {
@@ -14,19 +15,16 @@ import { useAllEnvironmentShellsBootstrapped, useProjects } from "~/state/entiti
 import { useEnvironments } from "~/state/environments";
 import {
   applyPullRequestOverrides,
+  displayPullRequestGroups,
   findProjectForRepository,
   findScopedProject,
   matchesPullRequestFilters,
-  pullRequestDiffStatKey,
   pullRequestEntryKey,
   pullRequestEntryViewer,
   pullRequestEnvironmentSetKey,
   pullRequestHostActions,
   resolveProjectScope,
-  resolveQueryEnvironmentIds,
   resolveSelectedEnvironmentId,
-  sortPullRequestGroups,
-  withDiffStat,
   type EnvironmentPullRequestEntry,
   type MergedPullRequestList,
   type PullRequestDiffStats,
@@ -35,26 +33,43 @@ import {
 } from "./pullRequestList.logic";
 import type { PullRequestExpectedHost } from "./PullRequestListFilters";
 import type { PullRequestListPreferences, PullRequestListSort } from "./pullRequestListPreferences";
-import { assignProjectsToEnvironments } from "./pullRequestProjectAssignment.logic";
-import { pullRequestFilterProjects } from "@t3tools/client-runtime/pull-request-project-filter";
+import {
+  pullRequestProjectQueries,
+  type PullRequestHostAvailability,
+} from "./pullRequestProjectAssignment.logic";
+import { useSidebarProjectGroups } from "~/hooks/useSidebarProjectGroups";
+import {
+  pullRequestFilterProjects,
+  pullRequestProjectFilterQueries,
+} from "@t3tools/client-runtime/pull-request-project-filter";
 import { pullRequestListEntryId } from "./pullRequestListGroups.logic";
 import { SORT_OPTIONS } from "./pullRequestListOptions";
 
 export interface PullRequestsSearch extends PullRequestListPreferences {
+  readonly selectedUrl?: string;
   readonly environmentId?: EnvironmentId;
   readonly projectId?: ProjectId;
-  readonly host?: string;
+  readonly host?: string | undefined;
   readonly repository?: string;
   readonly number?: number;
-  readonly selectedProjectId?: ProjectId;
-  readonly selectedHost?: string;
-  readonly selectedEnvironmentId?: EnvironmentId;
+  readonly selectedProjectId?: ProjectId | undefined;
+  readonly selectedHost?: string | undefined;
+  readonly selectedEnvironmentId?: EnvironmentId | undefined;
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
+const UNREACHABLE_PHASES: ReadonlySet<EnvironmentConnectionPhase> = new Set([
+  "offline",
+  "reconnecting",
+  "error",
+  "unsupported",
+]);
 
 /** Which servers and projects the page reads, from the URL and what this client knows. */
-export function usePullRequestScope(search: PullRequestsSearch) {
+export function usePullRequestScope(
+  search: PullRequestsSearch,
+  hostAvailability: PullRequestHostAvailability,
+) {
   const { environments } = useEnvironments();
   const allProjects = useProjects();
   const projectsKnown = useAllEnvironmentShellsBootstrapped();
@@ -81,8 +96,20 @@ export function usePullRequestScope(search: PullRequestsSearch) {
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
   const scopedProjectId = resolveProjectScope(search.projectId, projects, projectsKnown);
-  const scopedProject = findScopedProject(projects, scopedEnvironmentId, scopedProjectId);
-  const scopedProjects = pullRequestFilterProjects(projects, environmentLabels, scopedProject);
+  const scopedProject = findScopedProject(
+    projects,
+    search.projectEnvironmentId ?? scopedEnvironmentId,
+    scopedProjectId,
+  );
+  const sidebarProjectGroups = useSidebarProjectGroups();
+  const scopedProjects = pullRequestFilterProjects(
+    projects,
+    sidebarProjectGroups.map((group) => ({
+      label: group.displayName,
+      memberProjectRefs: group.memberProjectRefs,
+    })),
+    scopedProject,
+  );
 
   const selectedHost = search.selectedHost ?? search.host;
   // A named server still connecting is kept named rather than falling back: falling back while it
@@ -108,38 +135,49 @@ export function usePullRequestScope(search: PullRequestsSearch) {
     linkedProjectId === undefined && search.repository !== undefined
       ? projectForRepository
       : findScopedProject(projects, selectedEnvironmentId, linkedProjectId ?? scopedProjectId);
-  const queryEnvironmentIds = resolveQueryEnvironmentIds(
+  const selectedQueries = pullRequestProjectFilterQueries(
+    scopedProjects,
     environmentIds,
-    projects,
-    scopedProject,
-    scopedProjectId,
-    projectsKnown,
+    scopedProjectId === undefined
+      ? undefined
+      : {
+          id: scopedProjectId,
+          environmentId: scopedProject?.environmentId ?? search.projectEnvironmentId,
+        },
   );
-  const environmentQueries = ((): ReadonlyArray<{
+  const unreachable = new Set(
+    environments.flatMap((environment) =>
+      UNREACHABLE_PHASES.has(environment.connection.phase) ? [environment.environmentId] : [],
+    ),
+  );
+  const queryEnvironmentIds = selectedQueries.map((query) => query.environmentId);
+  const queriesFor = (
+    availability?: PullRequestHostAvailability,
+  ): ReadonlyArray<{
     readonly environmentId: EnvironmentId;
     readonly projectIds?: ReadonlyArray<ProjectId>;
   }> => {
     const plain = queryEnvironmentIds.map((environmentId) => ({ environmentId }));
-    if (!projectsKnown || scopedProjectId !== undefined) return plain;
-    const assignment = assignProjectsToEnvironments(
-      projects,
-      queryEnvironmentIds,
-      queryEnvironmentIds[0],
-    );
-    const totals = new Map<EnvironmentId, number>();
-    for (const project of projects) {
-      totals.set(project.environmentId, (totals.get(project.environmentId) ?? 0) + 1);
-    }
-    return queryEnvironmentIds.flatMap((environmentId) => {
-      const projectIds = assignment.get(environmentId);
-      if (projectIds === undefined) return [];
-      if (projectIds.length === (totals.get(environmentId) ?? 0)) return [{ environmentId }];
-      return [{ environmentId, projectIds }];
-    });
-  })();
+    if (!projectsKnown) return plain;
+    if (scopedProjectId !== undefined) return selectedQueries;
+    return pullRequestProjectQueries(projects, queryEnvironmentIds, availability, unreachable);
+  };
+  const environmentQueries = queriesFor(hostAvailability);
+  // What the page reads once a refresh forgets host reads; refresh must refetch these too.
+  const preferredEnvironmentQueries = queriesFor();
   const assignmentKey = environmentQueries
     .map(({ environmentId, projectIds }) => `${environmentId}#${projectIds?.join("+") ?? "*"}`)
     .join("|");
+  // The URL is user-controlled and stands in for the PR link until detail loads.
+  const selectedLink = search.selectedUrl
+    ? sourceControlClients.parseChangeRequestUrl(search.selectedUrl)?.link
+    : undefined;
+  const selectedUrl =
+    selectedLink !== undefined &&
+    selectedLink.number === search.number &&
+    selectedLink.repository.toLowerCase() === search.repository?.toLowerCase()
+      ? search.selectedUrl
+      : undefined;
   const linkedSelection =
     search.repository && search.number && selectedProject
       ? {
@@ -147,6 +185,7 @@ export function usePullRequestScope(search: PullRequestsSearch) {
           repository: search.repository,
           number: search.number,
           projectId: selectedProject.id,
+          ...(selectedUrl ? { url: selectedUrl, revealUrl: selectedUrl } : {}),
           ...(selectedHost ? { host: selectedHost } : {}),
         }
       : null;
@@ -175,6 +214,7 @@ export function usePullRequestScope(search: PullRequestsSearch) {
     selectedProject,
     queryEnvironmentIds,
     environmentQueries,
+    preferredEnvironmentQueries,
     assignmentKey,
     linkedSelection,
     expectedHosts,
@@ -228,6 +268,7 @@ export function usePullRequestDisplayGroups({
   host,
   groups,
   statsByRow,
+  sortStatsByRow,
   overrides,
   state,
   localFilters,
@@ -241,6 +282,7 @@ export function usePullRequestDisplayGroups({
   host: string | undefined;
   groups: ReadonlyArray<PullRequestGroup<EnvironmentPullRequestEntry>>;
   statsByRow: PullRequestDiffStats;
+  sortStatsByRow: PullRequestDiffStats;
   overrides: ReadonlyMap<string, PullRequestListOverride>;
   state: PullRequestListState;
   localFilters: PullRequestListFilters;
@@ -267,7 +309,7 @@ export function usePullRequestDisplayGroups({
   const displayGroups = (() => {
     const enriched = groups.map((group) => {
       const overridden = applyPullRequestOverrides(
-        group.entries.map((entry) => withDiffStat(entry, statsByRow)),
+        group.entries,
         overrides,
         pullRequestEntryKey,
         state,
@@ -288,14 +330,7 @@ export function usePullRequestDisplayGroups({
             : overridden,
       };
     });
-    return sortPullRequestGroups(
-      enriched,
-      sort,
-      text,
-      (entry) =>
-        entry.additions + entry.deletions > 0 || statsByRow.has(pullRequestDiffStatKey(entry)),
-      involvement,
-    );
+    return displayPullRequestGroups(enriched, sort, text, statsByRow, sortStatsByRow, involvement);
   })();
   const shownCount = displayGroups.reduce((count, group) => count + group.entries.length, 0);
   const hostActionsOf = pullRequestHostActions(hosts);
@@ -324,7 +359,7 @@ export function usePullRequestDisplayGroups({
 
 const MAX_SEARCH_LABEL_CANDIDATES = 100;
 
-function pullRequestSearchLabels(raw: unknown): Partial<Pick<PullRequestsSearch, "labels">> {
+function pullRequestSearchLabels(raw: unknown): PullRequestsSearch["labels"] {
   const values = (Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : []).slice(
     0,
     MAX_SEARCH_LABEL_CANDIDATES,
@@ -340,11 +375,12 @@ function pullRequestSearchLabels(raw: unknown): Partial<Pick<PullRequestsSearch,
     seen.add(key);
     if (labels.length === 10) break;
   }
-  return labels.length === 0 ? {} : { labels };
+  return labels.length === 0 ? undefined : labels;
 }
 
 export function validatePullRequestsSearch(raw: Record<string, unknown>): PullRequestsSearch {
   return {
+    ...(typeof raw.selectedUrl === "string" ? { selectedUrl: raw.selectedUrl.slice(0, 4096) } : {}),
     involvement:
       raw.involvement === "reviewing" || raw.involvement === "authored" ? raw.involvement : "all",
     state:
@@ -364,6 +400,9 @@ export function validatePullRequestsSearch(raw: Record<string, unknown>): PullRe
     ...(typeof raw.environmentId === "string" && raw.environmentId
       ? { environmentId: raw.environmentId as EnvironmentId }
       : {}),
+    ...(typeof raw.projectEnvironmentId === "string" && raw.projectEnvironmentId
+      ? { projectEnvironmentId: raw.projectEnvironmentId as EnvironmentId }
+      : {}),
     ...(typeof raw.host === "string" && raw.host ? { host: raw.host.slice(0, 200) } : {}),
     ...(typeof raw.selectedProjectId === "string" && raw.selectedProjectId
       ? { selectedProjectId: raw.selectedProjectId as ProjectId }
@@ -374,7 +413,7 @@ export function validatePullRequestsSearch(raw: Record<string, unknown>): PullRe
     ...(typeof raw.selectedEnvironmentId === "string" && raw.selectedEnvironmentId
       ? { selectedEnvironmentId: raw.selectedEnvironmentId as EnvironmentId }
       : {}),
-    // Keep every query as text and always own the key so an unvalidated parent value cannot leak.
+    // Keep every query as text and always own the free-text keys so an unvalidated parent value cannot leak.
     q:
       raw.q !== undefined && raw.q !== null && raw.q !== ""
         ? (typeof raw.q === "string" ? raw.q : JSON.stringify(raw.q)).slice(0, 200)
@@ -387,9 +426,10 @@ export function validatePullRequestsSearch(raw: Record<string, unknown>): PullRe
       ? { review: raw.review }
       : {}),
     ...(raw.checks === "passing" || raw.checks === "failing" ? { checks: raw.checks } : {}),
-    ...(typeof raw.author === "string" && raw.author.trim()
-      ? { author: raw.author.trim().slice(0, 200) }
-      : {}),
-    ...pullRequestSearchLabels(raw.labels),
+    author:
+      typeof raw.author === "string" && raw.author.trim()
+        ? raw.author.trim().slice(0, 200)
+        : undefined,
+    labels: pullRequestSearchLabels(raw.labels),
   };
 }

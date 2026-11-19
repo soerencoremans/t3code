@@ -6,12 +6,16 @@ import {
   sourceControlClients,
   type ReferenceAutolink,
 } from "@t3tools/client-runtime/source-control-clients";
-import type { PluggableList } from "unified";
-import { chatMarkdownImageSources } from "@t3tools/shared/markdownPipeline";
 import {
-  splitPullRequestBody,
-  type PullRequestBodySegment,
-} from "@t3tools/client-runtime/pull-request-markdown";
+  CHAT_MARKDOWN_REHYPE_PLUGINS,
+  CHAT_MARKDOWN_REMARK_PLUGINS,
+  chatMarkdownImageSources,
+} from "@t3tools/shared/markdownPipeline";
+import type { Nodes } from "hast";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified, type PluggableList } from "unified";
+import { splitPullRequestBody } from "@t3tools/client-runtime/pull-request-markdown";
 
 export {
   splitPullRequestBody,
@@ -101,6 +105,55 @@ export function pullRequestMarkdownPlugins(
   return plugins;
 }
 
+const commentPreviewProcessor = unified()
+  .use(remarkParse)
+  .use(CHAT_MARKDOWN_REMARK_PLUGINS)
+  .use(remarkRehype, { allowDangerousHtml: true })
+  .use(CHAT_MARKDOWN_REHYPE_PLUGINS)
+  .freeze();
+
+const PREVIEW_BLOCK_TAGS = new Set([
+  "blockquote",
+  "br",
+  "dd",
+  "details",
+  "div",
+  "dl",
+  "dt",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "summary",
+  "table",
+  "td",
+  "th",
+  "tr",
+  "ul",
+]);
+
+function commentPreviewText(node: Nodes): string {
+  if (node.type === "text") return node.value;
+  if (node.type === "element" && node.tagName === "img") {
+    return typeof node.properties.alt === "string" ? node.properties.alt : "";
+  }
+  if (!("children" in node)) return "";
+  const text = node.children.map(commentPreviewText).join("");
+  return node.type === "element" && PREVIEW_BLOCK_TAGS.has(node.tagName) ? ` ${text} ` : text;
+}
+
+export function pullRequestCommentPreview(body: string): string {
+  const tree = commentPreviewProcessor.runSync(commentPreviewProcessor.parse(body), body);
+  return commentPreviewText(tree).replace(/\s+/gu, " ").trim();
+}
+
 export function pullRequestAttachments(body: string) {
   const attachments: Array<{ url: string; media: "image" | "video"; caption: string }> = [];
   const seen = new Set<string>();
@@ -113,17 +166,17 @@ export function pullRequestAttachments(body: string) {
       caption: caption || `${media === "image" ? "Image" : "Video"} ${attachments.length + 1}`,
     });
   };
-  const visit = (segments: ReadonlyArray<PullRequestBodySegment>) => {
+  const collect = (segments: ReturnType<typeof splitPullRequestBody>) => {
     for (const segment of segments) {
       if (segment.kind === "attachment") {
         if (segment.media !== "unknown") add(segment.url, segment.media, "");
       } else if (segment.kind === "table") {
-        for (const row of segment.rows) for (const cell of row) visit(cell.segments);
+        for (const cell of segment.rows.flat()) collect(cell.segments);
       } else {
         for (const url of chatMarkdownImageSources(segment.text)) add(url, "image", "");
       }
     }
   };
-  visit(splitPullRequestBody(body));
+  collect(splitPullRequestBody(body));
   return attachments;
 }
