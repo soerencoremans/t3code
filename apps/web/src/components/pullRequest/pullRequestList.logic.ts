@@ -1,4 +1,5 @@
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { msg } from "gt-react";
 
 import { resolvePullRequestAuthorFilter } from "@t3tools/contracts";
 import type {
@@ -62,9 +63,9 @@ const pullRequestViewerKey = (entry: ScopedEntry): string =>
   `${entry.environmentId ?? ""} ${entry.host}`;
 
 const GROUP_LABELS: Record<PullRequestGroupKey, string> = {
-  reviewRequested: "Review requested",
-  authored: "Authored",
-  others: "Others",
+  reviewRequested: msg("Review requested"),
+  authored: msg("Authored"),
+  others: msg("Others"),
 };
 
 function normalize(value: string | null | undefined): string | null {
@@ -453,16 +454,16 @@ export function partitionPullRequestsWithPriority<Entry extends PullRequestListE
   authored: ReadonlyArray<Entry>,
   reviewRequested: ReadonlyArray<Entry>,
 ): ReadonlyArray<PullRequestGroup<Entry>> {
-  const authoredByKey = new Map(authored.map((entry) => [pullRequestEntryKey(entry), entry]));
+  // Matched by URL: each list may hold the pull request under a different environment.
+  const authoredByKey = new Map(authored.map((entry) => [entry.url, entry]));
   const reviewByKey = new Map(
-    reviewRequested.flatMap((entry) => {
-      const key = pullRequestEntryKey(entry);
-      return authoredByKey.has(key) ? [] : [[key, entry] as const];
-    }),
+    reviewRequested.flatMap((entry) =>
+      authoredByKey.has(entry.url) ? [] : [[entry.url, entry] as const],
+    ),
   );
   const others: Entry[] = [];
   for (const entry of entries) {
-    const key = pullRequestEntryKey(entry);
+    const key = entry.url;
     if (authoredByKey.has(key)) {
       authoredByKey.set(key, entry);
     } else if (reviewByKey.has(key)) {
@@ -492,6 +493,25 @@ export type PullRequestDiffStats = ReadonlyMap<
   string,
   { readonly additions: number; readonly deletions: number }
 >;
+
+export interface PullRequestSortStats {
+  readonly key: string;
+  readonly stats: PullRequestDiffStats;
+  readonly settled: boolean;
+}
+
+export function settlePullRequestSortStats(
+  previous: PullRequestSortStats | null,
+  key: string,
+  knownStats: PullRequestDiffStats,
+  eagerStats: ReadonlyArray<EnvironmentPullRequestStat> | null,
+  settled: boolean,
+): PullRequestSortStats {
+  const snapshot = previous?.key === key ? previous : { key, stats: knownStats, settled: false };
+  if (snapshot.settled || !settled) return snapshot;
+  // Only the requested eager batches may change positions after the list first appears.
+  return { key, stats: mergePullRequestDiffStats(snapshot.stats, eagerStats ?? []), settled: true };
+}
 
 /** New stats queries must not blank existing counts. */
 export function mergePullRequestDiffStats(
@@ -536,9 +556,9 @@ export function mergePullRequestLists(
 ): MergedPullRequestList | null {
   if (answers.length === 0) return null;
   const viewers: Record<string, string> = {};
-  const truncatedEnvironments: string[] = [];
+  const truncatedEnvironments = new Set<string>();
   const providers = new Map<string, PullRequestListResult["providers"][number]>();
-  const entries: EnvironmentPullRequestEntry[] = [];
+  const entries = new Map<string, EnvironmentPullRequestEntry>();
   const errors: EnvironmentPullRequestError[] = [];
   const nextCursors: Record<string, PullRequestListCursors> = {};
   let truncated = false;
@@ -560,22 +580,31 @@ export function mergePullRequestLists(
             },
       );
     }
-    entries.push(...answer.entries.map((entry) => ({ ...entry, environmentId })));
+    for (const entry of answer.entries) {
+      const held = entries.get(entry.url);
+      // The first environment to answer keeps a pull request that several of them read.
+      if (
+        held === undefined ||
+        (held.environmentId === environmentId && entry.updatedAt > held.updatedAt)
+      ) {
+        entries.set(entry.url, { ...entry, environmentId });
+      }
+    }
     errors.push(...answer.errors.map((error) => ({ ...error, environmentId })));
     truncated ||= answer.truncated;
-    if (answer.truncated) truncatedEnvironments.push(environmentId);
+    if (answer.truncated) truncatedEnvironments.add(environmentId);
     if (Object.keys(answer.nextCursors).length > 0) {
-      nextCursors[environmentId] = answer.nextCursors;
+      nextCursors[environmentId] = { ...nextCursors[environmentId], ...answer.nextCursors };
     }
   }
   return {
     viewers,
     providers: [...providers.values()],
-    entries: entries.toSorted(comparePullRequestsByRecency),
+    entries: [...entries.values()].toSorted(comparePullRequestsByRecency),
     errors,
     truncated,
     nextCursors,
-    truncatedEnvironments,
+    truncatedEnvironments: [...truncatedEnvironments],
   };
 }
 
@@ -646,7 +675,7 @@ export function scorePullRequestMatch(entry: PullRequestListEntry, query: string
   const needle = query.trim().toLowerCase();
   if (needle.length === 0) return 0;
   const number = needle.replace(/^#/u, "");
-  if (/^\d+$/u.test(number)) return String(entry.number) === number ? 100 : 0;
+  if (String(entry.number) === number) return 100;
 
   const title = entry.title.toLowerCase();
   const terms = needle.split(/\s+/u).filter((term) => term.length > 0);
@@ -787,15 +816,44 @@ export function sortPullRequestGroups<Entry extends PullRequestListEntry>(
   );
 }
 
-export function withDiffStat<
-  Entry extends PullRequestListEntry & { readonly environmentId: string },
->(
+function withDiffStat<Entry extends PullRequestListEntry & { readonly environmentId: string }>(
   entry: Entry,
   statsByRow: ReadonlyMap<string, { readonly additions: number; readonly deletions: number }>,
 ): Entry {
   if (entry.additions !== 0 || entry.deletions !== 0) return entry;
   const stat = statsByRow.get(pullRequestDiffStatKey(entry));
   return stat === undefined ? entry : { ...entry, ...stat };
+}
+
+export function displayPullRequestGroups<Entry extends EnvironmentPullRequestEntry>(
+  groups: ReadonlyArray<PullRequestGroup<Entry>>,
+  sort: PullRequestListSort,
+  searchText: string,
+  statsByRow: PullRequestDiffStats,
+  sortStatsByRow: PullRequestDiffStats,
+  involvement: PullRequestInvolvement,
+): ReadonlyArray<PullRequestGroup<Entry>> {
+  const displayed = new Map(
+    groups.flatMap((group) =>
+      group.entries.map(
+        (entry) => [pullRequestEntryKey(entry), withDiffStat(entry, statsByRow)] as const,
+      ),
+    ),
+  );
+  return sortPullRequestGroups(
+    groups.map((group) => ({
+      ...group,
+      entries: group.entries.map((entry) => withDiffStat(entry, sortStatsByRow)),
+    })),
+    sort,
+    searchText,
+    (entry) =>
+      entry.additions + entry.deletions > 0 || sortStatsByRow.has(pullRequestDiffStatKey(entry)),
+    involvement,
+  ).map((group) => ({
+    ...group,
+    entries: group.entries.map((entry) => displayed.get(pullRequestEntryKey(entry)) ?? entry),
+  }));
 }
 
 export interface PullRequestListOverride {

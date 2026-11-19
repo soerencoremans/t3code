@@ -6,11 +6,14 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as ServerConfig from "./config.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as SharedKeybindings from "@t3tools/shared/keybindings";
+import { evaluateWhenNode } from "@t3tools/shared/keybindingMatching";
 import { KeybindingsConfigError, MAX_KEYBINDINGS_COUNT } from "@t3tools/contracts";
 
 const KeybindingsConfigJson = Schema.fromJsonString(KeybindingsConfig);
@@ -355,12 +358,53 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     );
   });
 
+  it.effect("replaces retired defaults received from an older server", () =>
+    Effect.sync(() => {
+      const bindings = SharedKeybindings.mergeWithDefaultKeybindings(
+        SharedKeybindings.compileResolvedKeybindingsConfig([
+          ...SharedKeybindings.RETIRED_DEFAULT_KEYBINDINGS,
+          { key: "alt+w", command: "rightPanel.close", when: "!terminalFocus" },
+        ]),
+      );
+      for (const [key, shiftKey, context, command] of [
+        ["d", false, {}, "diff.toggle"],
+        ["\\", false, {}, "layout.splitRight"],
+        ["t", false, { rightPanelOpen: true }, "tab.new"],
+        ["w", false, {}, "tab.close"],
+        ["l", false, { previewFocus: true }, "preview.focusUrl"],
+        ["l", true, { assistantSelection: true }, "chat.citeSelection"],
+        ["l", true, {}, "composer.previousWorktree"],
+      ] as const) {
+        assert.equal(
+          bindings.findLast(
+            (binding) =>
+              SharedKeybindings.matchesKeybindingShortcut(
+                { key, shiftKey, metaKey: true, ctrlKey: false, altKey: false },
+                binding.shortcut,
+                "MacIntel",
+              ) &&
+              (!binding.whenAst || evaluateWhenNode(binding.whenAst, context)),
+          )?.command,
+          command,
+        );
+      }
+      assert.deepInclude(
+        bindings,
+        SharedKeybindings.compileResolvedKeybindingRule({
+          key: "alt+w",
+          command: "rightPanel.close",
+          when: "!terminalFocus",
+        }),
+      );
+    }),
+  );
+
   it.effect("drops a retired default so its replacement takes the key", () =>
     Effect.gen(function* () {
       const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
       yield* writeKeybindingsConfig(keybindingsConfigPath, [
-        { key: "mod+d", command: "diff.toggle", when: "!terminalFocus" },
-        { key: "mod+shift+d", command: "diff.toggle" },
+        { key: "mod+d", command: "layout.splitRight", when: "!terminalFocus" },
+        { key: "mod+shift+d", command: "layout.splitRight" },
         { key: "mod+w", command: "rightPanel.close", when: "(!terminalFocus)" },
       ]);
 
@@ -371,13 +415,15 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
 
       const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
       assert.isFalse(
-        persisted.some((entry) => entry.command === "diff.toggle" && entry.key === "mod+d"),
-      );
-      assert.isTrue(
-        persisted.some((entry) => entry.command === "diff.toggle" && entry.key === "mod+shift+d"),
-      );
-      assert.isTrue(
         persisted.some((entry) => entry.command === "layout.splitRight" && entry.key === "mod+d"),
+      );
+      assert.isTrue(
+        persisted.some(
+          (entry) => entry.command === "layout.splitRight" && entry.key === "mod+shift+d",
+        ),
+      );
+      assert.isTrue(
+        persisted.some((entry) => entry.command === "diff.toggle" && entry.key === "mod+d"),
       );
       assert.deepInclude(persisted, {
         key: "mod+w",
@@ -475,6 +521,53 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
       const persistedView = persisted.map(({ key, command }) => ({ key, command }));
       assert.deepEqual(persistedView, [{ key: "mod+shift+r", command: "script.run-tests.run" }]);
+    }).pipe(Effect.provide(layerKeybindings())),
+  );
+
+  it.effect("unassigns a shortcut without restoring it on startup and can reassign it", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      yield* writeKeybindingsConfig(
+        keybindingsConfigPath,
+        Array.from({ length: MAX_KEYBINDINGS_COUNT }, (_, index) => ({
+          key: "mod+alt+f1",
+          command: `script.filler-${index}.run` as const,
+        })),
+      );
+      const keybindings = yield* Keybindings.Keybindings;
+      const target = SharedKeybindings.DEFAULT_KEYBINDINGS.find(
+        (rule) => rule.command === "composer.sendBackground",
+      )!;
+      const siblings = SharedKeybindings.DEFAULT_KEYBINDINGS.filter(
+        (rule) => rule.command === target.command && rule !== target,
+      );
+      const removed = yield* keybindings.upsertKeybindingRule({
+        ...target,
+        when: "false",
+        replace: target,
+      });
+      const expected = SharedKeybindings.compileResolvedKeybindingsConfig([
+        ...siblings,
+        { ...target, when: "false" },
+      ]);
+      assert.deepEqual(
+        removed.keybindings.filter((rule) => rule.command === target.command),
+        expected,
+      );
+      yield* keybindings.syncDefaultKeybindingsOnStartup;
+      const snapshot = yield* keybindings.getSnapshot;
+      assert.deepEqual(
+        snapshot.keybindings.filter((rule) => rule.command === target.command),
+        expected,
+      );
+      const restored = yield* keybindings.upsertKeybindingRule({
+        ...target,
+        replace: { ...target, when: "false" },
+      });
+      assert.deepEqual(
+        restored.keybindings.filter((rule) => rule.command === target.command),
+        SharedKeybindings.compileResolvedKeybindingsConfig([...siblings, target]),
+      );
     }).pipe(Effect.provide(layerKeybindings())),
   );
 
@@ -649,5 +742,43 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         assert.isTrue(persistedCommands.has(command), `expected persisted command ${command}`);
       }
     }).pipe(Effect.provide(layerKeybindings())),
+  );
+
+  it.effect(
+    "suppresses change emission when revalidating unchanged keybindings configuration",
+    () =>
+      Effect.gen(function* () {
+        const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+        yield* writeKeybindingsConfig(keybindingsConfigPath, [
+          { key: "mod+j", command: "terminal.toggle" },
+        ]);
+
+        const keybindings = yield* Keybindings.Keybindings;
+        yield* keybindings.start;
+
+        const changes = yield* keybindings.subscribeChanges;
+
+        // Revalidate when config on disk has not changed (e.g. atime bump on Windows).
+        // `revalidate` publishes before it returns, so a wrongly emitted event would be
+        // buffered in the subscription ahead of the real change observed below.
+        yield* keybindings.revalidate;
+
+        yield* writeKeybindingsConfig(keybindingsConfigPath, [
+          { key: "mod+j", command: "terminal.toggle" },
+          { key: "mod+k", command: "threadPanel.toggle" },
+        ]);
+        yield* keybindings.revalidate;
+
+        // The first buffered event must be the real change, not the unchanged state.
+        const change = Option.getOrThrow(yield* Stream.runHead(changes));
+        assert.isTrue(
+          change.keybindings.some(
+            (rule) =>
+              rule.command === "threadPanel.toggle" &&
+              rule.shortcut.key === "k" &&
+              rule.shortcut.modKey,
+          ),
+        );
+      }).pipe(Effect.scoped, Effect.provide(layerKeybindings())),
   );
 });

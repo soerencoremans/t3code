@@ -1,7 +1,11 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { DownloadIcon, CopyIcon, CheckIcon } from "lucide-react";
-import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { T, useGT, useMessages, Var } from "gt-react";
+import { m } from "~/i18n/messages";
+import { namedClipboardTarget, useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Spinner } from "~/components/ui/spinner";
 import {
+  type AssetResource,
   AuthPreviewOperateScope,
   type EditorId,
   type EnvironmentId,
@@ -55,7 +59,14 @@ import {
   MessageSquarePlusIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
@@ -72,10 +83,12 @@ import {
 import { useRemoteOpenState } from "~/remoteOpen";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
-import { cn } from "~/lib/utils";
+import { cn, isMacPlatform } from "~/lib/utils";
+import { requestWorkspaceFocus } from "~/lib/workspaceFocus";
 import type { ChatFileAttachment } from "~/types";
 import { isHostPath } from "@t3tools/shared/path";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
@@ -86,10 +99,11 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
-import { buildFileReviewComment } from "~/reviewCommentContext";
+import { buildFileReviewComment, type ReviewCommentContext } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
 import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
+import { hostEnvironmentIdAtom } from "~/state/primaryEnvironment";
 import { previewEnvironment } from "~/state/preview";
 import { serverEnvironment } from "~/state/server";
 import { useEnvironmentScope } from "~/state/session";
@@ -107,11 +121,6 @@ import { FileExplorerPane } from "./FileExplorerPane";
 import { FileMediaDetails } from "./FileMediaDetails";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
-import {
-  PanelTabActions,
-  PanelTabBreadcrumb,
-  useInPanelTabBar,
-} from "~/components/PanelTabBreadcrumb";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import {
   type FileCommentAnnotationEntry,
@@ -121,6 +130,7 @@ import {
   nextFileCommentId,
   normalizeFileCommentRange,
   remapFileCommentAnnotations,
+  promptFileCommentEntries,
 } from "./fileCommentAnnotations";
 import { installFileEditorDismissal } from "./fileEditorDismissal";
 import {
@@ -234,7 +244,7 @@ function WorkspaceImagePreview(props: {
     return (
       <MediaActions source={actionsSource}>
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-meta leading-relaxed text-error-foreground">
-          Unable to load workspace image.
+          <T>Unable to load workspace image.</T>
         </div>
       </MediaActions>
     );
@@ -270,13 +280,20 @@ export function WorkspaceBrowserPreview(props: {
     workspaceRoot: props.workspaceRoot,
     absolutePath: props.absolutePath,
   });
-  const assetUrl = useAssetUrlState(
-    props.environmentId,
-    resource,
-    pdf ? props.workspaceMutationId : undefined,
-  );
+  // Each workspace mutation re-mints the URL: a file outside the workspace is signed by its
+  // inode, which an atomic replace changes.
+  const assetUrl = useAssetUrlState(props.environmentId, resource, props.workspaceMutationId);
+  // The HTML frame keeps its first URL per key, so the key moves only once the re-minted URL arrives.
+  const [settledMutationId, setSettledMutationId] = useState(props.workspaceMutationId);
+  if (
+    assetUrl._tag === "Success" &&
+    !assetUrl.waiting &&
+    settledMutationId !== props.workspaceMutationId
+  ) {
+    setSettledMutationId(props.workspaceMutationId);
+  }
   const fileRevision = pdf && assetUrl._tag === "Success" ? assetUrl.fileRevision : undefined;
-  const revision = fileRevision ?? props.workspaceMutationId;
+  const revision = fileRevision ?? (pdf ? props.workspaceMutationId : settledMutationId);
   const revisionSuffix =
     revision === null
       ? ""
@@ -285,7 +302,7 @@ export function WorkspaceBrowserPreview(props: {
   if (assetUrl._tag === "Failure") {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-meta leading-relaxed text-error-foreground">
-        Unable to load file preview.
+        <T>Unable to load file preview.</T>
       </div>
     );
   }
@@ -306,7 +323,56 @@ export function WorkspaceBrowserPreview(props: {
       documentId={`${props.environmentId}:${resource._tag}:${props.threadRef.threadId}:${props.absolutePath}`}
       title={props.title}
       pdf={pdf}
+      pdfActions={
+        <WorkspacePdfSaveAction
+          environmentId={props.environmentId}
+          resource={resource}
+          name={props.title}
+        />
+      }
     />
+  );
+}
+
+function WorkspacePdfSaveAction(props: {
+  readonly environmentId: EnvironmentId;
+  readonly resource: AssetResource;
+  readonly name: string;
+}) {
+  const gt = useGT();
+  const [saving, setSaving] = useState(false);
+  const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, props.resource);
+  return (
+    <FileSurfaceAction
+      label={saving ? gt("Preparing file…") : gt("Save file")}
+      disabled={saving}
+      onPress={() => {
+        setSaving(true);
+        void (async () => {
+          const url = await refreshAssetUrl();
+          if (!url) throw new Error(gt("Reconnect to the environment and try again."));
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(gt("The file could not be loaded. Try again."));
+          // Blob downloads keep desktop's custom app scheme from navigating to an external browser.
+          const downloadUrl = URL.createObjectURL(await response.blob());
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
+          const anchor = document.createElement("a");
+          anchor.href = downloadUrl;
+          anchor.download = props.name.split(/[\\/]/).at(-1) || props.name;
+          anchor.click();
+        })()
+          .catch((cause: unknown) =>
+            toastManager.add({
+              type: "error",
+              title: gt("Could not save file"),
+              description: thrownErrorMessage(cause, m) ?? gt("Please try again."),
+            }),
+          )
+          .finally(() => setSaving(false));
+      }}
+    >
+      <DownloadIcon className="size-3.5" />
+    </FileSurfaceAction>
   );
 }
 
@@ -400,6 +466,7 @@ function WorkspaceAudioPreview(props: {
   readonly name: string;
   readonly workspaceMutationId: string | null;
 }) {
+  const gt = useGT();
   const resource = workspaceAssetResource({
     kind: "media-file",
     threadRef: props.threadRef,
@@ -424,7 +491,7 @@ function WorkspaceAudioPreview(props: {
   if (assetUrl._tag === "Failure" || (url !== null && failedUrl === url)) {
     return (
       <FileSurfaceFailure
-        message="Unable to load audio."
+        message={gt("Unable to load audio.")}
         onRetry={() => {
           setFailedUrl(null);
           void refreshAssetUrl().catch(() => undefined);
@@ -439,6 +506,65 @@ function WorkspaceAudioPreview(props: {
       name={props.name}
       revision={revision}
       onError={() => setFailedUrl(url)}
+    />
+  );
+}
+
+function WorkspaceDocumentPreview(props: {
+  readonly environmentId: EnvironmentId;
+  readonly threadRef: ScopedThreadRef;
+  readonly draft: boolean;
+  readonly document: boolean;
+  readonly absolutePath: string;
+  readonly workspaceRoot: string;
+  readonly name: string;
+  readonly workspaceMutationId: string | null;
+  readonly refreshRevision: number;
+}) {
+  const resource =
+    props.draft && props.document
+      ? {
+          _tag: "draft-workspace-file" as const,
+          cwd: props.workspaceRoot,
+          path: props.absolutePath,
+        }
+      : {
+          _tag: "media-file" as const,
+          threadId: props.threadRef.threadId,
+          path: props.absolutePath,
+          ...(props.document ? {} : { disposition: "attachment" as const }),
+        };
+  const gt = useGT();
+  // Drafts keep reloading on every workspace mutation, as before.
+  const revisioned = resource._tag === "media-file";
+  const assetUrl = useAssetUrlState(
+    props.environmentId,
+    revisioned ? resource : null,
+    props.workspaceMutationId ?? undefined,
+  );
+  const resolved =
+    assetUrl._tag === "Success" ? (assetUrl.fileRevision ?? props.workspaceMutationId) : undefined;
+  // A reconnect reports Loading and keeps the last revision, so the open file stays loaded;
+  // a failure (say the file was deleted) remounts so the preview shows its error.
+  const [shown, setShown] = useState(resolved);
+  if (resolved !== undefined && resolved !== shown) setShown(resolved);
+  const revision = !revisioned
+    ? props.workspaceMutationId
+    : assetUrl._tag === "Failure"
+      ? `failure:${props.workspaceMutationId}`
+      : (resolved ?? shown);
+  // Waiting on the first revision keeps the preview from mounting twice when it opens.
+  if (revisioned && revision === undefined && assetUrl._tag === "Loading") {
+    return <FileSurfaceLoading />;
+  }
+  return (
+    <AttachmentFilePreview
+      key={`${revision}:${props.refreshRevision}`}
+      name={props.name}
+      mimeType="application/octet-stream"
+      sizeBytes={0}
+      asset={{ environmentId: props.environmentId, resource }}
+      origin={gt("File", { $context: "label for a file opened from the workspace" })}
     />
   );
 }
@@ -504,9 +630,27 @@ interface FileRevealState {
   cancelGuard: (() => void) | null;
   handledRequestId: number | null;
   latestRequestId: number | null;
+  /** The path's code view offset when it last unmounted, restored when it is shown again. */
+  scrollTop: number;
+  scrollContainer: HTMLElement | null;
+  restoreFrameId: number | null;
+}
+
+// A file pane tab unmounts while another tab of its pane shows, so its offset outlives the panel.
+const savedFileScrollTops = new Map<string, number>();
+const SAVED_FILE_SCROLL_TOPS_LIMIT = 200;
+
+function saveFileScrollTop(key: string, scrollTop: number) {
+  savedFileScrollTops.delete(key);
+  savedFileScrollTops.set(key, scrollTop);
+  if (savedFileScrollTops.size > SAVED_FILE_SCROLL_TOPS_LIMIT) {
+    const oldest = savedFileScrollTops.keys().next().value;
+    if (oldest !== undefined) savedFileScrollTops.delete(oldest);
+  }
 }
 
 function useFileLineReveal(
+  scrollScope: string,
   relativePath: string | null,
   revealLine: number | null,
   revealRequestId: number,
@@ -516,12 +660,16 @@ function useFileLineReveal(
   return (fileContainer, instance, phase) => {
     if (relativePath === null) return;
 
+    const scrollKey = `${scrollScope}\u0000${relativePath}`;
     const existingState = revealStatesByPath.get(relativePath);
     const state: FileRevealState = existingState ?? {
       frameId: null,
       cancelGuard: null,
       handledRequestId: null,
       latestRequestId: null,
+      scrollTop: savedFileScrollTops.get(scrollKey) ?? 0,
+      scrollContainer: null,
+      restoreFrameId: null,
     };
     if (!existingState) revealStatesByPath.set(relativePath, state);
 
@@ -531,10 +679,21 @@ function useFileLineReveal(
         state.frameId = null;
       }
       state.cancelGuard?.();
+      if (state.restoreFrameId !== null) {
+        cancelAnimationFrame(state.restoreFrameId);
+        state.restoreFrameId = null;
+      }
     };
 
+    const scrollContainer = fileContainer.closest<HTMLElement>(".file-preview-virtualizer");
+
     if (phase === "unmount") {
+      // A view torn down before its restore ran never showed the saved offset, so keep it.
+      const restorePending = state.restoreFrameId !== null;
       cancelPendingReveal();
+      if (scrollContainer && !restorePending) state.scrollTop = scrollContainer.scrollTop;
+      saveFileScrollTop(scrollKey, state.scrollTop);
+      state.scrollContainer = null;
       return;
     }
 
@@ -551,12 +710,37 @@ function useFileLineReveal(
       state.handledRequestId = null;
     }
 
+    if (scrollContainer && state.scrollContainer !== scrollContainer) {
+      state.scrollContainer = scrollContainer;
+      const savedScrollTop = state.scrollTop;
+      // A pending line reveal owns the scroll position.
+      if (
+        savedScrollTop > 0 &&
+        (revealLine === null || state.handledRequestId === revealRequestId)
+      ) {
+        const restoreScroll = (attempt: number) => {
+          state.restoreFrameId = requestAnimationFrame(() => {
+            state.restoreFrameId = null;
+            if (!scrollContainer.isConnected || scrollContainer.scrollTop !== 0) return;
+            // Wait for the virtualizer to size the file so the offset is not clamped.
+            const fits =
+              scrollContainer.scrollHeight - scrollContainer.clientHeight >= savedScrollTop;
+            if (fits || attempt >= REVEAL_MAX_ATTEMPTS) {
+              scrollContainer.scrollTop = savedScrollTop;
+              return;
+            }
+            restoreScroll(attempt + 1);
+          });
+        };
+        restoreScroll(0);
+      }
+    }
+
     if (revealLine === null) {
       fileContainer.style.minHeight = "";
       return;
     }
 
-    const scrollContainer = fileContainer.closest<HTMLElement>(".file-preview-virtualizer");
     if (!scrollContainer) return;
     fileContainer.style.minHeight = `${Math.ceil(
       Math.max(instance.height, scrollContainer.clientHeight),
@@ -669,11 +853,14 @@ function useFileLineReveal(
   };
 }
 
+const EMPTY_REVIEW_COMMENTS: ReadonlyArray<ReviewCommentContext> = [];
+
 const createFileEditor: EditorFactory<FileCommentAnnotationGroup, undefined> = (
   editorType,
   options,
   editStateKey,
 ) => new Editor(editorType, options, editStateKey);
+type FileEditor = Editor<"file", FileCommentAnnotationGroup, undefined>;
 
 function editableFileContents(
   environmentId: EnvironmentId,
@@ -738,6 +925,7 @@ interface EditableFileSurfaceProps {
   wordWrap: boolean;
   onPostRender: FilePostRender;
   onPendingChange: (relativePath: string, pending: boolean) => void;
+  onEditorChange: (editor: FileEditor | null) => void;
 }
 
 interface FileSelectionOverride {
@@ -757,9 +945,19 @@ function EditableFileSurface({
   wordWrap,
   onPostRender,
   onPendingChange,
+  onEditorChange,
 }: EditableFileSurfaceProps) {
+  const gt = useGT();
+  const messages = useMessages();
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
+  const promptCommentIds = new Set(
+    useComposerDraftStore((store) =>
+      composerDraftTarget
+        ? (store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS)
+        : EMPTY_REVIEW_COMMENTS,
+    ).map((comment) => comment.id),
+  );
   const [lineAnnotations, setLineAnnotations] = useState<FileCommentLineAnnotation[]>([]);
   const [selectionOverride, setSelectionOverride] = useState<FileSelectionOverride | null>(null);
   const selectedRange =
@@ -782,13 +980,15 @@ function EditableFileSurface({
   }
   const { ready: editable, onPostRender: onEditablePostRender } =
     useEditableAfterHighlight(externalFile);
-  const editorRef = useRef<Editor<"file", FileCommentAnnotationGroup, undefined> | null>(null);
+  const editorRef = useRef<FileEditor | null>(null);
   const editorOptions: EditorOptions<"file", FileCommentAnnotationGroup, undefined> = {
     onAttach: (editor) => {
       editorRef.current = editor;
+      onEditorChange(editor);
     },
     onComplete: () => {
       editorRef.current = null;
+      onEditorChange(null);
     },
   };
 
@@ -806,7 +1006,7 @@ function EditableFileSurface({
     setLineAnnotations((current) => (current === nextLineAnnotations ? current : remapped));
     for (const annotation of remapped) {
       for (const entry of annotation.metadata.entries) {
-        if (entry.kind !== "comment") continue;
+        if (entry.kind !== "comment" || !promptCommentIds.has(entry.id)) continue;
         addReviewComment(composerDraftTarget, {
           ...buildFileReviewComment({
             id: entry.id,
@@ -974,39 +1174,66 @@ function EditableFileSurface({
             }}
             selectedLines={selectedRange}
             lineAnnotations={lineAnnotations}
-            renderAnnotation={(annotation) => (
-              <div className="flex flex-col gap-2 pt-1.5 pr-3 pb-2 pl-10">
-                {annotation.metadata.entries.map((entry) => (
-                  <DiffCommentAnnotation
-                    key={entry.id}
-                    environmentId={environmentId}
-                    projectId={projectId}
-                    ownerKey={JSON.stringify([
-                      environmentId,
-                      composerDraftTarget,
-                      relativePath,
-                      entry.id,
-                    ])}
-                    kind={entry.kind}
-                    rangeLabel={formatFileCommentRange(entry.startLine, entry.endLine)}
-                    createdAt={entry.createdAt}
-                    // A saved file comment is the composer's context entry for it.
-                    stateLabel={entry.kind === "comment" ? "In composer" : undefined}
-                    submitLabel="Done"
-                    text={entry.text}
-                    onCancel={() => removeAnnotationEntry(entry.id)}
-                    onComment={(text) => submitAnnotationEntry(entry.id, text)}
-                    onDelete={() => removeAnnotationEntry(entry.id)}
-                  />
-                ))}
-              </div>
-            )}
+            renderAnnotation={(annotation) => {
+              // Sent comments stay annotated so a failed send can restore them at remapped lines.
+              const entries = promptFileCommentEntries(
+                annotation.metadata.entries,
+                promptCommentIds,
+              );
+              if (entries.length === 0) return null;
+              return (
+                <div className="flex flex-col gap-2 pt-1.5 pr-3 pb-2 pl-10">
+                  {entries.map((entry) => (
+                    <DiffCommentAnnotation
+                      key={entry.id}
+                      environmentId={environmentId}
+                      projectId={projectId}
+                      ownerKey={JSON.stringify([
+                        environmentId,
+                        composerDraftTarget,
+                        relativePath,
+                        entry.id,
+                      ])}
+                      kind={entry.kind}
+                      rangeLabel={formatFileCommentRange(entry.startLine, entry.endLine, messages)}
+                      createdAt={entry.createdAt}
+                      // A saved file comment is the composer's context entry for it.
+                      stateLabel={entry.kind === "comment" ? gt("In composer") : undefined}
+                      submitLabel={gt("Done", { $context: "button, saves a file comment" })}
+                      text={entry.text}
+                      onCancel={() => removeAnnotationEntry(entry.id)}
+                      onComment={(text) => submitAnnotationEntry(entry.id, text)}
+                      onDelete={() => removeAnnotationEntry(entry.id)}
+                    />
+                  ))}
+                </div>
+              );
+            }}
             className="min-h-full"
           />
         </Virtualizer>
       </div>
     </EditProvider>
   );
+}
+
+function selectRenderedContentOnSelectAll(event: ReactKeyboardEvent<HTMLElement>) {
+  const mac = isMacPlatform(navigator.platform);
+  const selectAll =
+    event.key.toLowerCase() === "a" &&
+    (mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey) &&
+    !event.shiftKey &&
+    !event.altKey;
+  // React bubbles keys from portaled children (the image dialog) through this surface.
+  if (
+    !selectAll ||
+    !(event.target instanceof Node) ||
+    !event.currentTarget.contains(event.target)
+  ) {
+    return;
+  }
+  event.preventDefault();
+  window.getSelection()?.selectAllChildren(event.currentTarget);
 }
 
 function RenderedMarkdownSurface({
@@ -1026,6 +1253,7 @@ function RenderedMarkdownSurface({
   | "revealRequestId"
   | "wordWrap"
   | "onPostRender"
+  | "onEditorChange"
 > & {
   threadRef: ScopedThreadRef;
   readOnly: boolean;
@@ -1035,7 +1263,7 @@ function RenderedMarkdownSurface({
   useFileSaveSession(saveTarget, onPendingChange);
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <ScrollArea className="min-h-0 flex-1" onKeyDown={selectRenderedContentOnSelectAll}>
       <div aria-hidden className="h-[var(--surface-top-inset,0px)]" />
       <FileMarkdownPreview
         text={contents}
@@ -1096,6 +1324,8 @@ export default function FilePreviewPanel({
     attachment === undefined ? resolveFilePreviewPath(requestedPath, cwd) : requestedPath;
   // Neither (a threadless surface): the server knows no thread, so assets go by cwd too.
   const draft = typeof composerDraftTarget !== "object";
+  const gt = useGT();
+  const m = useMessages();
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
   const defaultWordWrap = useClientSettings((settings) => settings.wordWrap);
@@ -1103,12 +1333,14 @@ export default function FilePreviewPanel({
   const wordWrap = wordWrapOverride ?? defaultWordWrap;
   const canOperatePreview = useEnvironmentScope(environmentId, AuthPreviewOperateScope);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const hostEnvironmentId = useAtomValue(hostEnvironmentIdAtom);
   const remoteOpenState = useRemoteOpenState(environmentId);
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const previewAvailable = usePreviewAvailable(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
+    refresh: true,
   });
   const openPreview = useAtomCommand(previewEnvironment.open, {
     reportFailure: false,
@@ -1126,7 +1358,7 @@ export default function FilePreviewPanel({
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isHostPath(relativePath));
-  const fileAccess = useFilesystemReadAccess(environmentId);
+  const fileAccess = useFilesystemReadAccess(environmentId, m);
   const { canReadFiles } = fileAccess;
   const canWriteFiles = useEnvironmentScope(environmentId, AuthFilesystemWriteScope);
   const file = useProjectFileQuery(
@@ -1134,6 +1366,7 @@ export default function FilePreviewPanel({
     cwd,
     relativePath,
     attachment === undefined && relativePath !== null,
+    m,
   );
   const [fileRefreshRevision, setFileRefreshRevision] = useState(0);
   const attemptedPath = file.readError?.resolvedPath ?? file.readError?.operationPath;
@@ -1160,7 +1393,7 @@ export default function FilePreviewPanel({
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(
     RENDER_MARKDOWN_STORAGE_KEY,
-    true,
+    false,
     Schema.Boolean,
   );
   const [renderBrowserFilePreferred, setRenderBrowserFilePreferred] = useLocalStorage(
@@ -1177,10 +1410,8 @@ export default function FilePreviewPanel({
   const [handledReveal, setHandledReveal] = useState<{ path: string; requestId: number } | null>(
     null,
   );
-  const breadcrumbRef = useRef<HTMLDivElement>(null);
-  const inPanelTabBar = useInPanelTabBar();
-  // A narrow pane shares one row between the tabs and these actions, so the
-  // view toggle shrinks to a source icon and Add to chat moves into the More menu.
+  const [breadcrumbElement, setBreadcrumbElement] = useState<HTMLDivElement | null>(null);
+  // Narrow rows use a source icon and move Add to chat into the More menu.
   const [surfaceElement, setSurfaceElement] = useState<HTMLDivElement | null>(null);
   const foldActions = useElementNarrowerThan(surfaceElement, FILE_ACTIONS_FOLD_WIDTH_PX);
   const stackExplorer = useElementNarrowerThan(surfaceElement, FILE_EXPLORER_SIDE_WIDTH_PX);
@@ -1229,22 +1460,6 @@ export default function FilePreviewPanel({
     !renderBrowserFile &&
     file.data?.truncated === true &&
     (draft || isMarkdown || isMermaid || isHtml);
-  const noticeAbove = readOnlyNotice || truncatedNotice;
-  // Source, rendered markdown and the file tree scroll up under a pane's tab
-  // row (--surface-top-inset); a notice above them, and other previews, keep
-  // everything below it.
-  const scrollsUnderTabRow =
-    inPanelTabBar &&
-    !noticeAbove &&
-    (showPreview
-      ? attachment === undefined &&
-        !isMedia &&
-        !renderBrowserFile &&
-        !renderTable &&
-        !renderMermaid &&
-        !isDocument &&
-        file.data != null
-      : showExplorer);
   const renderedMode = isMermaid
     ? ("mermaid" as const)
     : isMarkdown
@@ -1264,6 +1479,55 @@ export default function FilePreviewPanel({
     !(tableDelimiter && renderTable) &&
     !renderBrowserFile &&
     !isDocument;
+  const mayOpenEditor =
+    previewPath !== null &&
+    !isHostFile &&
+    canWriteFiles &&
+    file.error === null &&
+    !file.data?.truncated &&
+    !isMedia &&
+    !isDocument &&
+    !renderBrowserFile &&
+    !renderMermaid &&
+    !(isMarkdown && renderMarkdown) &&
+    !(tableDelimiter && renderTable);
+  const contentFocusRef = useRef<HTMLDivElement>(null);
+  const fileEditorRef = useRef<FileEditor | null>(null);
+  const focusEditorFromContent = () => {
+    const editor = fileEditorRef.current;
+    if (!editor || document.activeElement !== contentFocusRef.current) return;
+    // Without a caret the editor focuses with no selection, so no caret shows and typing
+    // lands on whatever the browser selection held.
+    const hasCaret = Boolean(editor.getViewState().selections?.length);
+    editor.focus(
+      hasCaret
+        ? { preventScroll: true }
+        : { preventScroll: true, lineNumber: revealLine ?? "first-visible" },
+    );
+  };
+  const handleEditorChange = (editor: FileEditor | null) => {
+    fileEditorRef.current = editor;
+    focusEditorFromContent();
+  };
+  const handleEditorChangeStable = useStableCallback(handleEditorChange);
+  const focusEditorOnTreeRowClickOrEnter = (event: {
+    nativeEvent: Event;
+    altKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    shiftKey: boolean;
+  }) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const row = event.nativeEvent
+      .composedPath()
+      .find(
+        (node): node is Element =>
+          node instanceof Element && node.matches('[role="treeitem"][data-item-path]'),
+      );
+    const path = row?.getAttribute("data-item-path");
+    if (!path || path.endsWith("/")) return;
+    requestWorkspaceFocus({ area: "panel", selector: "[data-file-content-focus]" });
+  };
   const rendered = isMermaid
     ? renderMermaid
     : isMarkdown
@@ -1303,7 +1567,12 @@ export default function FilePreviewPanel({
   // Mentions resolve against the workspace, so only workspace files can be added.
   const canAddToChat =
     previewPath !== null && relativePath !== null && !isHostFile && composerRef !== null;
-  const onFilePostRender = useFileLineReveal(relativePath, revealLine, revealRequestId);
+  const onFilePostRender = useFileLineReveal(
+    `${environmentId}\u0000${cwd}`,
+    relativePath,
+    revealLine,
+    revealRequestId,
+  );
   // Mounting the file read under the workspace mutation id refetches it after each mutation.
   useAtomMount(
     canReadFiles &&
@@ -1319,16 +1588,22 @@ export default function FilePreviewPanel({
       : NO_FILE_REVISION_ATOM,
   );
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the breadcrumb DOM so the deepest and current crumbs are in view after commit
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the current breadcrumb in view as its path or available width changes
   useEffect(() => {
-    const crumbs = breadcrumbRef.current?.querySelectorAll<HTMLElement>("[data-file-crumb]");
-    // Show the deepest crumb when it fits, but never at the cost of the current one.
-    crumbs?.[crumbs.length - 1]?.scrollIntoView({ block: "nearest", inline: "end" });
-    breadcrumbRef.current
-      ?.querySelector<HTMLElement>("[data-current-file-crumb='true']")
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const element = breadcrumbElement;
+    if (!element) return;
+    const revealCurrentCrumb = () => {
+      const crumbs = element.querySelectorAll<HTMLElement>("[data-file-crumb]");
+      // Show the deepest crumb when it fits, but never at the cost of the current one.
+      crumbs[crumbs.length - 1]?.scrollIntoView({ block: "nearest", inline: "end" });
+      element
+        .querySelector<HTMLElement>("[data-current-file-crumb='true']")
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    revealCurrentCrumb();
+    return observeResize(element, revealCurrentCrumb);
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new path or trail re-renders the crumbs, so the current one scrolls back into view.
-  }, [breadcrumbPath, breadcrumbTrail]);
+  }, [breadcrumbElement, breadcrumbPath, breadcrumbTrail]);
 
   const toggleExplorer = () => {
     setExplorerOpen((current) => {
@@ -1360,8 +1635,8 @@ export default function FilePreviewPanel({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to open file in browser",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: gt("Unable to open file in browser"),
+          description: thrownErrorMessage(error, m) ?? gt("An error occurred."),
         }),
       );
     })();
@@ -1372,13 +1647,13 @@ export default function FilePreviewPanel({
       return (
         <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-body text-muted-foreground">
           <Spinner className="size-4" />
-          Checking file access...
+          <T>Checking file access...</T>
         </div>
       );
     }
     return (
       <div className="p-4 text-body text-muted-foreground">
-        {fileAccess.error ?? "This connection cannot read host files."}
+        {fileAccess.error ?? gt("This connection cannot read host files.")}
       </div>
     );
   }
@@ -1393,15 +1668,13 @@ export default function FilePreviewPanel({
   const addToChat = () => {
     if (relativePath) addFileMentionToChat(composerRef, relativePath);
   };
-  // The file's crumbs and actions: their own row, or in a panel tab bar the
-  // tab's breadcrumb ("Files › file.tsx") and the row's end (pen r7Vc3).
   const fileHeader =
     breadcrumbPath !== null && breadcrumbTrail !== null
       ? {
           crumbs: (
             <ScrollArea
               radius="none"
-              ref={breadcrumbRef}
+              ref={setBreadcrumbElement}
               hideScrollbars
               scrollFade
               className="min-w-0 flex-1"
@@ -1422,25 +1695,11 @@ export default function FilePreviewPanel({
               </div>
             </ScrollArea>
           ),
-          tabCrumb: (
-            <FileBreadcrumbs
-              compact
-              cwd={cwd}
-              environmentId={environmentId}
-              isFolder={isFolder}
-              onNavigateFolder={navigateToFolder}
-              onOpenFile={openFileFromSurface}
-              projectName={projectName}
-              relativePath={breadcrumbPath}
-              trail={breadcrumbTrail}
-              workspaceMutationId={workspaceMutationId}
-            />
-          ),
           actions: (
             <>
               {canBrowseFiles && stackExplorer ? (
                 <FileSurfaceAction
-                  label={browsingFiles ? "Back to file" : "Back to files"}
+                  label={browsingFiles ? gt("Back to file") : gt("Back to files")}
                   onPress={() => setBrowsingRevealKey(browsingFiles ? null : revealKey)}
                 >
                   {browsingFiles ? (
@@ -1459,7 +1718,7 @@ export default function FilePreviewPanel({
               ) : null}
               {canToggleRendered && renderedMode && foldActions ? (
                 <FileSurfaceAction
-                  label={rendered ? "Show source" : "Show preview"}
+                  label={rendered ? gt("Show source") : gt("Show preview")}
                   pressed={!rendered}
                   onPress={() => setRendered(!rendered)}
                 >
@@ -1467,12 +1726,14 @@ export default function FilePreviewPanel({
                 </FileSurfaceAction>
               ) : null}
               {canAddToChat && !foldActions ? (
-                <FileSurfaceAction label="Add to chat" onPress={addToChat}>
+                <FileSurfaceAction label={gt("Add to chat")} onPress={addToChat}>
                   <MessageSquarePlusIcon className="size-3.5" />
                 </FileSurfaceAction>
               ) : null}
               {absolutePath &&
-              (environmentId === primaryEnvironmentId || remoteOpenState.mode !== "local-exec") ? (
+              (environmentId === primaryEnvironmentId ||
+                environmentId === hostEnvironmentId ||
+                remoteOpenState.mode !== "local-exec") ? (
                 <OpenInPicker
                   enableShortcut={openInShortcutEnabled}
                   environmentId={environmentId}
@@ -1494,7 +1755,7 @@ export default function FilePreviewPanel({
                             <Button
                               type="button"
                               className="shrink-0"
-                              aria-label="More file actions"
+                              aria-label={gt("More file actions")}
                               variant="ghost"
                               size="icon-sm"
                             />
@@ -1504,24 +1765,26 @@ export default function FilePreviewPanel({
                     >
                       <EllipsisIcon className="size-3.5" />
                     </TooltipTrigger>
-                    <TooltipPopup>More file actions</TooltipPopup>
+                    <TooltipPopup>
+                      <T>More file actions</T>
+                    </TooltipPopup>
                   </Tooltip>
                   <MenuPopup align="end">
                     {foldActions && canAddToChat ? (
                       <MenuItem onClick={addToChat}>
                         <MessageSquarePlusIcon aria-hidden />
-                        Add to chat
+                        <T>Add to chat</T>
                       </MenuItem>
                     ) : null}
                     {showsRawText ? (
                       <MenuCheckboxItem checked={wordWrap} onCheckedChange={setWordWrapOverride}>
-                        Word wrap
+                        <T>Word wrap</T>
                       </MenuCheckboxItem>
                     ) : null}
                     {canOpenInBrowser ? (
                       <MenuItem onClick={handleOpenInBrowser}>
                         <Globe2 aria-hidden />
-                        Open file in preview browser
+                        <T>Open file in preview browser</T>
                       </MenuItem>
                     ) : null}
                   </MenuPopup>
@@ -1529,7 +1792,7 @@ export default function FilePreviewPanel({
               ) : null}
               {canBrowseFiles && !stackExplorer ? (
                 <FileSurfaceAction
-                  label={explorerOpen ? "Hide file explorer" : "Show file explorer"}
+                  label={explorerOpen ? gt("Hide file explorer") : gt("Show file explorer")}
                   pressed={explorerOpen}
                   onPress={toggleExplorer}
                 >
@@ -1545,34 +1808,44 @@ export default function FilePreviewPanel({
     <div
       ref={setSurfaceElement}
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-      data-surface-reaches-under-header={scrollsUnderTabRow ? "" : undefined}
     >
-      {fileHeader && !inPanelTabBar ? (
+      {fileHeader ? (
         <div className={FILE_SURFACE_SUBHEADER_CLASS} data-surface-subheader>
           {fileHeader.crumbs}
           {fileHeader.actions}
         </div>
       ) : null}
-      {fileHeader && inPanelTabBar ? (
-        <>
-          <PanelTabBreadcrumb>{fileHeader.tabCrumb}</PanelTabBreadcrumb>
-          <PanelTabActions>{fileHeader.actions}</PanelTabActions>
-        </>
-      ) : null}
       {readOnlyNotice ? (
         <div className="shrink-0 border-b px-3 py-1.5 text-caption text-muted-foreground">
-          Read-only connection. Unsaved edits are kept until write access returns.
+          <T>Read-only connection. Unsaved edits are kept until write access returns.</T>
         </div>
       ) : null}
       {truncatedNotice && file.data ? (
         <div className="shrink-0 border-b border-warning/20 bg-warning-surface px-3 py-1.5 text-caption text-warning-foreground">
-          Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
+          {gt(
+            "{count, plural, one {Preview limited to the first 1 MB of a {formatted} byte file.} other {Preview limited to the first 1 MB of a {formatted} byte file.}}",
+            { count: file.data.byteLength, formatted: file.data.byteLength.toLocaleString() },
+          )}
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className={cn("min-w-0 flex-1 flex-col overflow-hidden", showPreview ? "flex" : "hidden")}
         >
+          {mayOpenEditor ? (
+            // Panel focus lands here and passes to the editor once it attaches. sr-only keeps the
+            // 1px box workspace focus needs, and clips it so clicks in the file never reach it.
+            // The hand-off waits a microtask: workspace focus checks that focus stayed here.
+            <div
+              ref={contentFocusRef}
+              tabIndex={-1}
+              data-workspace-focus-default
+              data-file-content-focus
+              aria-label={gt("File contents")}
+              className="sr-only"
+              onFocus={() => queueMicrotask(focusEditorFromContent)}
+            />
+          ) : null}
           {isFolder ? null : relativePath && attachment ? (
             <AttachmentFilePreview
               key={`${environmentId}:${attachment.id}`}
@@ -1650,45 +1923,42 @@ export default function FilePreviewPanel({
           ) : relativePath &&
             absolutePath &&
             (isDocument || file.readError?.failure === "binary_file") ? (
-            <AttachmentFilePreview
-              key={`${environmentId}:${absolutePath}:${workspaceMutationId}:${fileRefreshRevision}`}
+            <WorkspaceDocumentPreview
+              key={`${environmentId}:${absolutePath}`}
+              environmentId={environmentId}
+              threadRef={threadRef}
+              draft={draft}
+              document={isDocument}
+              absolutePath={absolutePath}
+              workspaceRoot={cwd}
               name={relativePath.split(/[\\/]/).at(-1) || relativePath}
-              mimeType="application/octet-stream"
-              sizeBytes={0}
-              asset={{
-                environmentId,
-                resource:
-                  draft && isDocument
-                    ? { _tag: "draft-workspace-file", cwd, path: absolutePath }
-                    : {
-                        _tag: "media-file",
-                        threadId: threadRef.threadId,
-                        path: absolutePath,
-                        ...(isDocument ? {} : { disposition: "attachment" as const }),
-                      },
-              }}
-              origin="File"
+              workspaceMutationId={workspaceMutationId}
+              refreshRevision={fileRefreshRevision}
             />
           ) : relativePath && file.error && file.data === null ? (
             <FileSurfaceFailure
               message={
                 <>
-                  {file.readError ? filePreviewReadErrorMessage(file.readError) : file.error}
+                  {file.readError ? filePreviewReadErrorMessage(file.readError, m) : file.error}
                   {attemptedPath ? (
                     <span className="mt-2 block">
-                      Attempted path
-                      <code className="block break-all font-mono text-foreground select-all">
-                        {attemptedPath}
-                      </code>
+                      <T>
+                        Attempted path
+                        <code className="block break-all font-mono text-foreground select-all">
+                          <Var>{attemptedPath}</Var>
+                        </code>
+                      </T>
                     </span>
                   ) : null}
                   {!isHostFile ? (
                     <span className="mt-2 block">
-                      Workspace folder:{" "}
-                      <code className="break-all font-mono select-all">
-                        {file.readError?.cwd ?? cwd}
-                      </code>
-                      . Check the link's path or locate the file in Files.
+                      <T>
+                        Workspace folder:{" "}
+                        <code className="break-all font-mono select-all">
+                          <Var>{file.readError?.cwd ?? cwd}</Var>
+                        </code>
+                        . Check the link's path or locate the file in Files.
+                      </T>
                     </span>
                   ) : null}
                 </>
@@ -1744,6 +2014,7 @@ export default function FilePreviewPanel({
                   wordWrap={wordWrap}
                   onPostRender={onFilePostRender}
                   onPendingChange={onPendingChange}
+                  onEditorChange={handleEditorChangeStable}
                 />
               </DiffWorkerPoolProvider>
             )
@@ -1751,32 +2022,40 @@ export default function FilePreviewPanel({
         </div>
         {mountExplorer ? (
           <FileExplorerPane resizable={showPreview && showExplorer} visible={showExplorer}>
-            <FileBrowserPanel
-              key={`${environmentId}:${hostFolderPath ?? cwd}`}
-              environmentId={environmentId}
-              repositoryRoot={repositoryRoot}
-              cwd={hostFolderPath ?? cwd}
-              projectName={hostFolderPath ?? projectName}
-              hostFolder={hostFolderPath !== null}
-              selectedPath={
-                hostFolderPath === null
-                  ? relativePath
-                  : trailChildOf(hostFolderPath, breadcrumbTrail ?? hostFolderPath)
-              }
-              selectedPathRevealId={revealRequestId}
-              visible={showExplorer}
-              underPaneHeader={scrollsUnderTabRow}
-              onOpenFile={openFileFromSurface}
-              workspaceMutationId={workspaceMutationId}
-              {...(previewPath && !isMedia && !isPdf
-                ? {
-                    onRefreshSelectedFile: () => {
-                      if (!isDocument) file.refresh();
-                      setFileRefreshRevision((value) => value + 1);
-                    },
-                  }
-                : {})}
-            />
+            <div
+              className="contents"
+              onClick={focusEditorOnTreeRowClickOrEnter}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") focusEditorOnTreeRowClickOrEnter(event);
+              }}
+            >
+              <FileBrowserPanel
+                key={`${environmentId}:${hostFolderPath ?? cwd}`}
+                environmentId={environmentId}
+                repositoryRoot={repositoryRoot}
+                cwd={hostFolderPath ?? cwd}
+                projectName={hostFolderPath ?? projectName}
+                hostFolder={hostFolderPath !== null}
+                selectedPath={
+                  hostFolderPath === null
+                    ? relativePath
+                    : trailChildOf(hostFolderPath, breadcrumbTrail ?? hostFolderPath)
+                }
+                selectedPathRevealId={revealRequestId}
+                visible={showExplorer}
+                onOpenFile={openFileFromSurface}
+                answersPanelFind={!previewPath}
+                workspaceMutationId={workspaceMutationId}
+                {...(previewPath && !isMedia && !isPdf
+                  ? {
+                      onRefreshSelectedFile: () => {
+                        if (!isDocument) file.refresh();
+                        setFileRefreshRevision((value) => value + 1);
+                      },
+                    }
+                  : {})}
+              />
+            </div>
           </FileExplorerPane>
         ) : null}
       </div>
@@ -1802,15 +2081,18 @@ export function WorkspaceLargeTextPreview(props: {
     path: props.absolutePath,
     disposition: "attachment",
   } as const;
+  const gt = useGT();
   const copyContents = useRef<(() => Promise<string>) | null>(null);
-  const { copyToClipboard, isCopied } = useCopyToClipboard({ target: props.name });
+  const { copyToClipboard, isCopied } = useCopyToClipboard({
+    target: namedClipboardTarget(props.name),
+  });
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
   const showError = (cause: unknown) => {
     toastManager.add({
       type: "error",
-      title: "Could not read file",
-      description: cause instanceof Error ? cause.message : "Try again.",
+      title: gt("Could not read file"),
+      description: thrownErrorMessage(cause, m) ?? gt("Try again."),
     });
   };
   // Each workspace mutation re-mints the URL, so an edited file loads its new bytes.
@@ -1833,7 +2115,7 @@ export function WorkspaceLargeTextPreview(props: {
   if (assetUrl._tag === "Failure")
     return (
       <FileSurfaceFailure
-        message="Unable to load file preview."
+        message={gt("Unable to load file preview.")}
         onRetry={() => {
           setRevision((value) => value + 1);
           void refreshAssetUrl().catch(showError);
@@ -1841,14 +2123,20 @@ export function WorkspaceLargeTextPreview(props: {
       />
     );
   if (assetUrl._tag !== "Success" || loaded === null)
-    return <div className="p-6 text-meta text-muted-foreground">Loading…</div>;
+    return (
+      <div className="p-6 text-meta text-muted-foreground">
+        <T>Loading…</T>
+      </div>
+    );
   const src = `${loaded.url}${loaded.url.includes("?") ? "&" : "?"}revision=${encodeURIComponent(loaded.revision)}`;
   return (
     <>
       <div className={FILE_SURFACE_SUBHEADER_CLASS}>
-        <span className="min-w-0 flex-1 text-meta text-muted-foreground">Full file</span>
+        <span className="min-w-0 flex-1 text-meta text-muted-foreground">
+          <T>Full file</T>
+        </span>
         <FileSurfaceAction
-          label={isCopied ? "Copied" : "Copy contents"}
+          label={isCopied ? gt("Copied") : gt("Copy contents")}
           onPress={() => {
             const copy = copyContents.current;
             if (!copy) return;
@@ -1860,15 +2148,15 @@ export function WorkspaceLargeTextPreview(props: {
           {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
         </FileSurfaceAction>
         <FileSurfaceAction
-          label={saving ? "Preparing file…" : "Save file"}
+          label={saving ? gt("Preparing file…") : gt("Save file")}
           disabled={saving}
           onPress={() => {
             setSaving(true);
             void (async () => {
               const url = await refreshAssetUrl();
-              if (!url) throw new Error("Reconnect to the environment and try again.");
+              if (!url) throw new Error(gt("Reconnect to the environment and try again."));
               const response = await fetch(url);
-              if (!response.ok) throw new Error("The file could not be loaded. Try again.");
+              if (!response.ok) throw new Error(gt("The file could not be loaded. Try again."));
               const downloadUrl = URL.createObjectURL(await response.blob());
               setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
               const anchor = document.createElement("a");
@@ -1883,7 +2171,13 @@ export function WorkspaceLargeTextPreview(props: {
           <DownloadIcon className="size-3.5" />
         </FileSurfaceAction>
       </div>
-      <Suspense fallback={<div className="p-6 text-meta text-muted-foreground">Loading…</div>}>
+      <Suspense
+        fallback={
+          <div className="p-6 text-meta text-muted-foreground">
+            <T>Loading…</T>
+          </div>
+        }
+      >
         <LargeTextViewer
           key={`${src}:${revision}`}
           name={props.name}

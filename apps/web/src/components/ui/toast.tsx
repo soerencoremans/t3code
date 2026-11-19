@@ -1,6 +1,7 @@
 import { Spinner } from "~/components/ui/spinner";
 
 import { Toast } from "@base-ui/react/toast";
+import { msg, useGT } from "gt-react";
 import {
   useEffect,
   useState,
@@ -10,12 +11,20 @@ import {
   type ReactNode,
 } from "react";
 import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
-import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import { Check, ChevronDown, ChevronUp, Copy } from "lucide";
+import {
+  CircleAlertIcon,
+  CircleCheckIcon,
+  InfoIcon,
+  TriangleAlertIcon,
+  XIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CopyIcon,
+} from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Button, type ButtonVariant, buttonVariants } from "~/components/ui/button";
-import { MorphIcon } from "~/components/MorphIcon";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import {
@@ -112,9 +121,9 @@ function errorDescriptionClampClass(type: unknown, description: unknown): string
  */
 const toastDismissPositionClass = "absolute z-20 -top-1.5 -right-1.5 flex";
 const toastDismissButtonClass = cn(
-  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-xs outline-none",
+  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border surface-dismiss text-muted-foreground outline-none",
   "transition-colors hover:text-foreground",
-  "focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring",
+  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 );
 // Notices close from inside their head row instead of the corner badge.
 // The 12px X's ink sits 7px inside its 20px button: right-1.25 ends the ink on the
@@ -123,7 +132,7 @@ const noticeDismissPositionClass = "absolute z-20 top-3 right-1.25 flex";
 const noticeDismissButtonClass = cn(
   "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none",
   "transition-colors hover:bg-accent hover:text-foreground",
-  "focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring",
+  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
 );
 
 function handleToastDismissClick(
@@ -136,8 +145,15 @@ function handleToastDismissClick(
 }
 
 function CopyErrorButton({ text }: { text: string }) {
-  const { copyToClipboard, isCopied } = useCopyToClipboard({ target: "error-message" });
-  const label = isCopied ? "Copied error" : "Copy error";
+  const { copyToClipboard, isCopied } = useCopyToClipboard({
+    target: {
+      target: "error-message",
+      unavailableMessage: msg("Clipboard API is unavailable while copying error-message."),
+      failureMessage: msg("Failed to copy error-message to the clipboard."),
+    },
+  });
+  const gt = useGT();
+  const label = isCopied ? gt("Copied error") : gt("Copy error");
 
   return (
     <Tooltip>
@@ -152,10 +168,7 @@ function CopyErrorButton({ text }: { text: string }) {
           />
         }
       >
-        <MorphIcon
-          className={cn("size-3", isCopied && "text-success")}
-          icon={isCopied ? Check : Copy}
-        />
+        {isCopied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
       </TooltipTrigger>
       <TooltipPopup side="top">{label}</TooltipPopup>
     </Tooltip>
@@ -173,8 +186,9 @@ function ToastExpandableSection({
   labels: { expand?: string; collapse?: string };
 }) {
   const [open, setOpen] = useState(false);
-  const expandLabel = labels.expand ?? "Show details";
-  const collapseLabel = labels.collapse ?? "Hide details";
+  const gt = useGT();
+  const expandLabel = labels.expand ?? gt("Show details");
+  const collapseLabel = labels.collapse ?? gt("Hide details");
 
   return (
     <div className="min-w-0">
@@ -184,11 +198,19 @@ function ToastExpandableSection({
         onClick={() => setOpen((prev) => !prev)}
         type="button"
       >
-        <MorphIcon
-          className="size-3.5 shrink-0 opacity-80"
-          icon={open ? ChevronUp : ChevronDown}
-          strokeWidth={2}
-        />
+        {open ? (
+          <ChevronUpIcon
+            className="size-3.5 shrink-0 opacity-80"
+
+            strokeWidth={2}
+          />
+        ) : (
+          <ChevronDownIcon
+            className="size-3.5 shrink-0 opacity-80"
+
+            strokeWidth={2}
+          />
+        )}
         {open ? collapseLabel : expandLabel}
       </button>
       {open ? <div className={toastExpandablePanelClassName}>{children}</div> : null}
@@ -208,6 +230,7 @@ function ToastDescriptionAndExpandable({
   const expandableContent = toastData?.expandableContent;
   const labels = toastData?.expandableLabels ?? {};
   const descriptionTrigger = toastData?.expandableDescriptionTrigger ?? false;
+  const gt = useGT();
   const descriptionClassName = cn(
     "min-w-0 select-text wrap-break-word text-meta leading-[1.45] text-muted-foreground",
     errorDescriptionClampClass(toastType, toastDescription),
@@ -227,8 +250,8 @@ function ToastDescriptionAndExpandable({
     );
   }
 
-  const expandLabel = labels.expand ?? "Show details";
-  const collapseLabel = labels.collapse ?? "Hide details";
+  const expandLabel = labels.expand ?? gt("Show details");
+  const collapseLabel = labels.collapse ?? gt("Hide details");
 
   const toggle = () => setOpen((v) => !v);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -268,12 +291,21 @@ function ToastDescriptionAndExpandable({
               data-slot="toast-description"
             />
           </div>
-          <MorphIcon
-            aria-hidden
-            className="size-3.5 h-lh shrink-0 text-muted-foreground opacity-80"
-            icon={open ? ChevronUp : ChevronDown}
-            strokeWidth={2}
-          />
+          {open ? (
+            <ChevronUpIcon
+              aria-hidden
+              className="size-3.5 h-lh shrink-0 text-muted-foreground opacity-80"
+
+              strokeWidth={2}
+            />
+          ) : (
+            <ChevronDownIcon
+              aria-hidden
+              className="size-3.5 h-lh shrink-0 text-muted-foreground opacity-80"
+
+              strokeWidth={2}
+            />
+          )}
         </TooltipTrigger>
         <TooltipPopup side="top">{open ? collapseLabel : expandLabel}</TooltipPopup>
       </Tooltip>
@@ -563,6 +595,7 @@ function ToastProvider({ children, position = "top-right", ...props }: ToastProv
 function Toasts({ position }: { position: ToastPosition }) {
   const { toasts } = Toast.useToastManager<ThreadToastData>();
   const activeThreadRef = useActiveThreadRefFromRoute();
+  const gt = useGT();
   const isTop = position.startsWith("top");
   const visibleToasts = toasts.filter((toast) =>
     shouldRenderThreadScopedToast(toast.data, activeThreadRef),
@@ -582,6 +615,7 @@ function Toasts({ position }: { position: ToastPosition }) {
   return (
     <Toast.Portal data-slot="toast-portal">
       <Toast.Viewport
+        aria-label={gt("Notifications", { $context: "screen reader name of the toast area" })}
         className={cn(
           // Above dialogs, sheets and the palette (z-50, media z-60), so an error raised from a dialog can be read and dismissed; under menus and popovers (z-130).
           "fixed z-[70] mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-inset:--spacing(4)]",
@@ -601,7 +635,9 @@ function Toasts({ position }: { position: ToastPosition }) {
         data-slot="toast-viewport"
         style={
           {
-            "--toast-frontmost-height": `${visibleToastLayout.frontmostHeight}px`,
+            "--toast-frontmost-height": visibleToastLayout.frontmostHeight
+              ? `${visibleToastLayout.frontmostHeight}px`
+              : undefined,
           } as CSSProperties
         }
       >
@@ -628,7 +664,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                 "data-[position*=top]:after:top-full",
                 "data-[position*=bottom]:after:bottom-full",
                 visibleIndex > 0
-                  ? "not-data-expanded:[--toast-calc-height:var(--toast-frontmost-height)] data-expanded:[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))]"
+                  ? "not-data-expanded:[--toast-calc-height:var(--toast-frontmost-height,var(--toast-height))] not-data-expanded:overflow-clip data-expanded:[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))]"
                   : "[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))]",
                 "[--toast-gap:--spacing(3)] [--toast-peek:--spacing(3)] [--toast-scale:calc(max(0,1-(var(--toast-index)*.1)))] [--toast-shrink:calc(1-var(--toast-scale))]",
                 // Base UI measures with height:auto; --toast-height as min-height would prevent shrinking.
@@ -685,7 +721,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                 }
               >
                 <button
-                  aria-label="Dismiss notification"
+                  aria-label={gt("Dismiss notification")}
                   className={
                     toast.data?.variant === "notification"
                       ? noticeDismissButtonClass
@@ -705,7 +741,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                   toastContentClassName(toast.data?.variant),
                   "transition-opacity duration-250 data-expanded:opacity-100",
                   hideCollapsedContent &&
-                    "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
+                    "not-data-expanded:pointer-events-none not-data-expanded:opacity-0 not-data-expanded:transition-none",
                 )}
               >
                 <ToastBodyContent
@@ -736,10 +772,16 @@ function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
 function AnchoredToasts() {
   const { toasts } = Toast.useToastManager<ThreadToastData>();
   const activeThreadRef = useActiveThreadRefFromRoute();
+  const gt = useGT();
 
   return (
     <Toast.Portal data-slot="toast-portal-anchored">
-      <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
+      <Toast.Viewport
+        aria-label={undefined}
+        className="outline-none"
+        data-slot="toast-viewport-anchored"
+        role={undefined}
+      >
         {toasts
           .filter((toast) => shouldRenderThreadScopedToast(toast.data, activeThreadRef))
           .map((toast) => {
@@ -784,7 +826,7 @@ function AnchoredToasts() {
                         }
                       >
                         <button
-                          aria-label="Dismiss notification"
+                          aria-label={gt("Dismiss notification")}
                           className={
                             toast.data?.variant === "notification"
                               ? noticeDismissButtonClass

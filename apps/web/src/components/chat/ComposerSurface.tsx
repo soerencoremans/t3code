@@ -10,7 +10,8 @@ function Shell({
 }: ComponentProps<"div"> & { contextRow?: boolean }) {
   return (
     <div
-      data-slot="composer-shell"
+      // Theme CSS styles the visible card through this documented hook.
+      data-slot="composer-host"
       data-context-row={contextRow || undefined}
       className={cn(
         "@container/composer-surface group/composer-surface relative isolate mx-auto flex w-full max-w-(--chat-content-max-width) flex-col rounded-2xl surface-tray border-0!",
@@ -25,30 +26,32 @@ function Shell({
 }
 
 function Host({ className, ...props }: ComponentProps<"div">) {
-  return (
-    <div data-slot="composer-host" className={cn("relative z-10 w-full", className)} {...props} />
-  );
+  return <div className={cn("relative z-10 w-full rounded-[inherit]", className)} {...props} />;
 }
 
-/** The message surface keeps its 14px corners inside the tray. */
+/**
+ * The message surface sits flush in the tray, so it inherits the tray's corners through its
+ * wrappers, including corners a theme sets on the card.
+ */
 function Main({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-chat-composer-main-surface="true"
-      className={cn("group relative z-10 rounded-pane surface-composer", className)}
+      className={cn("group relative z-10 rounded-[inherit] surface-composer", className)}
       {...props}
     />
   );
 }
 
-/** A plain row under the card (environment, worktree, branch) with no surface of its own. */
+/** A row under the card (environment, worktree, branch); page-coloured glass hides the timeline scrolling behind it. */
 function ContextStrip({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-tray-row"
-      // 8px on the right, so a trailing chip's hover fill ends on the send pill's edge.
+      // 8px on the right, so a trailing chip's hover fill ends on the send pill's edge; 5px on
+      // the left, so the first chip's icon (after its 1px border and 8px padding) sits on the text line.
       className={cn(
-        "group/composer-context relative flex h-7.5 min-w-0 items-center gap-1 ps-1.5 pe-2 py-1 text-meta text-muted-foreground",
+        "group/composer-context relative flex h-7.5 min-w-0 items-center gap-1 ps-1.25 pe-2 py-1 text-meta text-muted-foreground",
         className,
       )}
       {...props}

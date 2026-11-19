@@ -3,6 +3,7 @@
  * Reuse live-layout drop targets and snapping so the template follows the same rules.
  */
 import type { LayoutPaneKind, LayoutTemplate, LayoutWhenNoRoom } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   ArrowDownIcon,
   ArrowRightIcon,
@@ -27,6 +28,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { m, type MessageResolver } from "~/i18n/messages";
 import { snapToPreset } from "../../layout/ColumnResizeHandle";
 import { resolveLayoutDropTarget, type LayoutDropTarget } from "../../layout/layoutDrag";
 import {
@@ -68,11 +70,11 @@ const PANE_KINDS: ReadonlyArray<{
   icon: LucideIcon;
   shape: LayoutPaneSkeletonShape;
 }> = [
-  { kind: "chat", label: "Chat", icon: MessageSquareIcon, shape: "chat" },
-  { kind: "terminal", label: "Terminal", icon: SquareTerminalIcon, shape: "terminal" },
-  { kind: "diff", label: "Diff", icon: FileDiffIcon, shape: "diff" },
-  { kind: "files", label: "Files", icon: FilesIcon, shape: "lines" },
-  { kind: "browser", label: "Browser", icon: GlobeIcon, shape: "lines" },
+  { kind: "chat", label: msg("Chat"), icon: MessageSquareIcon, shape: "chat" },
+  { kind: "terminal", label: msg("Terminal"), icon: SquareTerminalIcon, shape: "terminal" },
+  { kind: "diff", label: msg("Diff"), icon: FileDiffIcon, shape: "diff" },
+  { kind: "files", label: msg("Files"), icon: FilesIcon, shape: "lines" },
+  { kind: "browser", label: msg("Browser"), icon: GlobeIcon, shape: "lines" },
 ];
 
 function paneKindMeta(kind: LayoutPaneKind) {
@@ -221,9 +223,23 @@ function percent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
-function dropLabel(target: LayoutDropTarget): string {
-  if (target.kind === "extend") return target.edge === "bottom" ? "Full width" : "New column";
-  return target.kind === "side" ? `Split ${target.side}` : "";
+function dropLabel(target: LayoutDropTarget, resolve: MessageResolver = m): string {
+  if (target.kind === "extend") {
+    return target.edge === "bottom"
+      ? resolve(msg("Full width", { $context: "where a dragged pane lands" }))
+      : resolve(msg("New column", { $context: "where a dragged pane lands" }));
+  }
+  if (target.kind !== "side") return "";
+  switch (target.side) {
+    case "left":
+      return resolve(msg("Split left"));
+    case "right":
+      return resolve(msg("Split right"));
+    case "up":
+      return resolve(msg("Split up"));
+    case "down":
+      return resolve(msg("Split down"));
+  }
 }
 
 function applyDrop(
@@ -262,6 +278,22 @@ interface ChipDrag {
 
 type DividerDrag = { id: string; template: LayoutTemplate; share: number };
 
+/**
+ * A chip press, below the drag threshold or dragging. A drag that ended
+ * (dropped, or Escape) is "released" until the release's click, which must
+ * not also add a pane.
+ */
+type ChipGesture =
+  | { readonly phase: "idle" }
+  | {
+      readonly phase: "pressed";
+      readonly kind: LayoutPaneKind;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly phase: "dragging"; readonly drag: ChipDrag }
+  | { readonly phase: "released" };
+
 export function LayoutEditor({
   template,
   onChange,
@@ -273,6 +305,8 @@ export function LayoutEditor({
   /** While set, the canvas shows how the strip runs past its edges (pen Nm9FG). */
   stripPreview?: LayoutWhenNoRoom | null;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [chipDrag, setChipDrag] = useState<ChipDrag | null>(null);
   const [dividerDrag, setDividerDrag] = useState<DividerDrag | null>(null);
@@ -312,9 +346,13 @@ export function LayoutEditor({
     );
   };
 
-  // Chip drags: window listeners while the pointer is down on a chip.
-  const chipPress = useRef<{ kind: LayoutPaneKind; x: number; y: number } | null>(null);
-  const suppressClick = useRef(false);
+  // Handlers read the gesture from the ref, so a release right after a move
+  // sees that move before it renders; the state is only what the canvas draws.
+  const chipGesture = useRef<ChipGesture>({ phase: "idle" });
+  const moveChipGesture = (next: ChipGesture) => {
+    chipGesture.current = next;
+    setChipDrag(next.phase === "dragging" ? next.drag : null);
+  };
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Own Escape and pointer capture cleanup only while a template chip is being dragged.
   useEffect(() => {
@@ -322,50 +360,50 @@ export function LayoutEditor({
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      chipPress.current = null;
       // The release still clicks the chip; that click must not add a pane.
-      suppressClick.current = true;
+      chipGesture.current = { phase: "released" };
       setChipDrag(null);
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [chipDrag]);
+  }, [chipDrag, chipGesture]);
 
   const onChipPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, kind: LayoutPaneKind) => {
     if (event.button !== 0 || event.pointerType === "touch") return;
-    chipPress.current = { kind, x: event.clientX, y: event.clientY };
+    moveChipGesture({ phase: "pressed", kind, x: event.clientX, y: event.clientY });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const onChipPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const press = chipPress.current;
-    if (!press) return;
+    const gesture = chipGesture.current;
+    if (gesture.phase !== "pressed" && gesture.phase !== "dragging") return;
     const point = { x: event.clientX, y: event.clientY };
-    if (chipDrag === null && Math.hypot(point.x - press.x, point.y - press.y) < DRAG_THRESHOLD_PX) {
+    if (
+      gesture.phase === "pressed" &&
+      Math.hypot(point.x - gesture.x, point.y - gesture.y) < DRAG_THRESHOLD_PX
+    ) {
       return;
     }
-    setChipDrag({ kind: press.kind, point, target: resolveTarget(point) });
+    const kind = gesture.phase === "pressed" ? gesture.kind : gesture.drag.kind;
+    moveChipGesture({ phase: "dragging", drag: { kind, point, target: resolveTarget(point) } });
   };
   const onChipPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = chipDrag;
-    chipPress.current = null;
+    const gesture = chipGesture.current;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    if (drag === null) return;
-    suppressClick.current = true;
-    setChipDrag(null);
+    if (gesture.phase === "pressed") moveChipGesture({ phase: "idle" });
+    if (gesture.phase !== "dragging") return;
+    moveChipGesture({ phase: "released" });
+    const { drag } = gesture;
     if (drag.target) {
       const next = applyDrop(template, drag.target, drag.kind, panes);
       if (next !== template) onChange(next);
     }
   };
-  const onChipPointerCancel = () => {
-    chipPress.current = null;
-    setChipDrag(null);
-  };
+  const onChipPointerCancel = () => moveChipGesture({ phase: "idle" });
   const onChipClick = (kind: LayoutPaneKind) => {
-    if (suppressClick.current) {
-      suppressClick.current = false;
+    if (chipGesture.current.phase === "released") {
+      moveChipGesture({ phase: "idle" });
       return;
     }
     // Without a drag (keyboard, or a plain click) the pane joins on the right.
@@ -374,7 +412,11 @@ export function LayoutEditor({
   };
 
   // Divider drags.
-  const dividerPress = useRef<DividerSlot | null>(null);
+  const dividerPress = useRef<{ divider: DividerSlot; drag: DividerDrag } | null>(null);
+  const moveDividerDrag = (next: { divider: DividerSlot; drag: DividerDrag } | null) => {
+    dividerPress.current = next;
+    setDividerDrag(next?.drag ?? null);
+  };
   const shareFromPointer = (divider: DividerSlot, point: { x: number; y: number }) => {
     const inner = innerRect();
     if (!inner) return null;
@@ -396,27 +438,25 @@ export function LayoutEditor({
   const onDividerPointerDown = (event: ReactPointerEvent<HTMLDivElement>, divider: DividerSlot) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    dividerPress.current = divider;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setDividerDrag({ id: divider.id, template, share: divider.share });
+    moveDividerDrag({ divider, drag: { id: divider.id, template, share: divider.share } });
   };
   const onDividerPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const divider = dividerPress.current;
+    const divider = dividerPress.current?.divider;
     if (!divider) return;
     const share = shareFromPointer(divider, { x: event.clientX, y: event.clientY });
     if (share === null) return;
     const next = resizeTo(template, divider, share);
     const actual =
       layoutTemplateSlots(next).dividers.find((entry) => entry.id === divider.id)?.share ?? share;
-    setDividerDrag({ id: divider.id, template: next, share: actual });
+    moveDividerDrag({ divider, drag: { id: divider.id, template: next, share: actual } });
   };
   const onDividerPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    dividerPress.current = null;
+    const drag = dividerPress.current?.drag;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    const drag = dividerDrag;
-    setDividerDrag(null);
+    moveDividerDrag(null);
     if (drag && drag.template !== template) onChange(drag.template);
   };
   const onDividerKeyDown = (event: KeyboardEvent<HTMLDivElement>, divider: DividerSlot) => {
@@ -497,7 +537,7 @@ export function LayoutEditor({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Text variant="meta" tone="dim" render={<h3 />}>
-          Drag in
+          <T>Drag in</T>
         </Text>
         {PANE_KINDS.map(({ kind, label, icon: Icon }) => (
           <Tooltip key={kind}>
@@ -515,21 +555,21 @@ export function LayoutEditor({
               }
             >
               <Icon aria-hidden className="size-3 text-muted-foreground" />
-              {label}
+              {messages(label)}
             </TooltipTrigger>
             <TooltipPopup side="top">
-              Drag onto the layout, or click to add it on the right
+              <T>Drag onto the layout, or click to add it on the right</T>
             </TooltipPopup>
           </Tooltip>
         ))}
         <span className="ms-auto text-caption text-dim-foreground">
           {chipDrag
-            ? "Edges extend"
+            ? gt("Edges extend")
             : stripPreview === "always-shrink"
-              ? "Columns share the window"
+              ? gt("Columns share the window")
               : stripPreview
-                ? "Columns keep their width"
-                : "Drag dividers to resize"}
+                ? gt("Columns keep their width")
+                : gt("Drag dividers to resize")}
         </span>
       </div>
       {chipDrag
@@ -554,13 +594,14 @@ export function LayoutEditor({
  * "Always shrink" the columns squeeze into the window instead.
  */
 function StripPreview({ whenNoRoom }: { whenNoRoom: LayoutWhenNoRoom }) {
+  const gt = useGT();
   const shrink = whenNoRoom === "always-shrink";
   const width = shrink ? 1 / 3 : 0.46;
   const top = 0.74;
   const columns: ReadonlyArray<{ label: string; badge: boolean }> = [
-    { label: "Chat", badge: true },
-    { label: "New tab", badge: true },
-    { label: "Next tab", badge: shrink },
+    { label: gt("Chat"), badge: true },
+    { label: gt("New tab"), badge: true },
+    { label: gt("Next tab"), badge: shrink },
   ];
   return (
     <div data-layout-strip-preview={whenNoRoom} className="relative size-full">
@@ -575,7 +616,7 @@ function StripPreview({ whenNoRoom }: { whenNoRoom: LayoutWhenNoRoom }) {
         />
       ))}
       <PreviewPane
-        label="Research"
+        label={gt("Research", { $context: "sample workspace name in a layout preview" })}
         icon={SquareTerminalIcon}
         shape="terminal"
         badge={null}
@@ -587,7 +628,7 @@ function StripPreview({ whenNoRoom }: { whenNoRoom: LayoutWhenNoRoom }) {
           className="-translate-y-1/2"
           style={{ right: 8, top: "38%" }}
         >
-          New tabs continue here
+          <T>New tabs continue here</T>
         </PreviewPill>
       )}
       <PreviewPill
@@ -595,7 +636,7 @@ function StripPreview({ whenNoRoom }: { whenNoRoom: LayoutWhenNoRoom }) {
         className="-translate-x-1/2 -translate-y-1/2"
         style={{ left: "50%", top: `${top * 100}%` }}
       >
-        Next workspace below
+        <T>Next workspace below</T>
       </PreviewPill>
     </div>
   );
@@ -676,11 +717,12 @@ function PreviewPill({
 }
 
 function ChipGhost({ kind }: { kind: LayoutPaneKind }) {
+  const messages = useMessages();
   const { label, icon: Icon } = paneKindMeta(kind);
   return (
     <div className="flex h-6.5 items-center gap-1.5 rounded-item surface-popover px-2.25 text-meta text-foreground shadow-lg">
       <Icon aria-hidden className="size-3 text-muted-foreground" />
-      {label}
+      {messages(label)}
     </div>
   );
 }
@@ -700,7 +742,10 @@ function TemplatePane({
   onChange: (next: LayoutTemplate) => void;
   onlyPane: boolean;
 }) {
-  const { label, icon: Icon, shape } = paneKindMeta(slot.kind);
+  const gt = useGT();
+  const messages = useMessages();
+  const { label: kindLabel, icon: Icon, shape } = paneKindMeta(slot.kind);
+  const label = messages(kindLabel);
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
@@ -708,7 +753,7 @@ function TemplatePane({
           <ContentButton
             variant="panel"
             type="button"
-            aria-label={`${label} pane`}
+            aria-label={gt("{kind} pane", { kind: label })}
             className="absolute"
             style={slotStyle(slot.rect)}
           />
@@ -744,6 +789,8 @@ function PanePopoverBody({
   onChange: (next: LayoutTemplate) => void;
   onDone: () => void;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const pane = template.columns[path.column]?.panes[path.pane];
   const measure = layoutTemplatePaneMeasure(template, path);
   const [draftShare, setDraftShare] = useState<number | null>(null);
@@ -784,9 +831,9 @@ function PanePopoverBody({
         remove();
       }}
     >
-      <PopoverSection label="Pane">
+      <PopoverSection label={gt("Pane", { $context: "layout editor section, which kind of pane" })}>
         <ToggleGroup
-          aria-label="Pane kind"
+          aria-label={gt("Pane kind")}
           variant="segmented"
           className="w-full"
           value={[pane.kind]}
@@ -799,7 +846,7 @@ function PanePopoverBody({
             <Toggle
               key={kind}
               value={kind}
-              aria-label={label}
+              aria-label={messages(label)}
               className="flex-1"
               disabled={onlyChat && kind !== "chat"}
             >
@@ -809,9 +856,11 @@ function PanePopoverBody({
         </ToggleGroup>
       </PopoverSection>
       {canLayoutTemplatePaneSpan(template, path) ? (
-        <PopoverSection label="Spans">
+        <PopoverSection
+          label={gt("Spans", { $context: "layout editor section, how far a pane reaches" })}
+        >
           <ToggleGroup
-            aria-label="Pane span"
+            aria-label={gt("Pane span")}
             variant="segmented"
             className="w-full"
             value={[pane.span]}
@@ -823,19 +872,25 @@ function PanePopoverBody({
             }}
           >
             <Toggle value="column" className="flex-1">
-              Under chat
+              <T>Under chat</T>
             </Toggle>
             <Toggle value="full" className="flex-1">
-              Full width
+              <T>Full width</T>
             </Toggle>
           </ToggleGroup>
         </PopoverSection>
       ) : null}
       {measure ? (
-        <PopoverSection label={measure.axis === "height" ? "Height" : "Width"}>
+        <PopoverSection
+          label={
+            measure.axis === "height"
+              ? gt("Height", { $context: "pane size" })
+              : gt("Width", { $context: "pane size" })
+          }
+        >
           <div className="flex items-center gap-2">
             <input
-              aria-label={measure.axis === "height" ? "Pane height" : "Column width"}
+              aria-label={measure.axis === "height" ? gt("Pane height") : gt("Column width")}
               className="settings-slider min-w-0 flex-1"
               type="range"
               min={15}
@@ -857,19 +912,19 @@ function PanePopoverBody({
       <div className="my-1 h-px bg-divider" />
       <PopoverAction
         icon={Columns2Icon}
-        label="Split right"
+        label={gt("Split right")}
         {...(splitRightKey ? { shortcut: splitRightKey } : {})}
         onClick={() => split("right")}
       />
       <PopoverAction
         icon={Rows2Icon}
-        label="Split down"
+        label={gt("Split down")}
         {...(splitDownKey ? { shortcut: splitDownKey } : {})}
         onClick={() => split("down")}
       />
       <PopoverAction
         icon={Trash2Icon}
-        label="Remove pane"
+        label={gt("Remove pane")}
         shortcut={isMacPlatform(navigator.platform) ? "⌫" : "Backspace"}
         destructive
         disabled={!canRemove}
@@ -939,6 +994,7 @@ function TemplateDivider({
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
 }) {
+  const gt = useGT();
   const { pair, share } = divider;
   const horizontal = divider.kind === "pane";
   // An 8px hit strip centered in the 6px gap between the pair.
@@ -960,7 +1016,7 @@ function TemplateDivider({
       role="separator"
       tabIndex={0}
       aria-orientation={horizontal ? "horizontal" : "vertical"}
-      aria-label={horizontal ? "Resize panes" : "Resize columns"}
+      aria-label={horizontal ? gt("Resize panes") : gt("Resize columns")}
       aria-valuemin={15}
       aria-valuemax={85}
       aria-valuenow={Math.round(share * 100)}
@@ -988,6 +1044,7 @@ function TemplateDivider({
 
 /** Pen KiIZ0 "60 · 40": the pair's split while a divider drags. */
 function DividerReadout({ divider, share }: { divider: DividerSlot; share: number }) {
+  const gt = useGT();
   const first = Math.round(share * 100);
   const { pair } = divider;
   const style: CSSProperties =
@@ -1006,7 +1063,9 @@ function DividerReadout({ divider, share }: { divider: DividerSlot; share: numbe
       className="pointer-events-none absolute z-20 flex h-6.5 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-control bg-strong-foreground px-2.5 text-meta text-background tabular-nums shadow-lg"
       style={style}
     >
-      {divider.kind === "pane" ? "Top" : "Left"} {first}%
+      {divider.kind === "pane"
+        ? gt("Top {share}%", { share: first })
+        : gt("Left {share}%", { share: first })}
     </div>
   );
 }
@@ -1025,6 +1084,7 @@ function DropFeedback({
   target: LayoutDropTarget | null;
   zone: Rect | null;
 }) {
+  const messages = useMessages();
   const sides = ["left", "right", "up", "down"] as const;
   const gripStyle = (slot: PaneSlot, side: (typeof sides)[number]): CSSProperties => {
     const { left, top, width, height } = slot.rect;
@@ -1094,7 +1154,7 @@ function DropFeedback({
           style={slotStyle(zone)}
         >
           <span className="flex h-6 items-center gap-1.5 rounded-control bg-strong-foreground px-2 text-meta whitespace-nowrap text-background shadow-lg">
-            {dropLabel(target)}
+            {dropLabel(target, messages)}
           </span>
         </div>
       ) : null}

@@ -16,9 +16,10 @@ import { ChevronRightIcon } from "lucide-react";
 const parts = {
   row: THREAD_DETAILS_PANEL_ROW_CLASS,
   heading:
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- class names, not copy
     "flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-caption text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
   usage:
-    "col-span-4 grid min-w-0 grid-cols-subgrid items-center rounded-md text-left text-meta text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+    "col-span-full col-start-1 row-start-1 grid min-w-0 grid-cols-subgrid items-center rounded-md text-left text-meta text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
   choice: THREAD_DETAILS_PANEL_CHOICE_ROW_CLASS,
   icon: THREAD_DETAILS_PANEL_ICON_ACTION_CLASS,
   meta: THREAD_DETAILS_PANEL_META_ACTION_CLASS,
@@ -29,6 +30,7 @@ export function ThreadDetailsControl({
   part = "row",
   multiline = false,
   tone = "default",
+  chevronAlign = "text",
   className,
   children,
   size = "default",
@@ -40,6 +42,8 @@ export function ThreadDetailsControl({
   part?: keyof typeof parts;
   multiline?: boolean;
   tone?: "default" | "muted" | "primary" | "destructive";
+  /** A choice row's chevron lines up with the text or the 12px icons ending the rows around it. */
+  chevronAlign?: "text" | "icon";
 }) {
   const control = useRender({
     defaultTagName: "button",
@@ -50,7 +54,7 @@ export function ThreadDetailsControl({
         ...({ "data-part": part } as Record<string, string>),
         className: cn(
           parts[part],
-          multiline && "h-auto min-h-9 py-0 disabled:opacity-100 sm:h-auto sm:min-h-9",
+          multiline && "h-auto min-h-9 py-1.5 disabled:opacity-100 sm:h-auto sm:min-h-9",
           tone === "muted" && "text-muted-foreground hover:text-foreground",
           tone === "primary" && "text-primary hover:text-primary",
           tone === "destructive" &&
@@ -64,7 +68,12 @@ export function ThreadDetailsControl({
           part === "choice" ? (
             <>
               {children}
-              <ChevronRightIcon className={THREAD_DETAILS_PANEL_CHEVRON_CLASS} />
+              <ChevronRightIcon
+                className={cn(
+                  THREAD_DETAILS_PANEL_CHEVRON_CLASS,
+                  chevronAlign === "icon" && "me-0",
+                )}
+              />
             </>
           ) : (
             children

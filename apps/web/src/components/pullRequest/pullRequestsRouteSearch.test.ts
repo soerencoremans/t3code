@@ -30,6 +30,12 @@ function matchedSearch(url: string) {
 }
 
 describe("pull requests route search", () => {
+  it("keeps a project member selection without narrowing to its server", () => {
+    const search = matchedSearch("/pull-requests?projectId=main&projectEnvironmentId=env-cups");
+    expect(search?.projectId).toBe("main");
+    expect(search?.projectEnvironmentId).toBe("env-cups");
+    expect(search?.environmentId).toBeUndefined();
+  });
   it("keeps a q the URL parser turned into a number or boolean as text", () => {
     expect(matchedSearch("/pull-requests?q=4089")?.q).toBe("4089");
     expect(matchedSearch("/pull-requests?q=true")?.q).toBe("true");
@@ -40,5 +46,10 @@ describe("pull requests route search", () => {
     expect(matchedSearch("/pull-requests?q=%224089%22")?.q).toBe("4089");
     expect(matchedSearch("/pull-requests?q=")?.q).toBeUndefined();
     expect(matchedSearch("/pull-requests?q=null")?.q).toBeUndefined();
+  });
+
+  it("drops an author or labels the URL parser turned into a number", () => {
+    expect(matchedSearch("/pull-requests?author=4089")?.author).toBeUndefined();
+    expect(matchedSearch("/pull-requests?labels=4089")?.labels).toBeUndefined();
   });
 });

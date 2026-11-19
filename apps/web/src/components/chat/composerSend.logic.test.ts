@@ -1,11 +1,15 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, RuntimeRequestId, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { describe, expect, it } from "vite-plus/test";
+import type { ComposerThreadDraftState } from "../../composerDraftStore";
 import { formatInlineContextReference } from "../../lib/composerContextReferences";
 import { threadContextReference } from "../../lib/composerContextRecords";
 import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import {
   approvalRedirectNotice,
+  composerDraftContentChanged,
+  approvalsForComposerRedirect,
+  composerDraftChangedSinceSend,
   loadBalancingSendWarning,
   multipleModelSendBlock,
   referencedThreadContexts,
@@ -15,6 +19,46 @@ const local = EnvironmentId.make("local");
 const remote = EnvironmentId.make("remote");
 const localThread = threadContextRecord(scopeThreadRef(local, ThreadId.make("a")), "Local");
 const remoteThread = threadContextRecord(scopeThreadRef(remote, ThreadId.make("b")), "Remote");
+
+it("detects draft edits during upload preparation without treating upload metadata as an edit", () => {
+  const draft: ComposerThreadDraftState = {
+    prompt: "before",
+    images: [],
+    files: [
+      {
+        type: "file",
+        id: "file",
+        name: "a.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1,
+        file: null,
+      },
+    ],
+    nonPersistedImageIds: [],
+    persistedAttachments: [],
+    terminalContexts: [],
+    previewAnnotations: [],
+    reviewComments: [],
+    threadContexts: [],
+    environmentContexts: [],
+    replyTo: null,
+    modelSelectionByProvider: {},
+    activeProvider: null,
+    runtimeMode: null,
+    interactionMode: null,
+  };
+  expect(
+    composerDraftContentChanged(draft, {
+      ...draft,
+      files: [{ ...draft.files[0]!, uploadedAttachmentId: "upload", uploadEnvironmentId: local }],
+    }),
+  ).toBe(false);
+  expect(composerDraftContentChanged(draft, { ...draft, prompt: "after" })).toBe(true);
+  expect(composerDraftContentChanged(draft, { ...draft, files: [] })).toBe(true);
+  expect(composerDraftContentChanged(draft, { ...draft, threadContexts: [localThread] })).toBe(
+    true,
+  );
+});
 
 describe("referencedThreadContexts", () => {
   it("keeps only the attached threads the prompt still links", () => {
@@ -122,5 +166,64 @@ describe("approvalRedirectNotice", () => {
   it("stays quiet when the decline failed or the user left the thread", () => {
     expect(approvalRedirectNotice({ ...settled, declined: false })).toBeNull();
     expect(approvalRedirectNotice(settled)).toBeNull();
+  });
+});
+
+describe("approvalsForComposerRedirect", () => {
+  it("leaves approvals alone when queueing and redirects only shown approvals when steering", () => {
+    const shown = {
+      requestId: RuntimeRequestId.make("shown"),
+      requestKind: "command" as const,
+      responseCapability: "live" as const,
+      supportsFeedback: true,
+      createdAt: "2026-11-05T00:00:00.000Z",
+    };
+    const held = { ...shown, requestId: RuntimeRequestId.make("held") };
+    const input = {
+      approvals: [shown, held],
+      shownApprovalIds: [shown.requestId],
+      sameThread: true,
+    };
+    expect(approvalsForComposerRedirect({ ...input, dispatchMode: "queue" })).toEqual([]);
+    expect(approvalsForComposerRedirect({ ...input, dispatchMode: "steer" })).toEqual([shown]);
+    expect(
+      approvalsForComposerRedirect({ ...input, dispatchMode: "steer", sameThread: false }),
+    ).toEqual([]);
+  });
+});
+
+describe("composerDraftChangedSinceSend", () => {
+  const sent = {
+    pendingAttachments: false,
+    prompt: "Queue this",
+    sentPrompts: ["Queue this"],
+    attachmentIds: ["upload"],
+    sentAttachmentIds: ["upload"],
+    annotationImageId: undefined,
+  };
+
+  it("catches text, attachments and pastes added while the send uploads", () => {
+    expect(composerDraftChangedSinceSend(sent)).toBe(false);
+    expect(composerDraftChangedSinceSend({ ...sent, prompt: "Queue this too" })).toBe(true);
+    expect(composerDraftChangedSinceSend({ ...sent, attachmentIds: ["upload", "added"] })).toBe(
+      true,
+    );
+    expect(composerDraftChangedSinceSend({ ...sent, pendingAttachments: true })).toBe(true);
+  });
+
+  it("ignores the annotation a direct annotation send writes into the draft", () => {
+    const annotated = {
+      ...sent,
+      sentPrompts: ["Queue this", "Queue this @annotation"],
+      sentAttachmentIds: ["upload", "annotation"],
+      annotationImageId: "annotation",
+    };
+    expect(composerDraftChangedSinceSend(annotated)).toBe(false);
+    expect(composerDraftChangedSinceSend({ ...annotated, prompt: "Queue this @annotation" })).toBe(
+      false,
+    );
+    expect(
+      composerDraftChangedSinceSend({ ...annotated, attachmentIds: ["upload", "annotation"] }),
+    ).toBe(false);
   });
 });

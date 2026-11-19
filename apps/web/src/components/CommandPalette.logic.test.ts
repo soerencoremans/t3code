@@ -1,3 +1,4 @@
+import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import type { Thread } from "../types";
@@ -10,6 +11,8 @@ import {
   buildLinkedThreadActionItems,
   filterPinnedBrowseEntries,
   filterCommandPaletteGroups,
+  buildRootGroups,
+  RECENT_THREAD_LIMIT,
   reduceCommandPaletteUiState,
   resolveAddProjectEntry,
   createCommandPaletteSearchState,
@@ -163,6 +166,47 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
 }
 
 describe("buildThreadActionItems", () => {
+  it("keeps main's empty-query actions and twelve recent threads in order", () => {
+    const items = buildThreadActionItems({
+      threads: Array.from({ length: 13 }, (_, index) =>
+        makeThread({
+          id: ThreadId.make(`daily-${index}`),
+          title: "Daily T3 Code trace hotspot check",
+          latestUserMessageAt: `2026-03-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+        }),
+      ),
+      projectByKey: new Map(),
+      icon: null,
+      runThread: async () => undefined,
+    });
+    const action = { ...items[0]!, value: "action:settings", title: "Open settings" };
+    const groups = filterCommandPaletteGroups({
+      activeGroups: buildRootGroups({
+        actionItems: [action],
+        recentThreadItems: items.slice(0, RECENT_THREAD_LIMIT),
+      }),
+      query: "",
+      isInSubmenu: false,
+      projectSearchItems: [],
+      threadSearchItems: items,
+    });
+    expect(groups.flatMap((group) => group.items.map((item) => item.value))).toEqual([
+      action.value,
+      ...items.slice(0, 12).map((item) => item.value),
+    ]);
+    const matches = filterCommandPaletteGroups({
+      activeGroups: [],
+      query: "dail",
+      isInSubmenu: false,
+      projectSearchItems: [],
+      threadSearchItems: items,
+      now: Date.parse("2026-03-14T00:00:00.000Z"),
+    });
+    expect(matches.flatMap((group) => group.items.map((item) => item.value))).toEqual(
+      items.toReversed().map((item) => item.value),
+    );
+  });
+
   it("keeps threads apart when two environments share a thread ID", async () => {
     const local = makeThread();
     const remote = makeThread({ environmentId: EnvironmentId.make("remote-copy") });
@@ -668,11 +712,13 @@ describe("buildThreadActionItems", () => {
     ]);
   });
 
-  it("hides subagent threads but keeps forks", () => {
+  it("hides subagent threads and tasks shown under their parent but keeps forks", () => {
     const parentId = ThreadId.make("parent");
+    const delegatedId = ThreadId.make("delegated");
     const items = buildThreadActionItems({
       threads: [
         makeThread({ id: parentId, title: "Parent" }),
+        makeThread({ id: delegatedId, title: "Delegated task" }),
         makeThread({
           id: ThreadId.make("subagent"),
           title: "Subagent",
@@ -692,6 +738,9 @@ describe("buildThreadActionItems", () => {
           },
         }),
       ],
+      delegatedUnderParent: new Set([
+        threadKey({ environmentId: LOCAL_ENVIRONMENT_ID, threadId: delegatedId }),
+      ]),
       projectByKey: new Map(),
       icon: null,
       runThread: async () => undefined,
@@ -797,6 +846,26 @@ describe("filterPinnedBrowseEntries", () => {
       visibleEntries: windowsEntries,
       exactEntry: windowsEntries[0],
     });
+    const decomposed = { name: "De\u0301veloppement", fullPath: "/Users/me/De\u0301veloppement" };
+    expect(
+      filterPinnedBrowseEntries({
+        browseEntries: [decomposed],
+        filterQuery: "D\u00e9veloppement",
+        pinnedDirectoryName: "repo",
+        caseSensitive: true,
+      }).exactEntry,
+    ).toBe(decomposed);
+    expect(
+      filterPinnedBrowseEntries({
+        browseEntries: [
+          { name: "\u212B", fullPath: "/home/me/\u212B" },
+          { name: "A\u030A", fullPath: "/home/me/A\u030A" },
+        ],
+        filterQuery: "\u00C5",
+        pinnedDirectoryName: "repo",
+        caseSensitive: true,
+      }).exactEntry,
+    ).toBeNull();
   });
 });
 
@@ -950,7 +1019,7 @@ describe("newThreadNoProjectIndex", () => {
   });
 
   it("goes after the pinned projects and the first unpinned one", () => {
-    expect(newThreadNoProjectIndex([entry(true), entry(true), entry(false, true), entry()])).toBe(
+    expect(newThreadNoProjectIndex([entry(false, true), entry(true), entry(true), entry()])).toBe(
       3,
     );
     expect(newThreadNoProjectIndex([entry(false, true), entry(), entry(false, false, true)])).toBe(

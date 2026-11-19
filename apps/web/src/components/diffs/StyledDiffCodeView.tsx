@@ -20,6 +20,17 @@ export const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
   --diffs-code-grid: var(--diffs-grid-number-column-width) minmax(0, 1fr);
 }
 
+/* Translucent find matches keep the syntax colours under them. */
+:host {
+  --diffs-bg-search-match-override: light-dark(#ff963288, #ff963266);
+  --diffs-bg-search-match-current-override: color-mix(
+    in lab,
+    var(--diffs-modified-base) 45%,
+    transparent
+  );
+  --diffs-fg-search-match-override: currentColor;
+}
+
 :is(
   [data-line],
   [data-line-annotation],
@@ -433,10 +444,24 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   const unsafeCSS = [DIFF_VIEW_UNSAFE_CSS, cards ? FILE_CARDS_UNSAFE_CSS : null, unsafeCSSExtra]
     .filter(Boolean)
     .join("\n");
+  const { renderHeaderMetadata } = props;
   return (
     <DiffWorkerPoolProvider>
       <CodeView<LAnnotation>
         {...props}
+        {...(renderHeaderMetadata
+          ? {
+              // The header's end: a pane resizing in a slide carries it with its right edge.
+              renderHeaderMetadata: (...args: Parameters<typeof renderHeaderMetadata>) => {
+                const metadata = renderHeaderMetadata(...args);
+                return metadata === null ? null : (
+                  <span data-sidebar-slide-track="end" className="inline-flex">
+                    {metadata}
+                  </span>
+                );
+              },
+            }
+          : {})}
         renderCodeViewHeader={props.renderCodeViewHeader ?? renderTopInset}
         {...(viewerRef ? { ref: handleRef } : {})}
         className={

@@ -22,6 +22,23 @@ Android uses **Material You Layout** by default unless you have turned it off in
 It changes shapes, spacing, and controls independently
 of the selected theme.
 
+## App icon
+
+On web and desktop, open **Settings → Appearance** and choose **App icon**, or use **Change app
+icon** in the command palette, to pick the black, Sunrise, or Blueprint icon or an older T3 Code
+icon. Desktop shows it in the Dock or taskbar, and the browser shows it in the tab. **Default**
+returns to your build's own icon. The choice is saved separately on each device.
+
+On macOS, the chosen icon shows in the Dock while T3 Code runs; when it is closed, the Dock and
+Finder show the default icon.
+
+## Style
+
+On web and desktop, **Style** in **Settings → Appearance** sets how buttons and controls are
+painted, independently of the theme: **Standard** (the default), **Flat**, **Soft**, **Gloss**,
+**Accent gloss**, or **Outline**. Accent gloss paints main buttons, the send button, and switches
+in the theme's accent color.
+
 ## Math
 
 Turn on **Render math** in **Settings → Appearance** to typeset LaTeX in messages and Markdown
@@ -49,6 +66,31 @@ system makes all of it, and the panels, instant.
 On web and desktop, choose **Create theme** to adjust a palette, or import a T3 Code or VS Code
 theme. The theme editor's color picker lets you select an area of the app to find the color to
 change. Export your theme as JSON to share it.
+
+### Custom CSS
+
+For a change that colors cannot make, open **Custom CSS** in the theme editor. The CSS is saved with
+the theme, applies after T3 Code's own styles on web and desktop, and is included in exports. Use
+`.dark` or `:root:not(.dark)` to target one appearance.
+
+Custom CSS cannot load files. `@import`, `image-set()`, and `url()` are ignored, except `url()`
+with a `data:` address or an `#id`. This keeps an imported theme from sending what is on your screen
+to another site. For a full-size image, use a [background image](#background-image).
+
+Class names in the app change between releases. For rules that keep working, target `data-slot`
+and other `data-` attributes, such as `[data-chat-header]` or `[data-slot="button"]`.
+
+If a rule hides something you need, run `t3 theme set t3-chat` on the server to switch to a
+built-in theme, or press **Cmd+Option+A** on macOS or **Ctrl+Alt+A** on Windows/Linux to pick
+another theme.
+
+### Ask an agent
+
+An agent on the same machine as the server can restyle T3 Code for you. Ask it to change the look,
+for example "make T3 Code's chat header taller" or "give T3 Code a solarized theme". It publishes
+an [environment theme](#environment-themes) with colors and CSS, and web and desktop clients of that
+server switch to it. It can also switch them to light, dark, or system mode. The thread must run
+in Full access. Ask the agent to set a built-in theme to undo it.
 
 ## Environment themes
 
@@ -99,7 +141,22 @@ For an integration that generates a palette, this shorter format also works:
 
 Set `appearance` to `light` or `dark` and supply hex colors for `canvas` and `accent`. T3 Code
 generates the rest. The optional `colors` overrides use the names in the theme editor's advanced
-view.
+view. An optional `css` string adds [custom CSS](#custom-css).
 
 Write updates to a temporary file and rename it into place so clients never read a partial theme.
 Invalid files are not published.
+
+### Background image
+
+A published theme can have a full-size background image. Ask an agent, for example "use
+~/Pictures/wallpaper.jpg as T3 Code's background", or save a JPEG, PNG, or WebP file of up to
+16 MB beside the theme file: `nightfall.jpg` beside `nightfall.json`. The theme's CSS decides
+where the image shows:
+
+```css
+[data-workspace-area="conversation"] {
+  background: var(--theme-background-image) center / cover no-repeat;
+}
+```
+
+Delete the image file to remove it.

@@ -6,6 +6,7 @@ import { useEffect } from "react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
 import {
+  ISSUES_PANEL_REF,
   PULL_REQUESTS_PANEL_REF,
   selectThreadRightPanelState,
   useRightPanelStore,
@@ -30,18 +31,24 @@ import {
   type LayoutCompanionKind,
   type LayoutState,
   type LayoutTab,
+  type LayoutTabDestination,
   type LayoutTabLocation,
   type LayoutTabPlacement,
 } from "./layoutModel";
 import { readableLayoutColumnShare, useLayoutStore, wasLayoutSavedBeforeLoad } from "./layoutStore";
 
-const PULL_REQUESTS_PANEL_KEY = scopedThreadKey(PULL_REQUESTS_PANEL_REF);
+// The pull request and issue lists keep their panels under sentinel refs, not threads.
+const LIST_PANEL_KEYS: ReadonlySet<string> = new Set([
+  scopedThreadKey(PULL_REQUESTS_PANEL_REF),
+  scopedThreadKey(ISSUES_PANEL_REF),
+]);
 
 /** Where the next surfaces a thread opens go, set right before opening them. */
 export type LayoutSurfacePlacement =
   | { kind: "beside" }
   | { kind: "below" }
   | { kind: "pane"; paneId: string; index?: number; replaceTabId?: string }
+  | Extract<LayoutTabDestination, { kind: "split" }>
   | { kind: "column"; workspaceId: string; index: number }
   | { kind: "workspace"; workspaceId: string };
 
@@ -63,6 +70,45 @@ export function requestLayoutSurfacePlacement(
       pendingPlacements.delete(scopedThreadKey(threadRef));
     }
   }, 5000);
+}
+
+/** Where Settings › Layout puts a thread's terminal or side pane, relative to its chat. */
+export function layoutSurfaceDestination(
+  chat: LayoutTabLocation,
+  terminal: boolean,
+): LayoutTabDestination {
+  const behavior = getLayoutBehavior();
+  const placement = terminal ? behavior.terminalPlacement : behavior.sidePanePlacement;
+  if (placement === "new-tab") {
+    return {
+      kind: "pane",
+      paneId: chat.pane.id,
+      index: behavior.newTabPosition === "end" ? chat.pane.tabs.length : chat.tabIndex + 1,
+    };
+  }
+  if (placement === "new-column") {
+    return {
+      kind: "column",
+      workspaceId: chat.workspace.id,
+      index: terminal
+        ? chat.workspace.columns.findIndex((column) => column.id === chat.column.id) + 1
+        : chat.workspace.columns.length,
+    };
+  }
+  return { kind: "split", paneId: chat.pane.id, side: terminal ? "down" : "right" };
+}
+
+export function layoutSurfacePlacement(
+  chat: LayoutTabLocation,
+  terminal: boolean,
+): LayoutSurfacePlacement {
+  const destination = layoutSurfaceDestination(chat, terminal);
+  return destination.kind === "split" ? { kind: terminal ? "below" : "beside" } : destination;
+}
+
+function dropPanelPlacement(threadRef: ScopedThreadRef): void {
+  const key = scopedThreadKey(threadRef);
+  if (pendingPlacements.get(key)?.kind !== "below") pendingPlacements.delete(key);
 }
 
 function isTerminalTab(tab: LayoutTab): boolean {
@@ -204,6 +250,8 @@ function placeSurfaceTabs(
         ...(pending.index === undefined ? {} : { index: pending.index }),
       };
     }
+  } else if (pending?.kind === "split") {
+    if (findLayoutPane(layout, pending.paneId)) placement = pending;
   } else if (pending?.kind === "column") {
     if (layout.workspaces.some((workspace) => workspace.id === pending.workspaceId)) {
       placement = pending;
@@ -303,18 +351,20 @@ function syncThreadSurfaces(
     return;
   }
   const ids = new Set<string>(after.surfaces.map((surface) => surface.id));
-  closeTabs(
-    tabs.filter((location) => !ids.has(surfaceIdOf(location.tab) ?? "")).map((l) => l.tab.id),
-  );
+  const gone = tabs
+    .filter((location) => !ids.has(surfaceIdOf(location.tab) ?? ""))
+    .map((location) => location.tab.id);
+  const placesFirst = pendingPlacements.has(scopedThreadKey(threadRef));
+  if (!placesFirst) closeTabs(gone);
   const placed = new Set(tabs.map((location) => surfaceIdOf(location.tab)));
   const missing = after.surfaces.filter((surface) => !placed.has(surface.id));
   const focus = opened.byUser && !opened.closing;
   if (missing.length > 0) {
     // Shown again after hiding: back together beside the chat, as alt+cmd+B does.
     if (!before.isOpen && tabs.length === 0 && !pendingPlacements.has(scopedThreadKey(threadRef))) {
-      if (findThreadChat(layout, threadRef)) {
-        pendingPlacements.set(scopedThreadKey(threadRef), { kind: "beside" });
-      }
+      const chat = findThreadChat(layout, threadRef);
+      if (chat)
+        pendingPlacements.set(scopedThreadKey(threadRef), layoutSurfacePlacement(chat, false));
     }
     const newTabs = missing.map((surface) =>
       createLayoutTab({ kind: "surface", threadRef, surfaceId: surface.id }),
@@ -325,9 +375,11 @@ function syncThreadSurfaces(
       focus: focus && active !== undefined,
       terminal: false,
     });
+    if (placesFirst) closeTabs(gone);
     if (active && focus) return;
-  }
+  } else if (placesFirst) closeTabs(gone);
   // A user's open or pick of a surface that already has a tab shows it.
+  if (focus && missing.length === 0) dropPanelPlacement(threadRef);
   if (focus && after.activeSurfaceId !== null) {
     const tab = findLayoutSurfaceTabs(useLayoutStore.getState().layout, threadRef).find(
       (location) => surfaceIdOf(location.tab) === after.activeSurfaceId,
@@ -505,7 +557,7 @@ function reconcileOnLoad() {
   closeTabs(gone);
   // Open where the layout shows them; hidden where it does not.
   for (const [key, state] of Object.entries(useRightPanelStore.getState().byThreadKey)) {
-    if (key === PULL_REQUESTS_PANEL_KEY || legacySurfaceThreadKeys.has(key)) continue;
+    if (LIST_PANEL_KEYS.has(key) || legacySurfaceThreadKeys.has(key)) continue;
     const threadRef = parseScopedThreadKey(key);
     if (!threadRef) continue;
     const shown = threadKeys.has(key);
@@ -513,7 +565,7 @@ function reconcileOnLoad() {
   }
   // A shown thread's surface added just before a reload whose layout save never landed.
   for (const key of threadKeys) {
-    const threadRef = key === PULL_REQUESTS_PANEL_KEY ? null : parseScopedThreadKey(key);
+    const threadRef = LIST_PANEL_KEYS.has(key) ? null : parseScopedThreadKey(key);
     if (threadRef) placeMissingSurfaceTabs(threadRef, false);
   }
   const terminals = useTerminalUiStateStore.getState();
@@ -609,7 +661,7 @@ function start(): () => void {
         ...Object.keys(previous.byThreadKey),
       ]);
       for (const key of keys) {
-        if (key === PULL_REQUESTS_PANEL_KEY) continue;
+        if (LIST_PANEL_KEYS.has(key)) continue;
         const before = previous.byThreadKey[key] ?? EMPTY_THREAD_STATE;
         const after = state.byThreadKey[key] ?? EMPTY_THREAD_STATE;
         if (before === after) continue;

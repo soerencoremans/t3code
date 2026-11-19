@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { MoveHorizontalIcon, MoveVerticalIcon } from "lucide-react";
 import {
   useEffect,
@@ -10,19 +11,19 @@ import {
 
 import { settleStripCamera } from "../motion/stripCamera";
 import {
-  arrangeLayoutWorkspaces,
   LAYOUT_COLUMN_WIDTH_PRESETS,
   LAYOUT_MIN_COLUMN_WIDTH,
   LAYOUT_MIN_PANE_SIZE,
   LAYOUT_READABLE_COLUMN_PX,
   findLayoutPane,
-  resizeLayoutColumn,
+  resizeLayoutColumnEdge,
   resizeLayoutPane,
   type LayoutColumn,
   type LayoutPaneSlot,
   type LayoutState,
   type LayoutWorkspace,
 } from "./layoutModel";
+import { getLayoutBehavior } from "./layoutBehavior";
 import { saveLayoutNow, useLayoutStore } from "./layoutStore";
 
 /** Handles fill the gap between panes (the chrome gutter), centered on the boundary. */
@@ -38,7 +39,6 @@ const FRACTION_LABELS = new Map<number, string>([
   [1 / 3, "⅓"],
   [1 / 2, "½"],
   [2 / 3, "⅔"],
-  [1, "Full"],
 ]);
 
 function fractionLabel(value: number, snapped: number | null): string {
@@ -59,12 +59,22 @@ export function snapToPreset(
   return { value: raw, snapped: null };
 }
 
-/** The next preset past `value` in `direction`, for keyboard resizing. */
-function stepPreset(value: number, direction: 1 | -1): number {
-  if (direction === 1) {
-    return LAYOUT_COLUMN_WIDTH_PRESETS.find((preset) => preset > value + 1e-3) ?? value;
+const MIN_KEYBOARD_STEP_PX = 12;
+
+/** The first preset in `direction` that moves the edge visibly once clamped, for keyboard resizing. */
+function stepPreset(
+  value: number,
+  direction: 1 | -1,
+  bounds: { min: number; max: number },
+  extentPx: number,
+): number {
+  const presets =
+    direction === 1 ? LAYOUT_COLUMN_WIDTH_PRESETS : LAYOUT_COLUMN_WIDTH_PRESETS.toReversed();
+  for (const preset of presets) {
+    const next = clampToBounds(preset, bounds);
+    if ((next - value) * direction * extentPx >= MIN_KEYBOARD_STEP_PX) return next;
   }
-  return LAYOUT_COLUMN_WIDTH_PRESETS.findLast((preset) => preset < value - 1e-3) ?? value;
+  return value;
 }
 
 /**
@@ -94,8 +104,9 @@ type ActiveDrag =
       columnId: string;
       /** Where the column starts, in arranged widths from the strip's left edge. */
       columnLeft: number;
-      /** The width its workspace is drawn against, in px: the unit column shares use. */
+      /** The strip's visible width in px: the unit column shares use. */
       unitWidth: number;
+      drawnUnitWidth: number;
       contentLeft: number;
       scrollLeft: number;
       bounds: { min: number; max: number };
@@ -115,6 +126,21 @@ type ActiveDrag =
       value: number;
       snapped: number | null;
     };
+
+type ResizeGuide =
+  | { kind: "column"; columnLeft: number; value: number; snapped: number | null }
+  | {
+      kind: "pane";
+      columnLeft: number;
+      columnWidth: number;
+      paneTop: number;
+      value: number;
+      snapped: number | null;
+    };
+
+function presetAt(value: number): number | null {
+  return LAYOUT_COLUMN_WIDTH_PRESETS.find((preset) => Math.abs(preset - value) < 1e-3) ?? null;
+}
 
 /**
  * Resize columns independently and stacked panes within their column.
@@ -137,13 +163,16 @@ export function LayoutResizeHandles({
   stripWidth: number;
   unitWidth: number;
   scrollerRef: RefObject<HTMLDivElement | null>;
-  onPreview: (layout: LayoutState | null) => void;
+  onPreview: (preview: { layout: LayoutState; heldStripPx: number } | null) => void;
 }) {
+  const gt = useGT();
   const [drag, setDrag] = useState<ActiveDrag | null>(null);
+  const [keyboardHandle, setKeyboardHandle] = useState<string | null>(null);
   const dragRef = useRef<ActiveDrag | null>(null);
   const baseLayoutRef = useRef<LayoutState>(layout);
   const frameRef = useRef<number | null>(null);
   const pointerRef = useRef({ x: 0, y: 0, scrollLeft: 0 });
+  const heldStripPxRef = useRef(0);
 
   const cancelFrame = () => {
     if (frameRef.current === null) return;
@@ -171,10 +200,13 @@ export function LayoutResizeHandles({
   // release does, so the preview never jumps between fitting and scrolling.
   const applyDrag = (base: LayoutState, active: ActiveDrag): LayoutState =>
     active.kind === "column"
-      ? arrangeLayoutWorkspaces(
+      ? resizeLayoutColumnEdge(
           base,
-          resizeLayoutColumn(base, active.columnId, active.value),
+          active.columnId,
+          active.value,
+          getLayoutBehavior().whenNoRoom,
           active.unitWidth,
+          active.drawnUnitWidth,
         )
       : resizeLayoutPane(base, active.paneId, active.value);
 
@@ -183,12 +215,16 @@ export function LayoutResizeHandles({
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     baseLayoutRef.current = layout;
+    heldStripPxRef.current = scrollerRef.current?.scrollWidth ?? 0;
     pointerRef.current = {
       x: event.clientX,
       y: event.clientY,
       scrollLeft: scrollerRef.current?.scrollLeft ?? 0,
     };
     updateDrag(active);
+    if (active.kind === "column") {
+      onPreview({ layout: applyDrag(layout, active), heldStripPx: heldStripPxRef.current });
+    }
   };
 
   const dragAtPointer = (active: ActiveDrag, event: PointerEvent<HTMLDivElement>): ActiveDrag => {
@@ -222,7 +258,10 @@ export function LayoutResizeHandles({
       const latest = dragRef.current;
       if (!latest) return;
       setDrag(latest);
-      onPreview(applyDrag(baseLayoutRef.current, latest));
+      onPreview({
+        layout: applyDrag(baseLayoutRef.current, latest),
+        heldStripPx: heldStripPxRef.current,
+      });
     });
   };
 
@@ -234,7 +273,12 @@ export function LayoutResizeHandles({
     onPreview(null);
     const store = useLayoutStore.getState();
     if (active.kind === "column") {
-      store.resizeColumnEdge(active.columnId, active.value, active.unitWidth);
+      store.resizeColumnEdge(
+        active.columnId,
+        active.value,
+        active.unitWidth,
+        active.drawnUnitWidth,
+      );
     } else store.resizePane(active.paneId, active.value);
     saveLayoutNow();
   };
@@ -260,6 +304,7 @@ export function LayoutResizeHandles({
     settleStripCamera();
     const rect = scroller.getBoundingClientRect();
     return {
+      width: scroller.clientWidth,
       height: scroller.clientHeight,
       contentLeft: rect.left - scroller.scrollLeft,
       contentTop: rect.top,
@@ -279,9 +324,9 @@ export function LayoutResizeHandles({
     };
   });
   // No wider than the strip, so a column can always be wholly on screen.
-  const columnBounds = () => ({
-    ...edgeBounds(MIN_COLUMN_PX, unitWidth, null, LAYOUT_MIN_COLUMN_WIDTH),
-    max: (scrollerRef.current?.clientWidth ?? unitWidth) / unitWidth,
+  const columnBounds = (unit: number) => ({
+    ...edgeBounds(MIN_COLUMN_PX, unit, null, LAYOUT_MIN_COLUMN_WIDTH),
+    max: (scrollerRef.current?.clientWidth ?? unit) / unit,
   });
   const paneBounds = (panes: LayoutColumn["panes"], index: number, heightPx: number) =>
     edgeBounds(
@@ -291,6 +336,13 @@ export function LayoutResizeHandles({
       LAYOUT_MIN_PANE_SIZE,
     );
   const handles: React.ReactNode[] = [];
+  const keyboardGuides: ResizeGuide[] = [];
+  const keyboardFocusProps = (key: string) => ({
+    onFocus: (event: React.FocusEvent<HTMLDivElement>) => {
+      if (event.currentTarget.matches(":focus-visible")) setKeyboardHandle(key);
+    },
+    onBlur: () => setKeyboardHandle(null),
+  });
   columns.forEach((column, columnIndex) => {
     const { left: thisColumnLeft, width } = drawn[columnIndex]!;
     const leftPct = (thisColumnLeft / stripWidth) * 100;
@@ -302,15 +354,25 @@ export function LayoutResizeHandles({
       const thisPaneTop = paneTop;
       paneTop += pane.size;
       if (paneIndex === column.panes.length - 1) return;
+      if (keyboardHandle === `pane:${pane.id}`) {
+        keyboardGuides.push({
+          kind: "pane",
+          columnLeft: thisColumnLeft,
+          columnWidth: width,
+          paneTop: thisPaneTop,
+          value: pane.size,
+          snapped: presetAt(pane.size),
+        });
+      }
       handles.push(
         <div
           key={`pane:${pane.id}`}
           role="separator"
           aria-orientation="horizontal"
-          aria-label="Resize pane"
+          aria-label={gt("Resize pane")}
           aria-valuenow={Math.round(pane.size * 100)}
           tabIndex={0}
-          className="absolute z-30 cursor-row-resize touch-none select-none outline-none [-webkit-app-region:no-drag] focus-visible:bg-ring/40"
+          className="absolute z-30 cursor-row-resize touch-none select-none outline-none [-webkit-app-region:no-drag]"
           style={{
             left: `${leftPct}%`,
             width: `${widthPct}%`,
@@ -333,6 +395,7 @@ export function LayoutResizeHandles({
               snapped: null,
             });
           }}
+          {...keyboardFocusProps(`pane:${pane.id}`)}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
           onPointerCancel={() => finishDrag()}
@@ -343,13 +406,13 @@ export function LayoutResizeHandles({
             const found = findLayoutPane(layout, pane.id);
             const metrics = measure();
             if (!found || !metrics) return;
-            const step = stepPreset(found.pane.size, event.key === "ArrowDown" ? 1 : -1);
-            useLayoutStore
-              .getState()
-              .resizePane(
-                pane.id,
-                clampToBounds(step, paneBounds(column.panes, paneIndex, metrics.height)),
-              );
+            const step = stepPreset(
+              found.pane.size,
+              event.key === "ArrowDown" ? 1 : -1,
+              paneBounds(column.panes, paneIndex, metrics.height),
+              metrics.height,
+            );
+            useLayoutStore.getState().resizePane(pane.id, step);
           }}
         />,
       );
@@ -357,34 +420,45 @@ export function LayoutResizeHandles({
 
     // A lone column fills the window: no width to drag.
     if (columns.length === 1) return;
+    if (keyboardHandle === `column:${column.id}`) {
+      keyboardGuides.push({
+        kind: "column",
+        columnLeft: thisColumnLeft,
+        value: width,
+        snapped: presetAt(width),
+      });
+    }
     handles.push(
       <div
         key={`column:${column.id}`}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize column"
+        aria-label={gt("Resize column")}
         aria-valuenow={Math.round(width * 100)}
         tabIndex={0}
-        className="absolute inset-y-0 z-30 cursor-col-resize touch-none select-none outline-none [-webkit-app-region:no-drag] focus-visible:bg-ring/40"
+        className="absolute inset-y-0 z-30 cursor-col-resize touch-none select-none outline-none [-webkit-app-region:no-drag]"
         style={{
           left: `calc(${((thisColumnLeft + width) / stripWidth) * 100}% - ${HANDLE_SIZE} / 2)`,
           width: HANDLE_SIZE,
         }}
         onPointerDown={(event) => {
           const metrics = measure();
-          if (!metrics) return;
+          if (!metrics || metrics.width <= 0) return;
+          const scale = unitWidth / metrics.width;
           startDrag(event, {
             kind: "column",
             columnId: column.id,
-            columnLeft: thisColumnLeft,
-            unitWidth,
+            columnLeft: thisColumnLeft * scale,
+            unitWidth: metrics.width,
+            drawnUnitWidth: unitWidth,
             contentLeft: metrics.contentLeft,
             scrollLeft: scrollerRef.current?.scrollLeft ?? 0,
-            bounds: columnBounds(),
-            value: width,
+            bounds: columnBounds(metrics.width),
+            value: width * scale,
             snapped: null,
           });
         }}
+        {...keyboardFocusProps(`column:${column.id}`)}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
         onPointerCancel={() => finishDrag()}
@@ -392,29 +466,34 @@ export function LayoutResizeHandles({
         onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
-          const step = stepPreset(width, event.key === "ArrowRight" ? 1 : -1);
-          useLayoutStore
-            .getState()
-            .resizeColumnEdge(column.id, clampToBounds(step, columnBounds()), unitWidth);
+          const step = stepPreset(
+            width,
+            event.key === "ArrowRight" ? 1 : -1,
+            columnBounds(unitWidth),
+            unitWidth,
+          );
+          useLayoutStore.getState().resizeColumnEdge(column.id, step, unitWidth);
         }}
       />,
     );
   });
+  const guide = drag ?? keyboardGuides[0];
 
   return (
     <>
       {handles}
-      {drag ? <ResizeFeedback drag={drag} stripWidth={stripWidth} /> : null}
+      {guide ? <ResizeFeedback drag={guide} stripWidth={stripWidth} /> : null}
     </>
   );
 }
 
 /**
- * The drag's guide line on the moving edge, the snap ticks along the strip's
- * bottom (column drags), and the pill naming the width (pen buCpT, KQQhW,
- * Fgh35). Static paint; it only moves with the pointer.
+ * The drag's guide line on the moving edge and the pill naming the width
+ * (pen buCpT, KQQhW, Fgh35). Static paint; it only moves with the pointer.
  */
-function ResizeFeedback({ drag, stripWidth }: { drag: ActiveDrag; stripWidth: number }) {
+function ResizeFeedback({ drag, stripWidth }: { drag: ResizeGuide; stripWidth: number }) {
+  const gt = useGT();
+  const size = fractionLabel(drag.value, drag.snapped);
   if (drag.kind === "column") {
     const edge = drag.columnLeft + drag.value;
     const toPct = (viewportUnits: number) => `${(viewportUnits / stripWidth) * 100}%`;
@@ -424,25 +503,14 @@ function ResizeFeedback({ drag, stripWidth }: { drag: ActiveDrag; stripWidth: nu
           className="absolute top-13 bottom-12 w-0.5 -translate-x-1/2 rounded-full bg-strong-foreground"
           style={{ left: toPct(edge) }}
         />
-        {LAYOUT_COLUMN_WIDTH_PRESETS.map((preset) => {
-          const at = drag.columnLeft + preset;
-          if (at > stripWidth) return null;
-          return (
-            <div
-              key={preset}
-              className={
-                drag.snapped === preset
-                  ? "absolute bottom-1 h-2 w-0.5 -translate-x-1/2 rounded-full bg-strong-foreground"
-                  : "absolute bottom-1 h-2 w-0.5 -translate-x-1/2 rounded-full bg-strong-foreground/25"
-              }
-              style={{ left: toPct(at) }}
-            />
-          );
-        })}
         <ResizePill
           style={{ left: toPct(edge), top: "58%" }}
           icon={<MoveHorizontalIcon className="size-3.25" />}
-          label={`${fractionLabel(drag.value, drag.snapped)} width`}
+          label={
+            drag.snapped === 1
+              ? gt("Full width", { $context: "column size while resizing" })
+              : gt("{size} width", { size })
+          }
         />
       </div>
     );
@@ -463,7 +531,11 @@ function ResizeFeedback({ drag, stripWidth }: { drag: ActiveDrag; stripWidth: nu
       <ResizePill
         style={{ left: `calc(${left} + ${width} / 2)`, top: `${edge * 100}%` }}
         icon={<MoveVerticalIcon className="size-3.25" />}
-        label={`${fractionLabel(drag.value, drag.snapped)} height`}
+        label={
+          drag.snapped === 1
+            ? gt("Full height", { $context: "pane size while resizing" })
+            : gt("{size} height", { size })
+        }
       />
     </div>
   );

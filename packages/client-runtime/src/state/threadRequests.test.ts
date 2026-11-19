@@ -9,6 +9,7 @@ import {
   NodeId,
   ProviderDriverKind,
   ProviderSessionId,
+  ProviderTurnId,
   RuntimeRequestId,
   TurnItemId,
   type OrchestrationV2TurnItem,
@@ -200,14 +201,20 @@ describe("announcing resolved thread requests", () => {
     using recorder = record();
     const announce = makeThreadRequestsResolvedAnnouncer(environmentId, threadId);
 
-    announce([first]);
-    announce([first, second]);
-    announce([first, second]);
-    announce([second]);
+    const pending = (id: RuntimeRequestId) => ({ id, status: "pending" as const });
+    announce([pending(first)]);
+    announce([pending(first), pending(second)]);
+    announce([pending(first), pending(second)]);
+    announce([{ id: first, status: "cancelled" }, pending(second)]);
+    announce([
+      { id: first, status: "cancelled" },
+      { id: second, status: "resolved" },
+    ]);
 
     expect(recorder.events).toEqual([
-      { environmentId, threadId, pendingRequestIds: [first] },
-      { environmentId, threadId, pendingRequestIds: [second] },
+      { environmentId, threadId, pendingRequestIds: [first], unansweredRequestIds: [] },
+      { environmentId, threadId, pendingRequestIds: [second], unansweredRequestIds: [first] },
+      { environmentId, threadId, pendingRequestIds: [], unansweredRequestIds: [first] },
     ]);
   });
 });
@@ -705,6 +712,14 @@ describe("pending v2 approvals", () => {
           nativeItemRef: { ...nativeItemRef, nativeId: "item-8" },
           type: "file_change",
           fileName: "src/other.ts",
+        },
+        {
+          ...base,
+          id: TurnItemId.make("previous-turn-file-change"),
+          providerTurnId: ProviderTurnId.make("previous-turn"),
+          nativeItemRef,
+          type: "file_change",
+          fileName: "src/previous.ts",
         },
         {
           ...base,

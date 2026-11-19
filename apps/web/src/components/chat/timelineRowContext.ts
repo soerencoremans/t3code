@@ -1,6 +1,7 @@
 import type { ToolCallDiffTarget } from "../../diffPanelStore";
 import {
   type ProviderApprovalDecision,
+  type ResponseContextRecord,
   type RuntimeRequestId,
   type WorktreeSetupSnapshot,
   type EnvironmentId,
@@ -16,14 +17,18 @@ import {
 import type { AsyncResult, Atom } from "effect/reactivity";
 import type { CommandOutputView } from "@t3tools/client-runtime/state/command-output";
 import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
-import { createContext, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, createContext, type MouseEvent, type ReactNode } from "react";
 import { type LegendListRef } from "@legendapp/list/react";
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
 import type { PendingApproval } from "../../session-logic";
 import { type ChatFileAttachment } from "../../types";
-import { ExpandedImagePreview } from "./ExpandedImagePreview";
+import { type ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { type AssistantCitationTarget } from "./AssistantCitationSource";
-import { type MessagesTimelineRow, type WorkGroupScrollAnchor } from "./MessagesTimeline.logic";
+import {
+  type MessagesTimelineRow,
+  type WorkGroupScrollAnchor,
+  type wakeUpsRailRows,
+} from "./MessagesTimeline.logic";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import type { TurnItemDetailSource } from "../../state/queries";
 import { type HandoffTimelineRun } from "./V2LifecycleRow";
@@ -48,6 +53,8 @@ export interface TimelineRowSharedState {
     | ((requestId: RuntimeRequestId, decision: ProviderApprovalDecision) => Promise<unknown>)
     | undefined;
   citationRequest: AssistantCitationTarget | null;
+  /** Absent hides "Reply", as in the guest view. */
+  onReplyToResponse: ((response: ResponseContextRecord) => boolean) | undefined;
   listRef: React.RefObject<LegendListRef | null>;
   timestampFormat: TimestampFormat;
   routeThreadKey: string;
@@ -76,7 +83,10 @@ export interface TimelineRowSharedState {
   renderHtmlRender: ((row: Extract<TimelineRow, { kind: "html-render" }>) => ReactNode) | undefined;
   /** Unset, expanded rows read detail and command output from the environment. */
   turnItemSource: TurnItemSource | undefined;
-  onOpenThread: (threadId: OrchestrationV2TurnItem["threadId"]) => void;
+  onOpenThread: (
+    threadId: OrchestrationV2TurnItem["threadId"],
+    environmentId?: EnvironmentId,
+  ) => void;
   workflowOpening: WorkflowOpening | null;
   /** Absent hides "Fork from this response", as in the guest view. */
   onForkFromRun:
@@ -88,14 +98,16 @@ export interface TimelineRowSharedState {
   onFileDownload: (attachment: ChatFileAttachment) => void;
   openPullRequest: (event: MouseEvent<HTMLElement>, url: string) => void;
   onToggleWorkGroup: (groupId: string, anchorKey: string) => void;
-  onToggleWorkEntry: (anchorKey: string) => void;
+  onToggleWorkEntry: (anchorKey: string, collapsed: boolean, entryId?: string) => void;
+  onWorkEntryContentReady?: (anchorKey: string, entryId: string) => void;
   onCancelWorktreeSetup: (() => void) | null;
   retryableWorkspacePreparationRunIds: ReadonlySet<RunId>;
   onRetryWorkspacePreparation: ((runId: RunId) => void) | null;
   onWorktreeSetupWorkLocally: (() => void) | null;
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
   onToggleWorkingHistory: (key: string) => void;
-  onWorkingHistoryCollapsing: (collapsing: boolean) => void;
+  onWorkingHistoryMoving: (moving: boolean) => void;
+  onWorkingHistorySettled: () => void;
   onFocusComposer: (() => void) | null;
   workGroupViewState: WorkGroupViewState;
 }
@@ -108,10 +120,10 @@ export interface TimelineRowActivityState {
   activeTurnStartedAt: string | null;
   awaitingUser: boolean;
   isPreparingWorktree: boolean;
-  /** The setup card is on screen with its own header, so the working row steps aside. */
-  worktreeSetupCardOwnsHeader: boolean;
+  providerStartingLabel: string | null;
   latestRunId: RunId | null;
-  backgroundWorktreeSetup: WorktreeSetupSnapshot | null;
+  /** The worktree setup of the live turn, drawn as the working row's first rows. */
+  worktreeSetup: WorktreeSetupSnapshot | null;
   liveAnswerPreview: string | null;
   /** The approval or question the running turn waits on; it pauses the clock. */
   pendingRequest: TimelinePendingRequest | null;
@@ -125,14 +137,31 @@ export const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
 
 export const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 
+/** Rows an open wake-ups fold reveals, by id. Its own context: it changes only when a fold does. */
+export const TimelineWakeUpsRailCtx = createContext<ReturnType<typeof wakeUpsRailRows>>(new Map());
+
+export const TimelineWakeUpsRailInteractionCtx = createContext<{
+  hoveredFoldId: string | null;
+  onHover: (foldId: string | null) => void;
+  onCollapse: (foldId: string) => void;
+}>(null!);
+
 export interface WorkGroupViewState {
   scrollPositions: Map<string, WorkGroupScrollAnchor>;
   expandedEntries: Set<string>;
 }
 
+/** One image the group's agent viewed; `item` is null until its URL resolves. */
+export interface WorkGroupViewedImage {
+  readonly path: string;
+  readonly item: ExpandedImageItem | null;
+}
+
 export const WorkGroupViewCtx = createContext<{
   state: WorkGroupViewState;
-  onToggleEntry: () => void;
+  viewedImages: ReadonlyArray<WorkGroupViewedImage>;
+  onToggleEntry: (collapsed: boolean, entryId: string) => void;
+  onContentReady?: ((entryId: string) => void) | undefined;
 } | null>(null);
 
 export type TimelineWorkEntry = Extract<
@@ -141,6 +170,17 @@ export type TimelineWorkEntry = Extract<
 >["groupedEntries"][number];
 
 export type TimelineRow = MessagesTimelineRow;
+
+export function useInitialOutputReady(pending: boolean, onReady: (() => void) | undefined) {
+  const notified = useRef(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reveals a disclosure after its first async output commits
+  useEffect(() => {
+    if (!pending && !notified.current) {
+      notified.current = true;
+      onReady?.();
+    }
+  }, [pending, onReady]);
+}
 
 /** The latest run stopped at a usage limit; its fold offers to snooze until the reset. */
 export interface TimelineUsageLimit {

@@ -24,6 +24,7 @@ import {
   normalizeModelSlug,
   resolveSelectableModel,
 } from "@t3tools/shared/model";
+import { msg, T, useMessages } from "gt-react";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import {
   Menu,
@@ -36,7 +37,8 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
-import { getProviderModelCapabilities } from "../../providerModels";
+import { getProviderModelCapabilities, keepsUnavailableModelOptions } from "../../providerModels";
+import { m, type MessageResolver } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -58,17 +60,19 @@ export function readPromptUltrathink(prompt: string): PromptUltrathink {
 }
 
 const SAVED_OPTION_LABELS: Readonly<Record<string, string>> = {
-  agent: "Agent",
-  effort: "Effort",
-  reasoningEffort: "Reasoning effort",
-  variant: "Reasoning",
+  agent: msg("Agent", { $context: "model option name" }),
+  effort: msg("Effort", { $context: "model option name" }),
+  reasoningEffort: msg("Reasoning effort"),
+  variant: msg("Reasoning", { $context: "model option name" }),
 };
 
-function savedOptionLabel(id: string): string {
-  return (
-    SAVED_OPTION_LABELS[id] ??
-    id.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (character) => character.toUpperCase())
-  );
+function savedOptionLabel(id: string, resolve: MessageResolver): string {
+  const saved = SAVED_OPTION_LABELS[id];
+  return saved !== undefined
+    ? resolve(saved)
+    : id
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/^./, (character) => character.toUpperCase());
 }
 
 /**
@@ -79,14 +83,15 @@ function savedOptionLabel(id: string): string {
  */
 function buildUnavailableModelOptionDescriptors(
   selections: ProviderOptions | null | undefined,
-  provider?: ProviderDriverKind,
+  provider: ProviderDriverKind | undefined,
+  resolve: MessageResolver,
 ): ReadonlyArray<ProviderOptionDescriptor> {
   const presets = provider ? DESCRIPTOR_PRESETS_BY_KIND[provider] : undefined;
   return (selections ?? []).map((selection) => {
     if (typeof selection.value === "boolean") {
       return {
         id: selection.id,
-        label: savedOptionLabel(selection.id),
+        label: savedOptionLabel(selection.id, resolve),
         type: "boolean" as const,
         currentValue: selection.value,
       };
@@ -95,11 +100,11 @@ function buildUnavailableModelOptionDescriptors(
     const choices = presets?.find((preset) => preset.id === selection.id)?.choices;
     return {
       id: selection.id,
-      label: savedOptionLabel(selection.id),
+      label: savedOptionLabel(selection.id, resolve),
       type: "select" as const,
       options:
         choices?.some((choice) => choice.id === value) === true
-          ? choices.map(({ id, label }) => ({ id, label }))
+          ? choices.map(({ id, label }) => ({ id, label: resolve(label) }))
           : [{ id: value, label: value }],
       currentValue: value,
     };
@@ -110,17 +115,20 @@ type TraitsPersistence =
   | {
       threadRef?: ScopedThreadRef;
       draftId?: DraftId;
+      /** Runs after a change is written to the draft. */
+      onDraftModelOptionsChange?: () => void;
       onModelOptionsChange?: never;
     }
   | {
       threadRef?: undefined;
+      onDraftModelOptionsChange?: never;
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
 function DefaultBadge() {
   return (
     <Badge variant="outline" size="sm" className="min-w-0">
-      Default
+      <T context="the default option in a list">Default</T>
     </Badge>
   );
 }
@@ -132,19 +140,20 @@ function getSelectedTraits(
   promptUltrathink: PromptUltrathink,
   modelOptions: ProviderOptions | null | undefined,
   allowPromptInjectedEffort: boolean,
-  planModeEnabled: boolean,
+  includePlanAgent: boolean | undefined,
+  resolve: MessageResolver = m,
 ) {
-  const caps = getProviderModelCapabilities(models, model, provider, planModeEnabled);
-  const modelIsUnavailable =
-    provider === "opencode"
-      ? !models.some((candidate) => candidate.slug === normalizeModelSlug(model, provider))
-      : resolveSelectableModel(provider, model, models) === null;
+  const caps = getProviderModelCapabilities(models, model, provider, includePlanAgent);
+  const modelIsUnavailable = keepsUnavailableModelOptions(provider, model)
+    ? !models.some((candidate) => candidate.slug === normalizeModelSlug(model, provider))
+    : resolveSelectableModel(provider, model, models) === null;
   const descriptors = modelIsUnavailable
     ? buildUnavailableModelOptionDescriptors(
-        planModeEnabled
+        includePlanAgent
           ? modelOptions
           : modelOptions?.filter((option) => option.id !== "agent" || option.value !== "plan"),
         provider,
+        resolve,
       )
     : getProviderOptionDescriptors({
         caps,
@@ -212,7 +221,8 @@ export function getTraitsSectionVisibility(input: {
   promptUltrathink?: PromptUltrathink | undefined;
   modelOptions?: ProviderOptions | null | undefined;
   allowPromptInjectedEffort?: boolean;
-  planModeEnabled: boolean;
+  includePlanAgent?: boolean | undefined;
+  resolve?: MessageResolver;
 }) {
   const selected = getSelectedTraits(
     input.provider,
@@ -221,7 +231,8 @@ export function getTraitsSectionVisibility(input: {
     input.promptUltrathink ?? "none",
     input.modelOptions,
     input.allowPromptInjectedEffort ?? true,
-    input.planModeEnabled,
+    input.includePlanAgent,
+    input.resolve,
   );
 
   const showEffort = selected.primarySelectDescriptor !== null;
@@ -260,7 +271,7 @@ export function getReasoningTraitStep(input: {
   modelOptions: ProviderOptions | undefined;
   reportedModelSelection: ModelSelection | null | undefined;
   prompt: string;
-  planModeEnabled: boolean;
+  includePlanAgent?: boolean | undefined;
   direction: 1 | -1;
 }) {
   const selected = getSelectedTraits(
@@ -270,7 +281,7 @@ export function getReasoningTraitStep(input: {
     readPromptUltrathink(input.prompt),
     input.modelOptions,
     true,
-    input.planModeEnabled,
+    input.includePlanAgent,
   );
   if (selected.modelIsUnavailable || selected.ultrathinkInBodyText) return null;
   const descriptor = selected.selectDescriptors.find(isReasoningSelect);
@@ -309,7 +320,7 @@ export interface TraitsMenuContentProps {
   modelOptions?: ProviderOptions | null | undefined;
   reportedModelSelection?: ModelSelection | null | undefined;
   allowPromptInjectedEffort?: boolean;
-  planModeEnabled: boolean;
+  includePlanAgent?: boolean | undefined;
   triggerClassName?: string;
   triggerVariant?: "toolbar" | "settings";
 }
@@ -327,13 +338,14 @@ export function useTraitsSelection({
   modelOptions,
   reportedModelSelection,
   allowPromptInjectedEffort = true,
-  planModeEnabled,
+  includePlanAgent,
   triggerClassName: _triggerClassName,
   ...persistence
 }: TraitsSelectionInput) {
   const modelSelection =
     instanceId && model ? { instanceId, model, options: modelOptions ?? [] } : null;
   const setProviderModelOptions = useComposerDraftStore((store) => store.setProviderModelOptions);
+  const resolve = useMessages();
   const updateModelOptions = (nextOptions: ProviderOptions | undefined) => {
     if ("onModelOptionsChange" in persistence) {
       persistence.onModelOptionsChange(nextOptions);
@@ -348,6 +360,7 @@ export function useTraitsSelection({
       model,
       persistSticky: true,
     });
+    persistence.onDraftModelOptionsChange?.();
   };
   const selected = getTraitsSectionVisibility({
     provider,
@@ -356,7 +369,8 @@ export function useTraitsSelection({
     promptUltrathink,
     modelOptions,
     allowPromptInjectedEffort,
-    planModeEnabled,
+    includePlanAgent,
+    resolve,
   });
   return {
     ...selected,
@@ -389,11 +403,13 @@ export function useTraitsSelection({
   };
 }
 
-export const ULTRATHINK_IN_BODY_NOTE =
-  'Your prompt contains "ultrathink" in the text. Remove it to change this option.';
+export const ULTRATHINK_IN_BODY_NOTE = msg(
+  'Your prompt contains "ultrathink" in the text. Remove it to change this option.',
+);
 
 export function TraitsMenuContent(props: TraitsSelectionInput & { reasoningOnly?: boolean }) {
   const traits = useTraitsSelection(props);
+  const resolve = useMessages();
   const {
     descriptors,
     selectDescriptors: allSelectDescriptors,
@@ -449,7 +465,7 @@ export function TraitsMenuContent(props: TraitsSelectionInput & { reasoningOnly?
             </div>
             {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
               <div className="px-2 pb-1.5 text-muted-foreground/80 text-meta">
-                {ULTRATHINK_IN_BODY_NOTE}
+                {resolve(ULTRATHINK_IN_BODY_NOTE)}
               </div>
             ) : null}
             <MenuRadioGroup
@@ -496,7 +512,13 @@ export function TraitsMenuContent(props: TraitsSelectionInput & { reasoningOnly?
               {(["on", "off"] as const).map((value) => (
                 <MenuRadioItem key={value} value={value} hideIndicator closeOnClick>
                   <span className="flex w-full min-w-0 items-center justify-between gap-3">
-                    <span>{value === "on" ? "On" : "Off"}</span>
+                    <span>
+                      {value === "on" ? (
+                        <T context="toggle state">On</T>
+                      ) : (
+                        <T context="toggle state">Off</T>
+                      )}
+                    </span>
                     <MenuRadioItemIndicator />
                   </span>
                 </MenuRadioItem>
@@ -515,7 +537,7 @@ export function resolveTraitsTriggerLabel(input: {
   models: ReadonlyArray<ServerProviderModel>;
   model: string | null | undefined;
   modelOptions: ProviderOptions | null | undefined;
-  planModeEnabled: boolean;
+  includePlanAgent?: boolean | undefined;
 }): string | null {
   const visibility = getTraitsSectionVisibility({
     ...input,
@@ -525,7 +547,6 @@ export function resolveTraitsTriggerLabel(input: {
   if (!visibility.hasAnyControls) return null;
   // The trigger label already pairs speed with reasoning ("High Fast").
   const { label } = buildTraitsTriggerDisplay({
-    provider: input.provider,
     descriptors: visibility.descriptors,
     primarySelectDescriptorId: visibility.primarySelectDescriptor?.id ?? null,
     ultrathinkPromptControlled: visibility.ultrathinkPromptControlled,
@@ -545,20 +566,23 @@ export function TraitsPicker({
 }) {
   const [isMenuOpen, setIsMenuOpen] = useComposerMenuState(hidden || disabled);
   const traits = useTraitsSelection(props);
+  const resolve = useMessages();
   if (!traits.hasAnyControls) {
     return null;
   }
-  const { label: triggerLabel } = buildTraitsTriggerDisplay({
-    provider: props.provider,
-    descriptors: traits.descriptors,
-    primarySelectDescriptorId: traits.primarySelectDescriptor?.id ?? null,
-    ultrathinkPromptControlled: traits.ultrathinkPromptControlled,
-    modelSelection:
-      props.instanceId && props.model
-        ? { instanceId: props.instanceId, model: props.model, options: props.modelOptions ?? [] }
-        : null,
-    reportedModelSelection: props.reportedModelSelection,
-  });
+  const { label: triggerLabel } = buildTraitsTriggerDisplay(
+    {
+      descriptors: traits.descriptors,
+      primarySelectDescriptorId: traits.primarySelectDescriptor?.id ?? null,
+      ultrathinkPromptControlled: traits.ultrathinkPromptControlled,
+      modelSelection:
+        props.instanceId && props.model
+          ? { instanceId: props.instanceId, model: props.model, options: props.modelOptions ?? [] }
+          : null,
+      reportedModelSelection: props.reportedModelSelection,
+    },
+    resolve,
+  );
   const isCodexStyle = props.provider === "codex";
   const triggerVariant = props.triggerVariant;
 

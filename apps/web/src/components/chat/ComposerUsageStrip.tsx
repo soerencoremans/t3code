@@ -1,5 +1,6 @@
 import type { ServerProviderUsageLimits, ServerProviderUsageWindow } from "@t3tools/contracts";
-import { formatResetsIn } from "@t3tools/shared/usageLimits";
+import { formatResetsIn } from "@t3tools/shared/usageLimitsCopy";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { useState } from "react";
 
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
@@ -49,11 +50,13 @@ function UsageBar({ percent, tone }: { readonly percent: number; readonly tone: 
  * data, so every update remounts it) and again when the tooltip opens. No timer.
  */
 function LimitWindowItem({ window }: { readonly window: ServerProviderUsageWindow }) {
+  const gt = useGT();
+  const m = useMessages();
   const [now, setNow] = useState(Date.now);
   const pace = statuslinePace(window, now);
   const tone = pace?.tone ?? "early";
   const percent = Math.round(window.usedPercent);
-  const resetsIn = formatResetsIn(window, now);
+  const resetsIn = formatResetsIn(window, now, m);
   return (
     <Tooltip onOpenChange={(open) => open && setNow(Date.now())}>
       <TooltipTrigger
@@ -61,7 +64,7 @@ function LimitWindowItem({ window }: { readonly window: ServerProviderUsageWindo
           <Button
             variant="ghost-muted"
             size="micro"
-            aria-label={`${window.label} limit ${percent}% used${resetsIn ? `, ${resetsIn}` : ""}`}
+            aria-label={`${gt("{label} limit {percent}% used", { label: window.label, percent })}${resetsIn ? `, ${resetsIn}` : ""}`}
           />
         }
       >
@@ -77,12 +80,16 @@ function LimitWindowItem({ window }: { readonly window: ServerProviderUsageWindo
       <TooltipPopup side="top">
         <div className="flex flex-col gap-0.5">
           <span>
-            {window.label} limit: {percent}% used
+            <T>
+              <Var>{window.label}</Var> limit: <Var>{percent}</Var>% used
+            </T>
           </span>
           {resetsIn ? <span className="first-letter:uppercase">{resetsIn}</span> : null}
           {pace?.projectedPercent != null ? (
             <span className={TONE_TEXT[pace.tone]}>
-              On pace for ~{pace.projectedPercent}% at reset
+              <T>
+                On pace for ~<Var>{pace.projectedPercent}</Var>% at reset
+              </T>
             </span>
           ) : null}
         </div>
@@ -99,6 +106,7 @@ export function ComposerUsageStrip({
   readonly contextWindow: ContextWindowSnapshot | null;
   readonly usageLimits: ServerProviderUsageLimits | undefined;
 }) {
+  const gt = useGT();
   const windows = stripWindows(usageLimits);
   const contextPercent = contextWindow?.usedPercentage ?? null;
   if (contextPercent === null && windows.length === 0) return null;
@@ -107,7 +115,10 @@ export function ComposerUsageStrip({
       {contextWindow !== null && contextPercent !== null ? (
         <span
           className="flex items-center gap-1.5 px-1.5"
-          aria-label={`Context window ${formatContextWindowTokens(contextWindow.usedTokens)} of ${formatContextWindowTokens(contextWindow.maxTokens ?? null)} tokens`}
+          aria-label={gt("Context window {used} of {max} tokens", {
+            used: formatContextWindowTokens(contextWindow.usedTokens),
+            max: formatContextWindowTokens(contextWindow.maxTokens ?? null),
+          })}
         >
           <UsageBar percent={contextPercent} tone={contextTone(contextPercent)} />
           <span>

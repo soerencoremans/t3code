@@ -6,13 +6,18 @@ import type {
   ThreadId,
   UsageLimitSourceSnapshots,
 } from "@t3tools/contracts";
+import { useMessages } from "gt-react";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { getDefaultServerModel } from "../../providerModels";
-import { providerStatusBannerItem } from "./ProviderStatusBanner";
+import {
+  dismissProviderStatusBannerForSession,
+  providerStatusBannerItem,
+} from "./ProviderStatusBanner";
 import { dismissThreadErrorBannerForSession, threadErrorBannerItem } from "./ThreadErrorBanner";
 import {
   isLowLimitDismissed,
   lowLimitBannerItem,
+  readLowLimitDismissals,
   resolveLowLimitSignal,
   resolveLowLimitSwitchTarget,
 } from "./ComposerUsageLimits";
@@ -22,12 +27,12 @@ import type { ComposerBannerStackItem } from "./ComposerBannerStack";
 export function useChatBannerLane(input: {
   readonly environmentId: EnvironmentId;
   readonly activeProviderStatus: ServerProvider | null;
+  readonly selectedModel: string | undefined;
   readonly providerStatuses: ReadonlyArray<ServerProvider>;
   readonly usageLimitSources: UsageLimitSourceSnapshots;
   readonly canSwitchProvider: boolean;
   readonly providerStatus: ServerProvider | null;
-  readonly providerStatusBannerKey: string | null;
-  readonly setDismissedProviderStatusBannerKey: Dispatch<SetStateAction<string | null>>;
+  readonly providerStatusDismissalKey: string | null;
   readonly onOpenProviderSetup: (instanceId: ProviderInstanceId) => void;
   readonly onOpenTerminal: () => void;
   readonly onProviderModelSelect: (instanceId: ProviderInstanceId, model: string) => void;
@@ -49,8 +54,7 @@ export function useChatBannerLane(input: {
     usageLimitSources,
     canSwitchProvider,
     providerStatus,
-    providerStatusBannerKey,
-    setDismissedProviderStatusBannerKey,
+    providerStatusDismissalKey,
     onOpenProviderSetup,
     onOpenTerminal,
     onProviderModelSelect,
@@ -65,14 +69,20 @@ export function useChatBannerLane(input: {
     setThreadError,
     setThreadErrorBannerDismissTick,
   } = input;
-  const [, setTrayNoticeDismissTick] = useState(0);
+  const messages = useMessages();
+  const [lowLimitDismissals, setLowLimitDismissals] = useState(readLowLimitDismissals);
   const lowLimitSignal = resolveLowLimitSignal(
     activeProviderStatus,
     providerStatuses,
     usageLimitSources,
     environmentId,
+    input.selectedModel ??
+      (activeProviderStatus
+        ? getDefaultServerModel([activeProviderStatus], activeProviderStatus.driver)
+        : undefined),
   );
-  const lowLimitVisible = lowLimitSignal !== null && !isLowLimitDismissed(lowLimitSignal.key);
+  const lowLimitVisible =
+    lowLimitSignal !== null && !isLowLimitDismissed(lowLimitDismissals, lowLimitSignal);
   const lowLimitSwitchTarget =
     lowLimitVisible && activeProviderStatus !== null && canSwitchProvider
       ? resolveLowLimitSwitchTarget(activeProviderStatus, providerStatuses)
@@ -81,24 +91,28 @@ export function useChatBannerLane(input: {
   const providerItem = providerStatusBannerItem({
     environmentId,
     status: providerStatus,
-    onDismiss: () => setDismissedProviderStatusBannerKey(providerStatusBannerKey),
+    onDismiss: () => dismissProviderStatusBannerForSession(providerStatusDismissalKey),
     onOpenProviderSetup,
     onOpenTerminal,
+    resolve: messages,
   });
   if (providerItem) items.push(providerItem);
-  const errorItem = threadErrorBannerItem({
-    bannerKey: threadErrorBannerKey,
-    error: threadError,
-    errorClass: threadErrorClass,
-    errorCode: threadErrorCode,
-    onRetry,
-    retrying,
-    onDismiss: () => {
-      if (threadId !== null) setThreadError(threadId, null);
-      dismissThreadErrorBannerForSession(threadErrorBannerKey);
-      setThreadErrorBannerDismissTick((tick) => tick + 1);
+  const errorItem = threadErrorBannerItem(
+    {
+      bannerKey: threadErrorBannerKey,
+      error: threadError,
+      errorClass: threadErrorClass,
+      errorCode: threadErrorCode,
+      onRetry,
+      retrying,
+      onDismiss: () => {
+        if (threadId !== null) setThreadError(threadId, null);
+        dismissThreadErrorBannerForSession(threadErrorBannerKey);
+        setThreadErrorBannerDismissTick((tick) => tick + 1);
+      },
     },
-  });
+    messages,
+  );
   if (errorItem) items.push(errorItem);
   if (lowLimitVisible && lowLimitSignal !== null) {
     items.push(
@@ -116,7 +130,8 @@ export function useChatBannerLane(input: {
                 sources: usageLimitSources,
               }
             : null,
-        onDismissed: () => setTrayNoticeDismissTick((tick) => tick + 1),
+        onDismissed: setLowLimitDismissals,
+        resolve: messages,
       }),
     );
   }

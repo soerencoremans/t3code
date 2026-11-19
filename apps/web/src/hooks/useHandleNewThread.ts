@@ -32,24 +32,41 @@ import {
   useQuietThreadShell,
 } from "../state/entities";
 import {
+  draftModelSelectionApplies,
   hasExplicitComposerModelSelection,
   resolveNewDraftStartFromOrigin,
   resolveNewThreadModelSelectionOverride,
+  threadHasStarted,
 } from "../lib/chatThreadActions";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "../state/presentation";
 import { environmentServerConfigsAtom } from "../state/server";
-import { layoutDraftIds } from "../layout/layoutModel";
-import { useLayoutStore } from "../layout/layoutStore";
+import { layoutDraftIds, selectLayoutOpenAnchor } from "../layout/layoutModel";
+import { runInNewLayoutTab, useLayoutStore } from "../layout/layoutStore";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { getClientSettings } from "./useSettings";
+import { getLocalStorageItem, useLocalStorage } from "./useLocalStorage";
+import * as Schema from "effect/Schema";
+import { useAtomValue } from "@effect/atom-react";
+import { defaultProjectFallbackReadyAtom } from "../state/projects";
 import { useThreadRouteTarget } from "./useThreadRouteTarget";
 import { readUnloadedThreadCount } from "../state/olderSettledShelf";
 import { resolveProjectDefaultProviderModelSelection } from "../providerInstances";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
+
+export const LAST_USED_PROJECT_STORAGE_KEY = "t3code:last-used-project:v1";
+export const lastUsedProjectKeySchema = Schema.NullOr(Schema.String);
+
+export function readLastUsedProjectKey(): string | null {
+  try {
+    return getLocalStorageItem(LAST_USED_PROJECT_STORAGE_KEY, lastUsedProjectKeySchema);
+  } catch {
+    return null;
+  }
+}
 
 interface NewThreadWorkspaceOptions {
   branch?: string | null;
@@ -128,7 +145,12 @@ export function createNewThreadHandler(router: AnyRouter) {
             : currentRouteTarget.draftId,
         )
       : null;
-    const composerActiveProvider = carrySourceComposer?.activeProvider ?? null;
+    const composerActiveProvider = draftModelSelectionApplies(
+      carrySourceComposer,
+      threadHasStarted(carrySourceShell),
+    )
+      ? (carrySourceComposer?.activeProvider ?? null)
+      : null;
     const composerModelSelection = composerActiveProvider
       ? (carrySourceComposer?.modelSelectionByProvider[composerActiveProvider] ?? null)
       : null;
@@ -215,6 +237,21 @@ export function createNewThreadHandler(router: AnyRouter) {
     const logicalProjectKey = project
       ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
       : scopedProjectKey(projectRef);
+    // Another opener (home's own first-project draft) may have reached this project's draft first.
+    // Matches lag the location during a navigation, so compare against the location.
+    const resultIfAbandoned = () => {
+      const draft = getDraftSessionByLogicalProjectKey(logicalProjectKey);
+      if (draft === null || draft.promotedTo != null || readProject(projectRef) === null) {
+        return null;
+      }
+      const draftHref = router.buildLocation({
+        to: "/draft/$draftId",
+        params: { draftId: draft.draftId },
+      }).href;
+      return router.state.location.href === draftHref
+        ? { draftId: draft.draftId, threadId: draft.threadId }
+        : null;
+    };
     const hasBranchOption = options?.branch !== undefined;
     const hasWorktreePathOption = options?.worktreePath !== undefined;
     const hasEnvModeOption = options?.envMode !== undefined;
@@ -259,7 +296,7 @@ export function createNewThreadHandler(router: AnyRouter) {
         } else if (!isDraftAlreadyOpen) {
           const defaultEnvMode = await resolveDefaultEnvMode();
           if (abandonedSinceRequest()) {
-            return null;
+            return resultIfAbandoned();
           }
           // Concurrent calls may change the draft; stale resets, remaps, or navigation could clobber it.
           const routeTargetNow = getCurrentRouteTarget();
@@ -376,7 +413,7 @@ export function createNewThreadHandler(router: AnyRouter) {
     return (async () => {
       const initialEnvMode = options?.envMode ?? (await resolveDefaultEnvMode());
       if (abandonedSinceRequest()) {
-        return null;
+        return resultIfAbandoned();
       }
       // Reuse drafts registered while awaiting so their pending navigation cannot lose them.
       const racedDraft = getDraftSessionByLogicalProjectKey(logicalProjectKey);
@@ -430,7 +467,13 @@ export function createNewThreadHandler(router: AnyRouter) {
     })();
   };
   return async (...args: Parameters<typeof openNewThread>) => {
-    const opened = await openNewThread(...args);
+    const open = () => openNewThread(...args);
+    // A new thread replaces the focused tab (cmd+N), kept or not; callers may place it elsewhere.
+    const store = useLayoutStore.getState();
+    const anchor = store.newTabRequest === null ? selectLayoutOpenAnchor(store.layout) : null;
+    const opened = await (anchor
+      ? runInNewLayoutTab(open, { replaceTabId: anchor.tab.id })
+      : open());
     if (opened) takeNoProjectsDraft(opened.draftId);
     return opened;
   };
@@ -441,7 +484,7 @@ export function createNewThreadHandler(router: AnyRouter) {
  * once a project exists, unless that thread already holds its own text.
  */
 function takeNoProjectsDraft(draftId: DraftId) {
-  const { getComposerDraft, moveComposerPromptAndImages } = useComposerDraftStore.getState();
+  const { getComposerDraft, moveComposerContent } = useComposerDraftStore.getState();
   const sendOnMove = useDraftSendOnOpenStore.getState().armed;
   if (
     !composerDraftHasUserContent(getComposerDraft(NO_PROJECTS_DRAFT_ID)) ||
@@ -450,7 +493,7 @@ function takeNoProjectsDraft(draftId: DraftId) {
     if (sendOnMove) useDraftSendOnOpenStore.setState({ armed: false });
     return;
   }
-  moveComposerPromptAndImages(NO_PROJECTS_DRAFT_ID, draftId);
+  moveComposerContent(NO_PROJECTS_DRAFT_ID, draftId);
   // Send on the no-projects home: this draft sends what just moved in.
   if (sendOnMove) useDraftSendOnOpenStore.setState({ armed: false, draftId });
 }
@@ -458,7 +501,16 @@ function takeNoProjectsDraft(draftId: DraftId) {
 export function resolveDefaultProjectRef(
   projects: ReadonlyArray<EnvironmentProject>,
   projectOrder: readonly string[],
+  lastUsedProjectKey: string | null,
+  fallbackReady = true,
 ): ScopedProjectRef | null {
+  const lastUsed = projects.find(
+    (project) =>
+      project.archivedAt == null &&
+      scopedProjectKey(scopeProjectRef(project.environmentId, project.id)) === lastUsedProjectKey,
+  );
+  if (lastUsed) return scopeProjectRef(lastUsed.environmentId, lastUsed.id);
+  if (!fallbackReady) return null;
   const [defaultProject] = orderItemsByPreferredIds({
     items: projects.filter((project) => project.archivedAt == null),
     preferredIds: projectOrder,
@@ -473,6 +525,14 @@ export function resolveDefaultProjectRef(
 
 export function useHandleNewThread() {
   const projectOrder = useUiStateStore((store) => store.projectOrder);
+  const [lastUsedProjectKey] = useLocalStorage(
+    LAST_USED_PROJECT_STORAGE_KEY,
+    null,
+    lastUsedProjectKeySchema,
+  );
+  const defaultProjectFallbackReady = useAtomValue(
+    defaultProjectFallbackReadyAtom(lastUsedProjectKey),
+  );
   const routeTarget = useThreadRouteTarget();
   const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
   const routeDraftId = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
@@ -487,12 +547,18 @@ export function useHandleNewThread() {
   );
   const projects = useProjects();
   const handleNewThread = useNewThreadHandler();
-  const defaultProjectRef = resolveDefaultProjectRef(projects, projectOrder);
+  const defaultProjectRef = resolveDefaultProjectRef(
+    projects,
+    projectOrder,
+    lastUsedProjectKey,
+    defaultProjectFallbackReady,
+  );
 
   return {
     activeDraftThread,
     activeThread,
     defaultProjectRef,
+    defaultProjectFallbackReady,
     handleNewThread,
     routeDraftId,
     routeThreadRef,

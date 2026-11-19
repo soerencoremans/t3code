@@ -1,4 +1,5 @@
 import type { AnyRouter } from "@tanstack/react-router";
+import { msg } from "gt-react";
 
 import {
   dispatchCommandPalette,
@@ -11,11 +12,12 @@ import { notifyThemeSaveFailure } from "../components/CommandPaletteThemeItems";
 import { toggleThemeEditorForTheme } from "../components/settings/themeEditorStore";
 import { toastManager } from "../components/ui/toast";
 import { APPEARANCE_CHOICES, getThemeSnapshot, setAppearanceChoice } from "../hooks/useTheme";
+import { m } from "../i18n/messages";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { type CommandHandler, type CommandScopeOptions, registerCommands } from "./dispatcher";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { resolveThreadRouteTarget } from "../threadRoutes";
-import { isModalDialogOpen } from "../lib/modalDialog";
+import { openLayerMatches } from "../lib/openLayers";
 
 function consume(event: KeyboardEvent): void {
   event.preventDefault();
@@ -52,7 +54,7 @@ export function installCommandPaletteCommands(
       capture: true,
       when: isCommandPaletteMounted,
       onKeyDown: (event) => {
-        if (event.isComposing || event.key !== "Escape") return false;
+        if (event.isComposing || event.keyCode === 229 || event.key !== "Escape") return false;
         const { open, mode } = useCommandPaletteStore.getState();
         if (!open || mode === "command") return false;
         consume(event);
@@ -79,7 +81,12 @@ export function installCommandPaletteCommands(
         }
         toastManager.add({
           id: "appearance-cycle",
-          title: `Appearance: ${next.label}`,
+          title: m(
+            msg(
+              "{mode, select, system {Appearance: System} light {Appearance: Light} blackChrome {Appearance: Black chrome} other {Appearance: Dark}}",
+            ),
+            { mode: next.choice === "black-chrome" ? "blackChrome" : next.choice },
+          ),
           timeout: 1500,
         });
       },
@@ -104,7 +111,11 @@ export function installCommandPaletteCommands(
     },
     {
       ...options,
-      when: () => isCommandPaletteMounted() && !isModalDialogOpen(),
+      when: () =>
+        isCommandPaletteMounted() &&
+        !openLayerMatches(
+          '[data-slot="dialog-popup"][data-open]:not([data-app-modal]), [data-slot="alert-dialog-popup"][data-open]',
+        ),
       context: () => {
         const threadRef = readRouteThreadRef();
         return {

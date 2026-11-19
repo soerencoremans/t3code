@@ -4,13 +4,14 @@ import { MotionAnimation, playMotion, toDevicePixel, type MotionRun } from "./an
 
 let current: { scroller: HTMLElement; run: MotionRun } | null = null;
 
-const nativeScrollLeft = Object.getOwnPropertyDescriptor(Element.prototype, "scrollLeft");
 const claimed = new WeakSet<HTMLElement>();
 
 /** Drop external scroll writes while camera motion owns the strip; editor focus otherwise follows
  * transformed caret geometry and flashes undrawn content. */
 function claimStripScroll(scroller: HTMLElement): void {
-  if (claimed.has(scroller) || !nativeScrollLeft?.get || !nativeScrollLeft.set) return;
+  if (claimed.has(scroller)) return;
+  const nativeScrollLeft = Object.getOwnPropertyDescriptor(Element.prototype, "scrollLeft");
+  if (!nativeScrollLeft?.get || !nativeScrollLeft.set) return;
   claimed.add(scroller);
   const { get, set } = nativeScrollLeft;
   Object.defineProperty(scroller, "scrollLeft", {
@@ -60,24 +61,22 @@ export function moveStripCamera(scroller: HTMLElement, stage: HTMLElement, targe
   // The browser clamps a scroll past the strip's end.
   const landed = scroller.scrollLeft;
   const motion = MotionAnimation.start("horizontal-view-movement", from, landed, velocity);
-  if (motion.durationMs <= 0) return;
-  const move = {
-    scroller,
-    run: playMotion(
-      stage,
-      motion,
-      (camera) => ({ transform: `translateX(${toDevicePixel(landed - camera)}px)` }),
-      () => {
-        if (current === move) current = null;
-      },
-      // Starts on the frame that first shows the new layout, with the panes'
-      // own slides: a keypress whose commit takes a few frames would
-      // otherwise land mid-move, skipping the start and out of step with them.
-      undefined,
-      true,
-    ),
-  };
-  current = move;
+  let finished = false;
+  const run = playMotion(
+    stage,
+    motion,
+    (camera) => ({ transform: `translateX(${toDevicePixel(landed - camera)}px)` }),
+    () => {
+      finished = true;
+      current = null;
+    },
+    // Starts on the frame that first shows the new layout, with the panes'
+    // own slides: a keypress whose commit takes a few frames would
+    // otherwise land mid-move, skipping the start and out of step with them.
+    undefined,
+    true,
+  );
+  if (!finished) current = { scroller, run };
 }
 
 /** Where the camera shows now, in scroll px: mid-move, not where the scroll already landed. */

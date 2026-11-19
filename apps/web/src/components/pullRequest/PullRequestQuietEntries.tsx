@@ -1,4 +1,5 @@
 import type { PullRequestActor } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react";
 import {
   ChevronDownIcon,
   CircleCheckIcon,
@@ -8,7 +9,9 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { RelativeTime } from "~/components/RelativeTime";
+import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
+import { formatFullTimestamp } from "~/timestampFormat";
 
 import { InlineButton } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
@@ -27,6 +30,8 @@ export function PullRequestCommentTime({
   createdAt: string;
   url: string | null;
 }) {
+  const gt = useGT();
+  const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -47,8 +52,8 @@ export function PullRequestCommentTime({
       </TooltipTrigger>
       <TooltipPopup>
         <span className="flex flex-col gap-0.5">
-          <span>{new Date(createdAt).toLocaleString()}</span>
-          {url ? <span>Open comment on host</span> : null}
+          <span>{formatFullTimestamp(createdAt, timestampFormat)}</span>
+          {url ? <span>{gt("Open comment on host")}</span> : null}
         </span>
       </TooltipPopup>
     </Tooltip>
@@ -67,9 +72,12 @@ export function PullRequestReviewEntry({
   outcome,
   stateLabel,
   preview,
+  icon,
   action,
   children,
+  defaultOpen = false,
 }: {
+  defaultOpen?: boolean;
   actor: PullRequestActor | null;
   profileUrl: string | null;
   createdAt: string;
@@ -78,11 +86,15 @@ export function PullRequestReviewEntry({
   /** The host's own word for a review that is neither an approval nor a change request. */
   stateLabel: string;
   preview: string | null;
+  /** In place of the comment glyph, for an event line such as an issue's "closed this". */
+  icon?: ReactNode;
   action?: ReactNode;
   /** What opens under the line: the review's text, its reactions. Null leaves nothing to open. */
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const gt = useGT();
+  const messages = useMessages();
+  const [open, setOpen] = useState(defaultOpen);
   const expandable = children !== null && children !== false;
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -96,16 +108,16 @@ export function PullRequestReviewEntry({
           {outcome ? (
             <PullRequestReviewOutcomeIcon outcome={outcome} />
           ) : (
-            <MessageSquareIcon aria-hidden className="size-3.5 text-dim-foreground" />
+            (icon ?? <MessageSquareIcon aria-hidden className="size-3.5 text-dim-foreground" />)
           )}
           <span className="truncate">
-            {outcome ? pullRequestReviewOutcomeVerb(outcome) : stateLabel}
+            {outcome ? pullRequestReviewOutcomeVerb(outcome, messages) : stateLabel}
           </span>
         </span>
         {expandable ? (
           <CollapsibleTrigger
             variant="muted"
-            aria-label={open ? "Hide review text" : "Show review text"}
+            aria-label={open ? gt("Hide review text") : gt("Show review text")}
             className="min-w-0 flex-1 shrink gap-1 text-left"
           >
             <span className="min-w-0 flex-1 truncate">{open ? null : preview}</span>
@@ -140,8 +152,10 @@ export function PullRequestResolvedThreadRow({
   commentCount,
   action,
   children,
+  defaultOpen = false,
 }: {
-  path: string;
+  defaultOpen?: boolean;
+  path: string | null;
   line: number | null | undefined;
   outdated: boolean;
   /** The thread is still open on the host, but the review that started it was dismissed. */
@@ -150,15 +164,25 @@ export function PullRequestResolvedThreadRow({
   action?: ReactNode;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const label = `${path}${line ? `:${line}` : ""}`;
-  const comments = `${commentCount} ${commentCount === 1 ? "comment" : "comments"}`;
+  const gt = useGT();
+  const [open, setOpen] = useState(defaultOpen);
+  const label =
+    path === null
+      ? gt("Overview", { $context: "pull request conversation, not tied to a file" })
+      : `${path}${line ? `:${line}` : ""}`;
+  const comments = gt("{count, plural, one {{count} comment} other {{count} comments}}", {
+    count: commentCount,
+  });
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="flex min-w-0 items-center pr-3">
         <CollapsibleTrigger
           variant="muted"
-          aria-label={`${dismissed ? "Dismissed" : "Resolved"} thread on ${label}, ${comments}`}
+          aria-label={
+            dismissed
+              ? gt("Dismissed thread on {location}, {comments}", { location: label, comments })
+              : gt("Resolved thread on {location}, {comments}", { location: label, comments })
+          }
           className="min-w-0 flex-1 shrink gap-2 px-3 text-left"
         >
           {dismissed ? (
@@ -167,7 +191,11 @@ export function PullRequestResolvedThreadRow({
             <CircleCheckIcon aria-hidden className="size-3.5 shrink-0 text-success-foreground" />
           )}
           <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
-          {outdated ? <span className="shrink-0">Outdated</span> : null}
+          {outdated ? (
+            <span className="shrink-0">
+              <T context="review thread state">Outdated</T>
+            </span>
+          ) : null}
           <span className="shrink-0">{comments}</span>
           <ChevronDownIcon
             aria-hidden

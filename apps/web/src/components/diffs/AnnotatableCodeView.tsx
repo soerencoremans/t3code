@@ -6,8 +6,9 @@ import type {
   FileDiffMetadata,
   SelectedLineRange,
 } from "@pierre/diffs";
-import type { CodeViewHandle } from "@pierre/diffs/react";
+import type { CodeViewHandle, CodeViewProps } from "@pierre/diffs/react";
 import type { EnvironmentId, ProjectId, ScopedThreadRef } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { useState, type ReactNode, type Ref } from "react";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
@@ -90,6 +91,7 @@ interface AnnotatableCodeViewProps {
   composerDraftTarget?: ScopedThreadRef | DraftId | undefined;
   options: StyledDiffCodeViewOptions<DiffCommentAnnotationGroup>;
   viewerRef?: Ref<AnnotatableCodeViewHandle>;
+  onScroll?: CodeViewProps<DiffCommentAnnotationGroup, undefined>["onScroll"];
   className?: string;
   renderCodeViewFooter?: () => ReactNode;
   unsafeCSSExtra?: string;
@@ -102,7 +104,7 @@ interface AnnotatableCodeViewProps {
   ) => ReactNode;
   /** Told each time a comment from this view lands in the composer draft. */
   onCommentAdded?: (commentId: string) => void;
-  onRevealSearchMatch: (fileKey: string) => void;
+  onFileCollapsedChange: (fileKey: string, collapsed: boolean) => void;
 }
 
 interface DiffSelectionContext {
@@ -120,6 +122,7 @@ export function AnnotatableCodeView({
   composerDraftTarget,
   options,
   viewerRef,
+  onScroll,
   className,
   renderCodeViewFooter,
   unsafeCSSExtra,
@@ -127,8 +130,9 @@ export function AnnotatableCodeView({
   renderHeaderFilenameSuffix,
   renderHeaderPrefix,
   onCommentAdded,
-  onRevealSearchMatch,
+  onFileCollapsedChange,
 }: AnnotatableCodeViewProps) {
+  const gt = useGT();
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
   const reviewComments = useComposerDraftStore(
@@ -272,6 +276,7 @@ export function AnnotatableCodeView({
     <StyledDiffCodeView<DiffCommentAnnotationGroup>
       key={codeViewKey}
       {...(viewerRef ? { viewerRef } : {})}
+      {...(onScroll ? { onScroll } : {})}
       {...(className ? { className } : {})}
       {...(unsafeCSSExtra ? { unsafeCSSExtra } : {})}
       {...(renderHeaderMetadata
@@ -284,12 +289,13 @@ export function AnnotatableCodeView({
       items={items}
       selectedLines={selectedLines}
       onSelectedLinesChange={setSelectedLines}
-      onRevealSearchMatch={(item) => onRevealSearchMatch(item.id)}
       options={{
         ...options,
         enableGutterUtility: composerDraftTarget !== undefined && draft === null,
         enableLineSelection: draft === null,
         onGutterUtilityClick: beginComment,
+        onItemCollapsedChange: (_item, nextItem) =>
+          onFileCollapsedChange(nextItem.id, nextItem.collapsed === true),
       }}
       renderHeaderFilenameSuffix={(item) =>
         item.type === "diff" ? renderHeaderFilenameSuffix(item.fileDiff) : null
@@ -317,8 +323,8 @@ export function AnnotatableCodeView({
                 rangeLabel={entry.rangeLabel}
                 createdAt={entry.createdAt}
                 // Saved comments here are read back from the composer draft they live in.
-                stateLabel={entry.kind === "comment" ? "In composer" : undefined}
-                submitLabel="Done"
+                stateLabel={entry.kind === "comment" ? gt("In composer") : undefined}
+                submitLabel={gt("Done", { $context: "button, saves a file comment" })}
                 text={entry.kind === "draft" ? draftText : entry.text}
                 onTextChange={setDraftText}
                 onCancel={() => removeEntry(entry.id)}

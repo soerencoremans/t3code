@@ -1,6 +1,7 @@
 import type { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, CircleDashedIcon, PlusIcon, SettingsIcon } from "lucide-react";
+import { T, useGT, Var } from "gt-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AddClaudeAccountDialog } from "../settings/AddClaudeAccountDialog";
@@ -38,12 +39,12 @@ export function ClaudeAccountPickerRow(props: ClaudeAccountPickerRowProps) {
   return <ClaudeAccountPickerRowInner {...props} />;
 }
 
-const ROW_LABEL = "Claude account";
-
 function RowLines(props: { readonly children: ReactNode }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="text-meta text-muted-foreground">{ROW_LABEL}</span>
+      <span className="text-meta text-muted-foreground">
+        <T>Claude account</T>
+      </span>
       <span className="flex items-center gap-1 text-label">{props.children}</span>
     </span>
   );
@@ -54,6 +55,7 @@ function ClaudeAccountPickerRowInner({
   instanceId,
   onRequestClose,
 }: ClaudeAccountPickerRowProps) {
+  const gt = useGT();
   const accounts = useClaudeSetupAccounts(environmentId, instanceId);
   const accountSwitch = useClaudeAccountSwitch(environmentId, instanceId, accounts.refresh);
   const navigate = useNavigate();
@@ -89,12 +91,16 @@ function ClaudeAccountPickerRowInner({
     setAnnouncement("");
     const outcome = await accountSwitch.switchTo(name);
     if (outcome.kind === "switched") {
-      if (mountedRef.current) setAnnouncement(`Claude account switched to ${name}.`);
-      else toastManager.add({ type: "success", title: `Claude account switched to ${name}` });
+      if (mountedRef.current) setAnnouncement(gt("Claude account switched to {name}.", { name }));
+      else
+        toastManager.add({
+          type: "success",
+          title: gt("Claude account switched to {name}", { name }),
+        });
     } else if (outcome.kind === "failed" && !mountedRef.current) {
       toastManager.add({
         type: "error",
-        title: "Claude account not switched",
+        title: gt("Claude account not switched"),
         description: outcome.message,
       });
     }
@@ -116,8 +122,8 @@ function ClaudeAccountPickerRowInner({
           ref={attachTrigger}
           aria-label={
             pending !== null
-              ? `Claude account for all Claude chats: switching to ${pending}`
-              : `Claude account for all Claude chats: ${activeName}`
+              ? gt("Claude account for all Claude chats: switching to {pending}", { pending })
+              : gt("Claude account for all Claude chats: {activeName}", { activeName })
           }
           render={
             <Button variant="ghost" size="multiline" className="w-full justify-between text-left" />
@@ -127,7 +133,9 @@ function ClaudeAccountPickerRowInner({
             {pending !== null ? (
               <>
                 <CircleDashedIcon aria-hidden="true" className="size-3.5" />
-                Switching to {pending}…
+                <T>
+                  Switching to <Var>{pending}</Var>…
+                </T>
               </>
             ) : (
               activeName
@@ -137,7 +145,9 @@ function ClaudeAccountPickerRowInner({
         </MenuTrigger>
         <MenuPopup side="top" align="end">
           <MenuGroup>
-            <MenuGroupLabel>Switch account</MenuGroupLabel>
+            <MenuGroupLabel>
+              <T>Switch account</T>
+            </MenuGroupLabel>
             <MenuRadioGroup
               value={activeName}
               onValueChange={(name: string) => {
@@ -155,11 +165,11 @@ function ClaudeAccountPickerRowInner({
           <MenuSeparator />
           <MenuItem onClick={() => setAddOpen(true)}>
             <PlusIcon aria-hidden="true" />
-            Add account…
+            <T>Add account…</T>
           </MenuItem>
           <MenuItem onClick={manageAccounts}>
             <SettingsIcon aria-hidden="true" />
-            Manage accounts
+            <T>Manage accounts</T>
           </MenuItem>
         </MenuPopup>
       </Menu>
@@ -171,28 +181,40 @@ function ClaudeAccountPickerRowInner({
       value = (
         <RedactedSensitiveText
           value={view.email}
-          ariaLabel="Toggle account email visibility"
-          revealTooltip="Click to reveal email"
-          hideTooltip="Click to hide email"
+          ariaLabel={gt("Toggle account email visibility")}
+          revealTooltip={gt("Click to reveal email")}
+          hideTooltip={gt("Click to hide email")}
         />
       );
       action = (
         <Button
           variant="secondary"
           size="xs"
-          aria-label="Remember the Claude account for all Claude chats"
+          aria-label={gt("Remember the Claude account for all Claude chats")}
           onClick={() => setRememberOpen(true)}
         >
-          Remember…
+          <T>Remember…</T>
         </Button>
       );
     } else if (view?.kind === "loggedOut") {
-      value = "No Claude account is logged in on this setup.";
-      action = <InlineButton onClick={manageAccounts}>Manage accounts</InlineButton>;
+      value = gt("No Claude account is logged in on this setup.");
+      action = (
+        <InlineButton onClick={manageAccounts}>
+          <T>Manage accounts</T>
+        </InlineButton>
+      );
     } else if (accounts.error === null) {
-      value = <span className="text-muted-foreground">Loading account…</span>;
+      value = (
+        <span className="text-muted-foreground">
+          <T>Loading account…</T>
+        </span>
+      );
     } else {
-      action = <InlineButton onClick={accounts.refresh}>Retry</InlineButton>;
+      action = (
+        <InlineButton onClick={accounts.refresh}>
+          <T>Retry</T>
+        </InlineButton>
+      );
     }
     row = (
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -211,7 +233,9 @@ function ClaudeAccountPickerRowInner({
         </p>
       ) : null}
       <span role="status" className="sr-only">
-        {pending !== null ? `Switching Claude account to ${pending}…` : announcement}
+        {pending !== null
+          ? gt("Switching Claude account to {pending}…", { pending })
+          : announcement}
       </span>
       {rememberOpen && view?.kind === "notRemembered" ? (
         <RememberClaudeAccountDialog

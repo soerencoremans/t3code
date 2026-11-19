@@ -1,6 +1,8 @@
 import { memo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
 import { cn } from "~/lib/utils";
+import { useGT, useMessages } from "gt-react";
 import {
+  ArrowLeftIcon,
   CopyIcon,
   DownloadIcon,
   ExternalLinkIcon,
@@ -8,13 +10,13 @@ import {
   MinusIcon,
   PlusIcon,
   VideoIcon,
-  XIcon,
+  Image as ImageGlyphIcon,
+  Text as TextGlyphIcon,
 } from "lucide-react";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { flushSync } from "react-dom";
 import { Button } from "../ui/button";
-import { Image as ImageGlyph, Text as TextGlyph } from "lucide";
-import { MorphIcon } from "~/components/MorphIcon";
+
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import type { ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { resolveExternalWebLinkHost } from "./externalLinkContextMenu";
@@ -25,6 +27,7 @@ import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
 import { isContextMenuOpen } from "../../contextMenuFallback";
 import {
   SnapShotAccessibilityData,
+  SnapShotCopyButton,
   SnapShotContentsButton,
   snapShotAccessibilityDetails,
 } from "./SnapShotAttachmentDetails";
@@ -159,6 +162,8 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   preview,
   onClose,
 }: ExpandedImageDialogProps) {
+  const gt = useGT();
+  const messages = useMessages();
   const [imageOffset, setImageOffset] = useState(0);
   const [failedImageSrc, setFailedImageSrc] = useState<string | null>(null);
   const [accessibilityDetailsSrc, setAccessibilityDetailsSrc] = useState<string | null>(null);
@@ -169,15 +174,17 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   } | null>(null);
   const [view, setView] = useState<ZoomableImageView | null>(null);
   const zoomableImageRef = useRef<ZoomableImageHandle>(null);
-  const [returnFocusTarget] = useState(() =>
-    document.activeElement instanceof HTMLElement ? document.activeElement : null,
-  );
+  const [returnFocus] = useState(() => {
+    const target = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return { target, focusVisible: target?.matches(":focus-visible") ?? false };
+  });
   // The host unmounts the dialog outright, so Base UI never runs finalFocus. Without
   // this, focus stays on the removed dialog, and the composer that owned the opener
-  // reads that as a blur and rests.
+  // reads that as a blur and rests. Preserve mouse focus when Escape closes it.
   const close = () => {
     flushSync(onClose);
-    if (returnFocusTarget?.isConnected) returnFocusTarget.focus({ preventScroll: true });
+    const { target, focusVisible } = returnFocus;
+    if (target?.isConnected) target.focus({ preventScroll: true, focusVisible });
   };
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const imageCount = preview.images.length;
@@ -186,7 +193,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   const item = preview.images[index];
   const source: MediaActionSource = item?.actionsSource ?? {
     kind: item?.type === "video" ? "video" : "image",
-    name: item?.name ?? "Media",
+    name: item?.name ?? gt("Media"),
     src: item?.src ?? null,
   };
   const openFile = source.onOpenFile;
@@ -230,7 +237,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   };
 
   if (!item) return null;
-  const mediaLabel = item.type === "video" ? "video" : "image";
+  const isVideo = item.type === "video";
   const openOriginalLink =
     item.originalUrl && resolveExternalWebLinkHost(item.originalUrl) !== null ? (
       <OpenMediaLink originalUrl={item.originalUrl} />
@@ -239,10 +246,10 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   const showingAccessibilityDetails =
     Boolean(accessibilityDetails) && accessibilityDetailsSrc === item.src;
   const contentsLabel = showingAccessibilityDetails
-    ? "Show screenshot"
+    ? gt("Show screenshot")
     : accessibilityDetails?.format === "json"
-      ? "Show accessibility JSON"
-      : "Show extracted text";
+      ? gt("Show accessibility JSON")
+      : gt("Show extracted text");
   const imageFailed = item.src === null || failedImageSrc === item.src;
   const zoomable = item.type !== "video" && !showingAccessibilityDetails && !imageFailed;
   const unavailable = actionsSource.src === null && actionsSource.asset === undefined;
@@ -257,18 +264,18 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
       ? item.originalUrl
       : browserUrl(item.src);
   const openExternally = actionsSource.onOpenFile
-    ? { label: "Open in file viewer", run: actionsSource.onOpenFile }
+    ? { label: gt("Open in file viewer"), run: actionsSource.onOpenFile }
     : externalUrl
       ? {
-          label: item.originalUrl ? "Open original" : "Open in browser",
+          label: item.originalUrl ? gt("Open original") : gt("Open in browser"),
           run: () => {
             void readLocalApi()
               ?.shell.openExternal(externalUrl)
               .catch((error: unknown) => {
                 toastManager.add({
                   type: "error",
-                  title: "Could not open link",
-                  description: error instanceof Error ? error.message : "An error occurred.",
+                  title: gt("Could not open link"),
+                  description: error instanceof Error ? error.message : gt("An error occurred."),
                 });
               });
           },
@@ -297,6 +304,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
       <DialogPopup
         {...composerFloatingLayerProps}
         variant="media"
+        mediaControlsPlacement="inside"
         showCloseButton={false}
         bottomStickOnMobile={false}
         // --media-height keeps ZoomableImage's reserved 200px for the bar and thumbnails.
@@ -315,18 +323,40 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
         }}
         onKeyDown={onKeyDown}
         initialFocus={closeButtonRef}
-        finalFocus={() => returnFocusTarget}
+        finalFocus={() => returnFocus.target}
         onClick={(event) => {
           if (event.target === event.currentTarget) close();
         }}
       >
-        <DialogTitle className="sr-only">Expanded {mediaLabel} preview</DialogTitle>
+        <DialogTitle className="sr-only">
+          {isVideo ? gt("Expanded video preview") : gt("Expanded image preview")}
+        </DialogTitle>
         <div className="relative isolate z-10 flex w-fit min-w-[min(var(--media-width),36rem)] max-w-[var(--media-width)] flex-col items-center gap-2.5">
           <div
             role="toolbar"
-            aria-label={`${item.name} actions`}
-            className="flex h-10 w-0 min-w-full items-center gap-2 rounded-card surface-popover pr-1.5 pl-3"
+            aria-label={gt("{name} actions", { name: item.name })}
+            className="flex h-10 w-0 min-w-full items-center gap-2 rounded-card surface-popover px-1.5"
           >
+            {/* Back sits first, away from where the window's own close button is. */}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    ref={closeButtonRef}
+                    size="icon-sm"
+                    variant="secondary"
+                    onClick={close}
+                    aria-label={
+                      isVideo ? gt("Back, close video preview") : gt("Back, close image preview")
+                    }
+                  />
+                }
+              >
+                <ArrowLeftIcon aria-hidden="true" />
+              </TooltipTrigger>
+              <TooltipPopup side="bottom">{gt("Back")}</TooltipPopup>
+            </Tooltip>
             <ImageIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
             <span
               className="min-w-0 truncate text-label text-foreground"
@@ -348,12 +378,12 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                     />
                   }
                 >
-                  {meta ?? formatAttachmentSize(item.sizeBytes!)}
+                  {meta ?? formatAttachmentSize(item.sizeBytes!, messages)}
                 </TooltipTrigger>
                 <TooltipPopup>
                   {meta ? <span className="block">{meta}</span> : null}
                   {item.sizeBytes !== undefined ? (
-                    <span className="block">{formatAttachmentSize(item.sizeBytes)}</span>
+                    <span className="block">{formatAttachmentSize(item.sizeBytes, messages)}</span>
                   ) : null}
                 </TooltipPopup>
               </Tooltip>
@@ -375,15 +405,19 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                     />
                   }
                 >
-                  <MorphIcon
-                    aria-hidden="true"
-                    icon={showingAccessibilityDetails ? ImageGlyph : TextGlyph}
-                  />
+                  {showingAccessibilityDetails ? (
+                    <ImageGlyphIcon aria-hidden="true" />
+                  ) : (
+                    <TextGlyphIcon aria-hidden="true" />
+                  )}
                 </TooltipTrigger>
                 <TooltipPopup side="bottom">{contentsLabel}</TooltipPopup>
               </Tooltip>
             ) : item.source ? (
               <SnapShotContentsButton source={item.source} side="bottom" />
+            ) : null}
+            {item.onCopySnapshot ? (
+              <SnapShotCopyButton onCopy={item.onCopySnapshot} side="bottom" />
             ) : null}
             {zoomable ? (
               <div className="flex h-7 shrink-0 items-center rounded-control surface-well px-0.5 max-sm:hidden">
@@ -392,7 +426,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                   type="button"
                   size="xs"
                   variant="ghost-muted"
-                  aria-label="Zoom out"
+                  aria-label={gt("Zoom out")}
                   aria-disabled={!view?.canZoomOut}
                   onClick={() => zoomableImageRef.current?.zoomOut()}
                 >
@@ -402,7 +436,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                   type="button"
                   size="xs"
                   variant="ghost-muted"
-                  aria-label={`Zoom ${zoomPercent}, reset to fit`}
+                  aria-label={gt("Zoom {percent}, reset to fit", { percent: zoomPercent })}
                   aria-disabled={!view?.canZoomOut}
                   onClick={() => zoomableImageRef.current?.resetZoom()}
                 >
@@ -412,7 +446,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                   type="button"
                   size="xs"
                   variant="ghost-muted"
-                  aria-label="Zoom in"
+                  aria-label={gt("Zoom in")}
                   aria-disabled={!view?.canZoomIn}
                   onClick={() => zoomableImageRef.current?.zoomIn()}
                 >
@@ -422,7 +456,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
             ) : null}
             {item.type !== "video" ? (
               <MediaBarButton
-                label="Copy image"
+                label={gt("Copy image")}
                 disabled={!canCopyImage}
                 onClick={() => void runByteAction("copy-image")}
               >
@@ -430,7 +464,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
               </MediaBarButton>
             ) : null}
             <MediaBarButton
-              label={`Save ${mediaLabel}`}
+              label={isVideo ? gt("Save video") : gt("Save image")}
               disabled={unavailable}
               onClick={() => void runByteAction("save")}
             >
@@ -441,23 +475,6 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                 <ExternalLinkIcon aria-hidden="true" />
               </MediaBarButton>
             ) : null}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    ref={closeButtonRef}
-                    size="icon-sm"
-                    variant="secondary"
-                    onClick={close}
-                    aria-label={`Close ${mediaLabel} preview`}
-                  />
-                }
-              >
-                <XIcon aria-hidden="true" />
-              </TooltipTrigger>
-              <TooltipPopup side="bottom">Close</TooltipPopup>
-            </Tooltip>
           </div>
           <MediaActions source={actionsSource} showTooltip={false}>
             <div className="max-w-[var(--media-width)]">
@@ -474,8 +491,8 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                 <ExpandedMediaFailure>
                   <p>
                     {openOriginalLink
-                      ? "This image could not be loaded."
-                      : "Image unavailable. The file may have been moved or deleted."}
+                      ? gt("This image could not be loaded.")
+                      : gt("Image unavailable. The file may have been moved or deleted.")}
                   </p>
                   {openOriginalLink}
                 </ExpandedMediaFailure>
@@ -498,7 +515,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
           {imageCount > 1 ? (
             <div
               role="listbox"
-              aria-label="Media in this message"
+              aria-label={gt("Media in this message")}
               aria-orientation="horizontal"
               className="flex w-0 min-w-full justify-center-safe gap-2 overflow-x-auto p-0.5"
             >

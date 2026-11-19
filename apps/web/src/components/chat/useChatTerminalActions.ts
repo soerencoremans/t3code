@@ -1,4 +1,8 @@
+import { msg } from "gt-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
 import { toggleThreadTerminalPane } from "../../layout/openRules";
+import { terminalTabTitle } from "../../layout/surfaceTabLabels";
 import type { TerminalLaunchContext } from "../ThreadTerminalSurfaces";
 export type { TerminalLaunchContext } from "../ThreadTerminalSurfaces";
 import type {
@@ -10,7 +14,6 @@ import type { ComposerHandleRef } from "../../composerHandleContext";
 import type { selectThreadTerminalUiState } from "../../terminalUiStateStore";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { useThreadTerminalActions } from "../terminal/useThreadTerminalActions";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
@@ -26,12 +29,13 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { MAX_TERMINALS_PER_GROUP } from "../../types";
-import { isPreviewSupportedInRuntime } from "../../previewStateStore";
 import { openUrlInPreview } from "../../browser/openFileInPreview";
+import { isPreviewAvailableFor } from "../../browser/previewRuntime";
 import { resolveDiscoveredServerUrl } from "../../browser/browserTargetResolver";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { confirmTerminalClose } from "../../lib/terminalCloseConfirm";
 import { findReusableProjectScriptTerminal } from "../../lib/projectScriptTerminal";
+import { closingTerminalIds } from "../terminal/closingTerminals";
 import { type TerminalContextSelection } from "../../lib/terminalContext";
 import { focusActiveDrawerTerminal, focusTerminal } from "../../lib/terminalFocus";
 import { useTerminalUiStateStore } from "../../terminalUiStateStore";
@@ -136,16 +140,16 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     )
       return;
     if (nextOpen && hasTerminalWriteAccess() && terminalUiState.terminalIds.length === 0) {
+      // The server lists a closing terminal until its close finishes, which would end the reopen.
+      const closingIds = new Set(closingTerminalIds(activeThreadRef));
+      const isReusable = (id: string) => !panelTerminalIds.has(id) && !closingIds.has(id);
       // Reattach the thread's existing sessions before allocating another PTY.
-      const existingTerminalIds = activeServerOrderedTerminalIds.filter(
-        (terminalId) => !panelTerminalIds.has(terminalId),
-      );
+      const existingTerminalIds = activeServerOrderedTerminalIds.filter(isReusable);
       if (existingTerminalIds.length > 0) {
         storeReconcileTerminalIds(activeThreadRef, existingTerminalIds);
       }
       // A server-created setup terminal may arrive before the ordered session list.
-      const existingTerminalId =
-        runningTerminalIds.find((id) => !panelTerminalIds.has(id)) ?? existingTerminalIds[0];
+      const existingTerminalId = runningTerminalIds.find(isReusable) ?? existingTerminalIds[0];
       if (existingTerminalId !== undefined) {
         storeEnsureTerminal(activeThreadRef, existingTerminalId, { open: true, active: true });
         focusActiveDrawerTerminal(activeThreadRef);
@@ -227,6 +231,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
             activeTerminalId: terminalUiState.activeTerminalId,
             panelTerminalIds,
             runningTerminalIds,
+            closingTerminalIds: activeThreadRef ? closingTerminalIds(activeThreadRef) : [],
           });
     const targetWorktreePath = options?.worktreePath ?? activeThread.worktreePath ?? null;
 
@@ -262,7 +267,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
         const error = squashAtomCommandFailure(openResult);
         setThreadError(
           activeThreadId,
-          error instanceof Error ? error.message : `Failed to run script "${script.name}".`,
+          thrownErrorMessage(error, m) ??
+            m(msg('Failed to run script "{name}".', { name: script.name })),
         );
       }
       return;
@@ -280,12 +286,17 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
         const error = squashAtomCommandFailure(writeResult);
         setThreadError(
           activeThreadId,
-          error instanceof Error ? error.message : `Failed to run script "${script.name}".`,
+          thrownErrorMessage(error, m) ??
+            m(msg('Failed to run script "{name}".', { name: script.name })),
         );
       }
       return;
     }
-    if (script.autoOpenPreview && script.previewUrl && isPreviewSupportedInRuntime()) {
+    if (
+      script.autoOpenPreview &&
+      script.previewUrl &&
+      isPreviewAvailableFor(activeThreadRef.environmentId)
+    ) {
       const previewResult = await openUrlInPreview({
         threadRef: activeThreadRef,
         url: resolveDiscoveredServerUrl(activeThreadRef.environmentId, script.previewUrl),
@@ -296,8 +307,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not open preview",
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+            title: m(msg("Could not open preview")),
+            description: thrownErrorMessage(error, m) ?? m(msg("An unexpected error occurred.")),
           }),
         );
       }
@@ -309,7 +320,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     void runProjectScript(
       {
         id: "chat-code-block",
-        name: "Chat code block",
+        name: m(msg("Chat code block")),
         command,
         icon: "play",
         runOnWorktreeCreate: false,
@@ -320,7 +331,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   const runShellCommandStable = useStableCallback(runShellCommand);
   const requestCloseTerminal = (terminalId: string) => {
     if (!hasTerminalWriteAccess()) return;
-    const label = activeTerminalLabelsById.get(terminalId) ?? getTerminalLabel(terminalId);
+    const label = terminalTabTitle(terminalId, activeTerminalLabelsById.get(terminalId));
     void confirmTerminalClose([label]).then((confirmed) => {
       if (confirmed && readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
         closeTerminal(terminalId);

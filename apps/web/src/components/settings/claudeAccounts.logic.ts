@@ -1,3 +1,4 @@
+import { msg } from "gt-react";
 import * as Schema from "effect/Schema";
 import {
   ClaudeAccountError,
@@ -5,6 +6,8 @@ import {
   type ClaudeSetupAccountState,
   type ProviderInstanceId,
 } from "@t3tools/contracts";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export function claudeAccountsAvailable(input: {
   readonly os: string | undefined;
@@ -57,8 +60,8 @@ export function claudeShareConfigSetups(
 
 export const isClaudeAccountError = Schema.is(ClaudeAccountError);
 
-export function claudeAccountErrorMessage(failure: unknown): string {
+export function claudeAccountErrorMessage(failure: unknown, resolve: MessageResolver = m): string {
   return isClaudeAccountError(failure)
     ? failure.message
-    : "T3 could not reach the Claude accounts. Try again.";
+    : resolve(msg("T3 could not reach the Claude accounts. Try again."));
 }

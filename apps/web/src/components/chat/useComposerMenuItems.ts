@@ -1,3 +1,8 @@
+import { msg, useGT, useMessages } from "gt-react";
+import {
+  legacyThreadPullRequestKey,
+  threadPullRequestKeyOf,
+} from "@t3tools/client-runtime/thread-pull-requests";
 import {
   matchComposerEnvironmentItems,
   matchComposerThreadItems,
@@ -8,6 +13,7 @@ import type {
   EnvironmentId,
   ProjectId,
   ProviderDriverKind,
+  ProviderInstanceId,
   PullRequestListInput,
   ServerProvider,
   ThreadId,
@@ -29,10 +35,8 @@ import {
 } from "@t3tools/client-runtime/providerSkills";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useProjects, useVisibleThreadShells } from "~/state/entities";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { useEnvironmentIdentities, useEnvironmentMachines } from "~/state/environments";
 import { offersLinkedEnvironmentsAtom } from "~/state/peerLinks";
-import { useNowMinute } from "../../hooks/useNowMinute";
 import {
   pullRequestEnvironment,
   usePullRequestList,
@@ -40,15 +44,21 @@ import {
 } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
 import { useComposerPathSearch, useDebouncedValue, useThreadSearch } from "~/state/queries";
+import { m, type MessageResolver } from "~/i18n/messages";
 import {
   matchesPullRequestQuery,
   rankPullRequestMatches,
 } from "../pullRequest/pullRequestList.logic";
 import type { ComposerCommandItem } from "./ComposerCommandMenu";
+import { matchComposerModelItems } from "./composerModelMentions";
+import type { ModelEsque } from "./providerIconUtils";
+import type { ProviderInstanceEntry } from "../../providerInstances";
 import {
   searchSlashCommandItems,
   slashCommandItemsForPromptPosition,
 } from "./composerSlashCommandSearch";
+
+import { retainPendingComposerMenuItems } from "./composerMenuResults";
 
 const COMPOSER_PULL_REQUEST_LIST_LIMIT = 99;
 const COMPOSER_PULL_REQUEST_RESULT_LIMIT = 12;
@@ -56,13 +66,16 @@ const EMPTY_PULL_REQUEST_LIST_TARGETS: ReadonlyArray<EnvironmentQueryTarget<Pull
   [];
 
 /** Describes thread matches during render without retaining the composer's render scope. */
-function makeComposerThreadDescription(projects: ReturnType<typeof useProjects>) {
+function makeComposerThreadDescription(
+  projects: ReturnType<typeof useProjects>,
+  resolve: MessageResolver = m,
+) {
   return (shell: ReturnType<typeof useVisibleThreadShells>[number]) => {
     const project = projects.find(
       (candidate) =>
         candidate.environmentId === shell.environmentId && candidate.id === shell.projectId,
     );
-    return project?.title ?? "Thread";
+    return project?.title ?? resolve(msg("Thread"));
   };
 }
 
@@ -76,7 +89,6 @@ export function useComposerMenuItems({
   pullRequestProjectId,
   pullRequestRepository,
   threadPullRequests,
-  planModeUiEnabled,
   sideChatAvailable,
   sideChatDisabledReason,
   freshSessionAvailable,
@@ -87,6 +99,7 @@ export function useComposerMenuItems({
   showSkillsInSlashMenu,
   workspaceSkillsScanning,
   questionAttachmentTarget,
+  modelMentions,
 }: {
   readonly composerTrigger: ComposerTrigger | null;
   readonly environmentId: EnvironmentId;
@@ -96,7 +109,6 @@ export function useComposerMenuItems({
   readonly pullRequestProjectId: ProjectId | null;
   readonly pullRequestRepository: string | null;
   readonly threadPullRequests: ReadonlyArray<ThreadPullRequestLink> | undefined;
-  readonly planModeUiEnabled: boolean;
   readonly sideChatAvailable: boolean;
   readonly sideChatDisabledReason: string | null;
   readonly freshSessionAvailable: boolean;
@@ -107,7 +119,13 @@ export function useComposerMenuItems({
   readonly showSkillsInSlashMenu: boolean;
   readonly workspaceSkillsScanning: boolean;
   readonly questionAttachmentTarget: DraftId | null;
+  readonly modelMentions: {
+    readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+    readonly modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
+  };
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   // Thread mentions rank by recency as of when the composer mounted.
   const [now] = useState(() => Date.now());
   const composerTriggerKind = composerTrigger?.kind ?? null;
@@ -127,7 +145,8 @@ export function useComposerMenuItems({
   // Both `@` and `#` offer thread matches, so subscribe while either menu is open.
   const isThreadTrigger = isPathTrigger || composerTriggerKind === "pull-request";
   const environmentThreadShells = useVisibleThreadShells(isThreadTrigger);
-  // Mounts older settled threads matching the mention, which shells may leave out.
+  // Mounts older settled threads matching the mention, here and on linked machines, which shells
+  // may leave out.
   useThreadSearch(
     isThreadTrigger ? [environmentId, ...linkedEnvironments.keys()] : [],
     isPathTrigger ? pathTriggerQuery : pullRequestTriggerQuery,
@@ -142,9 +161,8 @@ export function useComposerMenuItems({
     machine: environmentMachines.get(identity.environmentId) ?? ("server" as const),
   }));
   const environmentProjects = useProjects();
-  const nowMinute = useNowMinute();
-  // Thread rows read "project · 2h ago", like the sidebar.
-  const describeComposerThread = makeComposerThreadDescription(environmentProjects);
+  // Thread rows show project and age, like the sidebar.
+  const describeComposerThread = makeComposerThreadDescription(environmentProjects, messages);
   const withThreadAge = (item: Extract<ComposerCommandItem, { type: "thread" }>) => {
     const shell = environmentThreadShells.find(
       (shell) =>
@@ -152,21 +170,22 @@ export function useComposerMenuItems({
     );
     return {
       ...item,
-      description: shell ? describeComposerThread(shell) : "Thread",
+      description: shell ? describeComposerThread(shell) : gt("Thread"),
       environmentLabel:
         item.thread.environmentId === environmentId
           ? undefined
           : linkedEnvironments.get(item.thread.environmentId),
-      metadata: shell
-        ? formatRelativeTimeLabel(shell.updatedAt, Date.parse(`${nowMinute}:00.000Z`))
-        : undefined,
+      updatedAt: shell?.updatedAt,
     };
   };
-  const workspaceEntries = useComposerPathSearch({
-    environmentId,
-    cwd: isPathTrigger ? gitCwd : null,
-    query: isPathTrigger ? pathTriggerQuery : null,
-  });
+  const workspaceEntries = useComposerPathSearch(
+    {
+      environmentId,
+      cwd: isPathTrigger ? gitCwd : null,
+      query: isPathTrigger ? pathTriggerQuery : null,
+    },
+    messages,
+  );
 
   const pullRequestListTargets =
     composerTriggerKind !== "pull-request" ||
@@ -230,23 +249,34 @@ export function useComposerMenuItems({
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
       return [
-        ...matchComposerThreadItems({
-          shells: environmentThreadShells,
-          environmentId,
-          linkedEnvironments,
-          excludeThreadId: activeThreadId,
-          query: composerTrigger.query,
-          now,
-          describe: describeComposerThread,
-        }).map(withThreadAge),
+        ...matchComposerThreadItems(
+          {
+            shells: environmentThreadShells,
+            environmentId,
+            linkedEnvironments,
+            excludeThreadId: activeThreadId,
+            query: composerTrigger.query,
+            now,
+            describe: describeComposerThread,
+          },
+          messages,
+        ).map(withThreadAge),
         // An answer to an agent's question carries thread links, not machines.
         ...(questionAttachmentTarget === null && offersMachines
-          ? matchComposerEnvironmentItems({
-              environments: mentionableEnvironments,
-              environmentId,
-              query: composerTrigger.query,
-            })
+          ? matchComposerEnvironmentItems(
+              {
+                environments: mentionableEnvironments,
+                environmentId,
+                query: composerTrigger.query,
+              },
+              messages,
+            )
           : []),
+        ...matchComposerModelItems({
+          instanceEntries: modelMentions.instanceEntries,
+          modelOptionsByInstance: modelMentions.modelOptionsByInstance,
+          query: composerTrigger.query,
+        }),
         ...workspaceEntries.entries.map((entry) => ({
           id: `path:${entry.kind}:${entry.path}`,
           type: "path" as const,
@@ -265,26 +295,8 @@ export function useComposerMenuItems({
           type: "slash-command",
           command: "model",
           label: "/model",
-          description: "Switch response model for this thread",
+          description: gt("Switch response model for this thread"),
         },
-        ...(planModeUiEnabled
-          ? ([
-              {
-                id: "slash:plan",
-                type: "slash-command",
-                command: "plan",
-                label: "/plan",
-                description: "Switch this thread into plan mode",
-              },
-              {
-                id: "slash:default",
-                type: "slash-command",
-                command: "default",
-                label: "/default",
-                description: "Switch this thread back to normal build mode",
-              },
-            ] as const)
-          : []),
         ...(sideChatAvailable
           ? ([
               {
@@ -292,14 +304,14 @@ export function useComposerMenuItems({
                 type: "slash-command",
                 command: "side",
                 label: "/side",
-                description: sideChatDisabledReason ?? "Ask a side question in a new side chat",
+                description: sideChatDisabledReason ?? gt("Ask a side question in a new side chat"),
               },
               {
                 id: "slash:btw",
                 type: "slash-command",
                 command: "btw",
                 label: "/btw",
-                description: sideChatDisabledReason ?? "Same as /side",
+                description: sideChatDisabledReason ?? gt("Same as /side"),
               },
             ] as const)
           : []),
@@ -310,7 +322,7 @@ export function useComposerMenuItems({
                 type: "slash-command",
                 command: "clear",
                 label: "/clear",
-                description: "Start a fresh session; earlier messages stay visible",
+                description: gt("Start a fresh session; earlier messages stay visible"),
               },
             ] as const)
           : []),
@@ -328,7 +340,7 @@ export function useComposerMenuItems({
         provider: selectedProvider,
         command,
         label: `/${command.name}`,
-        description: command.description ?? command.input?.hint ?? "Run provider command",
+        description: command.description ?? command.input?.hint ?? gt("Run provider command"),
       }));
       const query = composerTrigger.query.trim().toLowerCase();
       const skillItems = slashMenuSkills.map((skill) => ({
@@ -340,7 +352,7 @@ export function useComposerMenuItems({
         description:
           skill.shortDescription ??
           skill.description ??
-          (skill.scope ? `${skill.scope} skill` : ""),
+          (skill.scope ? gt("{scope} skill", { scope: skill.scope }) : ""),
       }));
       // T3's `/clear` replaces the provider's, which would clear a session T3 still treats as live.
       const visibleProviderSlashCommandItems = providerSlashCommandItems.filter(
@@ -364,29 +376,39 @@ export function useComposerMenuItems({
         description:
           skill.shortDescription ??
           skill.description ??
-          (skill.scope ? `${skill.scope} skill` : "Run provider skill"),
+          (skill.scope ? gt("{scope} skill", { scope: skill.scope }) : gt("Run provider skill")),
       }));
     }
     if (composerTrigger.kind === "pull-request") {
       // `#` lists pull requests, then threads. Threads need no git host, so a project without
       // pull requests still gets them, and a bare `#` shows the most recent ones.
-      const threadItems = matchComposerThreadItems({
-        shells: environmentThreadShells,
-        environmentId,
-        linkedEnvironments,
-        excludeThreadId: activeThreadId,
-        query: composerTrigger.query,
-        allowEmptyQuery: true,
-        now,
-        describe: describeComposerThread,
-      }).map(withThreadAge);
+      const threadItems = matchComposerThreadItems(
+        {
+          shells: environmentThreadShells,
+          environmentId,
+          linkedEnvironments,
+          excludeThreadId: activeThreadId,
+          query: composerTrigger.query,
+          allowEmptyQuery: true,
+          now,
+          describe: describeComposerThread,
+        },
+        messages,
+      ).map(withThreadAge);
       if (pullRequestProjectId === null || pullRequestRepository === null) return threadItems;
       const exactPullRequest =
         exactPullRequestLookup.data?.number === pullRequestTriggerNumber
-          ? [exactPullRequestLookup.data]
+          ? [
+              {
+                ...exactPullRequestLookup.data,
+                // Only the host: the URL's full repository path would not match the project's selector.
+                host: legacyThreadPullRequestKey(exactPullRequestLookup.data).host,
+              },
+            ]
           : [];
       const matches = /^\d*$/u.test(composerTrigger.query)
         ? filterComposerPullRequestMatches({
+            keyOf: threadPullRequestKeyOf,
             entries: [...exactPullRequest, ...(pullRequestLookup.data?.entries ?? [])],
             linked: linkedPullRequests,
             projectId: pullRequestProjectId,
@@ -395,6 +417,7 @@ export function useComposerMenuItems({
             limit: COMPOSER_PULL_REQUEST_RESULT_LIMIT,
           })
         : withLinkedComposerPullRequestsFirst({
+            keyOf: threadPullRequestKeyOf,
             matches: rankPullRequestMatches(
               (pullRequestLookup.data?.entries ?? []).filter((entry) => {
                 if (
@@ -419,7 +442,7 @@ export function useComposerMenuItems({
             limit: COMPOSER_PULL_REQUEST_RESULT_LIMIT,
           });
       const pullRequestItems = matches.map((pullRequest) => ({
-        id: `pull-request:${pullRequest.projectId}:${pullRequest.repository}:${pullRequest.number}`,
+        id: `pull-request:${pullRequest.projectId}:${threadPullRequestKeyOf(pullRequest)}`,
         type: "pull-request" as const,
         pullRequest: {
           number: pullRequest.number,
@@ -443,7 +466,7 @@ export function useComposerMenuItems({
   })();
 
   const isLoading =
-    (composerTriggerKind === "path" && pathTriggerQuery.length > 0 && workspaceEntries.isPending) ||
+    (composerTriggerKind === "path" && workspaceEntries.isPending) ||
     ((composerTriggerKind === "skill" || composerTriggerKind === "slash-command") &&
       workspaceSkillsScanning) ||
     (composerTriggerKind === "pull-request" &&
@@ -455,26 +478,63 @@ export function useComposerMenuItems({
         exactPullRequestLookup.isPending));
   const emptyState = (() => {
     if (composerTriggerKind === "skill") {
-      return "No skills found. Try / to browse provider commands.";
+      return gt("No skills found. Try / to browse provider commands.");
     }
     if (composerTriggerKind === "pull-request") {
       if (pullRequestProjectId === null || pullRequestRepository === null) {
-        return "No matching threads. Pull requests are not available for this project.";
+        return gt("No matching threads. Pull requests are not available for this project.");
       }
       if (
         pullRequestLookup.error !== null ||
         pullRequestLookup.data?.errors.some((error) => error.projectId === pullRequestProjectId)
       ) {
-        return "Pull requests could not be read for this project.";
+        return gt("Pull requests could not be read for this project.");
       }
       return composerTrigger?.query
-        ? `No pull request matches ${composerTrigger.query}.`
-        : "No pull requests found in this repository.";
+        ? gt("No pull request matches {query}.", { query: composerTrigger.query })
+        : gt("No pull requests found in this repository.");
     }
     return composerTriggerKind === "path"
-      ? "No matching files or folders."
-      : "No matching command.";
+      ? pathTriggerQuery.trim()
+        ? gt("No matching files or folders.")
+        : gt("Type to search files and folders.")
+      : gt("No matching command.");
   })();
 
-  return { items, isLoading, emptyState };
+  const scope =
+    composerTrigger?.kind === "path"
+      ? JSON.stringify([
+          environmentId,
+          gitCwd,
+          activeThreadId,
+          questionAttachmentTarget,
+          composerTrigger.rangeStart,
+        ])
+      : null;
+  const [settled, setSettled] = useState({
+    scope,
+    query: pathTriggerQuery,
+    isPending: isLoading,
+    entries: workspaceEntries.entries,
+    items,
+  });
+  if (
+    settled.scope !== scope ||
+    (!isLoading &&
+      (settled.isPending ||
+        settled.query !== pathTriggerQuery ||
+        settled.entries !== workspaceEntries.entries ||
+        settled.items.length !== items.length ||
+        settled.items.some((item, index) => item.id !== items[index]?.id)))
+  ) {
+    setSettled({
+      scope,
+      query: pathTriggerQuery,
+      isPending: isLoading,
+      entries: workspaceEntries.entries,
+      items: isLoading ? [] : items,
+    });
+  }
+  const visibleItems = retainPendingComposerMenuItems(settled, scope, items, isLoading);
+  return { items: visibleItems, isLoading, emptyState };
 }

@@ -118,7 +118,8 @@ function shortcutForContext(binding: ResolvedKeybindingRule, context: ShortcutMa
   // Resolve persisted Mod+Enter against send preference without rewriting saved shortcuts.
   if (
     context.composerRequiresModifier &&
-    binding.command === "composer.sendAlternate" &&
+    (binding.command === "composer.sendAlternate" ||
+      binding.command === "composer.sendBackground") &&
     shortcut.key === "enter" &&
     shortcut.modKey &&
     !shortcut.metaKey &&
@@ -131,16 +132,34 @@ function shortcutForContext(binding: ResolvedKeybindingRule, context: ShortcutMa
   return shortcut;
 }
 
-export function effectiveShortcutsForCommand(
+type EffectiveShortcutsByCommand = ReadonlyMap<KeybindingCommand, readonly KeybindingShortcut[]>;
+
+// Label lookups run on every render of many components; one walk per keybindings array and context.
+const effectiveShortcutsCache = new WeakMap<
+  ResolvedKeybindingsConfig,
+  Map<string, EffectiveShortcutsByCommand>
+>();
+
+function effectiveShortcutsByCommand(
   keybindings: ResolvedKeybindingsConfig,
-  command: KeybindingCommand,
-  options?: ShortcutMatchOptions,
-): KeybindingShortcut[] {
+  options: ShortcutMatchOptions | undefined,
+): EffectiveShortcutsByCommand {
   const platform = resolvePlatform(options);
   const context = resolveContext(options);
-  const claimedShortcuts = new Set<string>();
-  const effective: KeybindingShortcut[] = [];
+  const cacheKey = `${platform}|${Object.keys(context)
+    .toSorted()
+    .map((name) => `${name}:${context[name] ? 1 : 0}`)
+    .join(",")}`;
+  let byContext = effectiveShortcutsCache.get(keybindings);
+  if (!byContext) {
+    byContext = new Map();
+    effectiveShortcutsCache.set(keybindings, byContext);
+  }
+  const cached = byContext.get(cacheKey);
+  if (cached) return cached;
 
+  const claimedShortcuts = new Set<string>();
+  const effective = new Map<KeybindingCommand, KeybindingShortcut[]>();
   for (let index = keybindings.length - 1; index >= 0; index -= 1) {
     const binding = keybindings[index];
     if (!binding) continue;
@@ -153,12 +172,20 @@ export function effectiveShortcutsForCommand(
     }
 
     claimedShortcuts.add(conflictKey);
-    if (binding.command === command) {
-      effective.push(shortcut);
-    }
+    const shortcuts = effective.get(binding.command);
+    if (shortcuts) shortcuts.push(shortcut);
+    else effective.set(binding.command, [shortcut]);
   }
-
+  byContext.set(cacheKey, effective);
   return effective;
+}
+
+export function effectiveShortcutsForCommand(
+  keybindings: ResolvedKeybindingsConfig,
+  command: KeybindingCommand,
+  options?: ShortcutMatchOptions,
+): KeybindingShortcut[] {
+  return [...(effectiveShortcutsByCommand(keybindings, options).get(command) ?? [])];
 }
 
 function findEffectiveShortcutForCommand(
@@ -166,7 +193,7 @@ function findEffectiveShortcutForCommand(
   command: KeybindingCommand,
   options?: ShortcutMatchOptions,
 ): KeybindingShortcut | null {
-  return effectiveShortcutsForCommand(keybindings, command, options)[0] ?? null;
+  return effectiveShortcutsByCommand(keybindings, options).get(command)?.[0] ?? null;
 }
 
 function matchesCommandShortcut(
@@ -189,9 +216,12 @@ export function resolveShortcutCommand(
     context.editableFocus = isEditableFocused(event.target ?? document.activeElement);
   }
 
+  // Every scope resolves every keydown, so rule out other keys before the full match.
+  const eventKeys = resolveEventKeys(event);
   for (let index = keybindings.length - 1; index >= 0; index -= 1) {
     const binding = keybindings[index];
     if (!binding) continue;
+    if (!eventKeys.has(binding.shortcut.key)) continue;
     if (!matchesWhenClause(binding.whenAst, context)) continue;
     if (!matchesKeybindingShortcut(event, shortcutForContext(binding, context), platform)) continue;
     return binding.command;
@@ -224,6 +254,8 @@ export function formatShortcutKeyLabel(key: string): string {
   if (key === "arrowdown") return "Down";
   if (key === "arrowleft") return "Left";
   if (key === "arrowright") return "Right";
+  if (key === "pageup") return "PageUp";
+  if (key === "pagedown") return "PageDown";
   return key.slice(0, 1).toUpperCase() + key.slice(1);
 }
 
@@ -283,12 +315,24 @@ export function threadTraversalDirectionFromCommand(
   return null;
 }
 
+export function isThreadNavigationShortcut(
+  event: ShortcutEventLike,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): boolean {
+  const command = resolveShortcutCommand(event, keybindings, options);
+  return (
+    threadTraversalDirectionFromCommand(command) !== null ||
+    threadJumpIndexFromCommand(command ?? "") !== null
+  );
+}
+
 export function shouldShowThreadJumpHintsForModifiers(
   modifiers: ShortcutModifierStateLike,
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): boolean {
-  // Ghostty can write keys to the shell before window shortcuts run, regardless of the when clause.
+  // Holding a modifier is routine in a shell (Ctrl+C, Ctrl+R), so don't flash hints over it.
   if (resolveContext(options).terminalFocus) {
     return false;
   }
@@ -382,7 +426,7 @@ export function isOpenFavoriteEditorShortcut(
  * Whether the keypress should bold text in the rich-text composer: Mod+B
  * without extra modifiers, with text selected. Tiptap binds the same chord, so
  * app shortcuts captured ahead of the editor yield only in that case. With no
- * selection the chord stays with the app (the sidebar toggle by default).
+ * selection an app binding on the chord wins (the sidebar toggle by default).
  */
 export function isRichTextBoldShortcut(
   event: ShortcutEventLike,
@@ -399,6 +443,13 @@ export function isRichTextBoldShortcut(
     !event.altKey &&
     !event.shiftKey
   );
+}
+
+/** Mod+B, Mod+I and Mod+E, the mark chords the rich-text composer binds. */
+export function isRichTextFormattingShortcut(event: ShortcutEventLike): boolean {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return false;
+  const keys = resolveEventKeys(event);
+  return keys.has("b") || keys.has("i") || keys.has("e");
 }
 
 export function isTerminalClearShortcut(

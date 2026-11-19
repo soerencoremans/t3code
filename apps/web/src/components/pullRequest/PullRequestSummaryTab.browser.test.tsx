@@ -1,4 +1,8 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import {
+  DEFAULT_CLIENT_SETTINGS,
+  SourceControlProviderKind,
+  type ClientSettings,
+} from "@t3tools/contracts";
 import {
   EnvironmentId,
   ProjectId,
@@ -8,7 +12,11 @@ import {
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
-const state = vi.hoisted(() => ({ update: vi.fn(), canUpdate: true }));
+const state = vi.hoisted(() => ({
+  update: vi.fn(),
+  canUpdate: true,
+  timestampFormat: "locale" as "locale" | "12-hour" | "24-hour",
+}));
 
 vi.mock(import("~/state/use-atom-command"), async (original) => ({
   ...(await original()),
@@ -18,6 +26,13 @@ vi.mock(import("~/state/session"), async (original) => ({
   ...(await original()),
   readEnvironmentScope: () => true,
   useEnvironmentScope: () => true,
+}));
+vi.mock(import("~/hooks/useSettings"), async (original) => ({
+  ...(await original()),
+  useClientSettings: ((select?: (settings: ClientSettings) => unknown) => {
+    const settings = { ...DEFAULT_CLIENT_SETTINGS, timestampFormat: state.timestampFormat };
+    return select ? select(settings) : settings;
+  }) as never,
 }));
 vi.mock(import("~/state/pullRequests"), async (original) => {
   const actual = await original();
@@ -40,8 +55,10 @@ function setup() {
   state.update.mockReset();
   state.update.mockResolvedValue({ _tag: "Success", value: undefined });
   state.canUpdate = true;
+  state.timestampFormat = "locale";
 }
 
+import "~/index.css";
 import { act, fakeTimers, render as renderUi } from "../../../test/render";
 import { PullRequestSummaryTab } from "./PullRequestSummaryTab";
 
@@ -153,6 +170,55 @@ it("updates comment ages without another panel render", async () => {
   expect(time.textContent).toBe("6m ago");
 });
 
+it("grows a collapsed description into the room a sparse summary leaves", async () => {
+  const sparse = {
+    ...detail,
+    body: Array.from({ length: 40 }, (_, index) => `Description paragraph ${index + 1}.`).join(
+      "\n\n",
+    ),
+  };
+  const sized = (value: PullRequestDetailView) => <div style={{ height: 600 }}>{tab(value)}</div>;
+  await using screen = await renderUi(sized(sparse));
+  const clip = () =>
+    screen.container.querySelector<HTMLElement>("[data-pr-description] [data-comment-clip]")!;
+  const scroller = screen.container.querySelector<HTMLElement>(
+    "[data-pull-request-summary-scroll]",
+  )!;
+  await expect
+    .element(screen.getByRole("button", { name: "Read more", exact: true }))
+    .toBeVisible();
+  await vi.waitFor(() => expect(clip().getBoundingClientRect().height).toBeGreaterThan(300));
+  expect(scroller.scrollHeight).toBeLessThanOrEqual(scroller.clientHeight);
+  await userEvent.click(screen.getByRole("button", { name: "Read more", exact: true }));
+  await expect
+    .element(screen.getByText("Description paragraph 40.", { exact: true }))
+    .toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "Show less", exact: true }));
+  await expect
+    .element(screen.getByRole("button", { name: "Read more", exact: true }))
+    .toBeVisible();
+  await screen.rerender(
+    sized({
+      ...sparse,
+      commentCount: 12,
+      comments: Array.from({ length: 12 }, (_, index) => ({
+        id: `comment-${index}`,
+        kind: "issue-comment",
+        author: detail.author,
+        body: `Conversation entry ${index + 1}`,
+        createdAt: detail.createdAt,
+        url: null,
+        path: null,
+        reviewState: null,
+      })),
+    }),
+  );
+  await vi.waitFor(() => expect(clip().getBoundingClientRect().height).toBe(64));
+  await expect
+    .element(screen.getByRole("button", { name: "Read more", exact: true }))
+    .toBeVisible();
+});
+
 it("keeps an unsaved description when collapsed and reopened, and after a failed save", async () => {
   setup();
   state.update.mockResolvedValue({ _tag: "Failure", cause: new Error("offline") });
@@ -180,7 +246,9 @@ it("ticks a description checkbox placed after an attachment and edits from the t
   state.update.mockReturnValueOnce(new Promise((resolve) => (finishSave = resolve)));
   const body = "Intro\n\nhttps://example.com/shot.png\n\n## Test plan\n- [ ] First\n- [ ] Second";
   const ticked = body.replace("- [ ] Second", "- [x] Second");
-  await using screen = await render({ ...detail, body, observedAt: 1 });
+  await using screen = await renderUi(
+    <div style={{ height: 1000 }}>{tab({ ...detail, body, observedAt: 1 })}</div>,
+  );
   const boxes = () => screen.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
   expect([...boxes()].map((box) => box.disabled)).toEqual([false, false]);
 
@@ -215,6 +283,75 @@ it("leaves description checkboxes read-only without the right to edit it", async
   );
 });
 
+it("fixes an overview thread as its opening remark, since it has no line to attach", async () => {
+  setup();
+  const author = { login: "reviewer", name: null, avatarUrl: null };
+  const note = { author, createdAt: "2026-09-01T00:00:00Z", url: null };
+  const remark = {
+    ...note,
+    id: "10",
+    kind: "review-comment" as const,
+    body: "Mention the flag in the README",
+    path: null,
+    reviewState: null,
+  };
+  const onFixFinding = vi.fn();
+  const value: PullRequestDetailView = {
+    ...detail,
+    comments: [remark],
+    overviewThreads: [
+      {
+        id: "overview",
+        path: null,
+        line: null,
+        side: "right",
+        isResolved: false,
+        isOutdated: false,
+        comments: [{ ...note, id: "10", body: remark.body }],
+      },
+    ],
+  };
+  await using screen = await renderUi(
+    <PullRequestSummaryTab
+      scrollerRef={() => {}}
+      environmentId={EnvironmentId.make("environment")}
+      threadRef={null}
+      reference={value}
+      detail={value}
+      activityPending={false}
+      activityError={null}
+      onRefresh={() => {}}
+      onFixFinding={onFixFinding}
+    />,
+  );
+
+  await userEvent.click(screen.getByRole("button", { name: "Fix in a thread" }));
+  expect(onFixFinding).toHaveBeenCalledWith({ kind: "comment", comment: remark });
+});
+
+it("shows a comment's exact time in the chosen 24-hour clock", async () => {
+  setup();
+  state.timestampFormat = "24-hour";
+  const createdAt = "2026-09-01T17:30:00Z";
+  const comment = {
+    id: "10",
+    kind: "review-comment" as const,
+    body: "A remark",
+    author: { login: "reviewer", name: null, avatarUrl: null },
+    createdAt,
+    url: null,
+    path: null,
+    reviewState: null,
+  };
+  await using screen = await render({ ...detail, comments: [comment], commentCount: 1 });
+
+  await userEvent.hover(screen.container.querySelector(`time[datetime="${createdAt}"]`)!);
+  const expected = new Date(createdAt).toLocaleString(undefined, { hour12: false });
+  await vi.waitFor(() =>
+    expect(document.querySelector('[data-slot="tooltip-popup"]')?.textContent).toBe(expected),
+  );
+});
+
 function openThread(id: string, bot = false): PullRequestReviewThread {
   return {
     id,
@@ -235,60 +372,115 @@ function openThread(id: string, bot = false): PullRequestReviewThread {
   };
 }
 
-it("filters promoted bot threads while retaining human replies and bot verdicts", async () => {
-  localStorage.removeItem("t3code:pull-request-comment-filter:v1");
-  const mixed = openThread("mixed", true);
-  await using screen = await render({
-    ...detail,
-    reviewThreads: [
-      openThread("bot-only", true),
-      {
-        ...mixed,
-        comments: [...mixed.comments, { ...openThread("human").comments[0]!, body: "Human reply" }],
-      },
-    ],
-    comments: [
-      {
-        ...openThread("verdict", true).comments[0]!,
-        kind: "review",
-        path: null,
-        reviewState: "CHANGES_REQUESTED",
-        body: "Bot verdict",
-      },
-    ],
-  });
-  await expect.element(screen.getByText("Finding bot-only")).not.toBeInTheDocument();
-  await expect.element(screen.getByText("Finding mixed")).toBeVisible();
-  await expect.element(screen.getByText("Human reply")).toBeVisible();
-  await expect.element(screen.getByText("Bot verdict")).toBeVisible();
-  await expect.element(screen.getByText("1 hidden", { exact: true })).toBeVisible();
-});
+it.each(["review", "issue-comment", "resolved-reply"] as const)(
+  "reveals a linked %s in the summary conversation",
+  async (kind) => {
+    setup();
+    const url = `${detail.url}#${kind === "review" ? "pullrequestreview-123" : kind === "issue-comment" ? "issuecomment-123" : "discussion_r123"}`;
+    const linkedDetail: PullRequestDetailView = {
+      ...detail,
+      comments:
+        kind === "resolved-reply"
+          ? []
+          : [
+              {
+                id: "linked",
+                kind,
+                author: detail.author,
+                body: "Linked reply",
+                createdAt: "2026-10-01T00:00:00Z",
+                url,
+                path: null,
+                reviewState: kind === "review" ? "CHANGES_REQUESTED" : null,
+              },
+            ],
+      reviewThreads:
+        kind !== "resolved-reply"
+          ? []
+          : [
+              {
+                id: "thread",
+                path: "src/test.ts",
+                line: 5,
+                side: "right",
+                isResolved: true,
+                isOutdated: false,
+                comments: [
+                  {
+                    id: "root",
+                    author: detail.author,
+                    body: "Root comment",
+                    createdAt: "2026-10-01T00:00:00Z",
+                    url: `${detail.url}#discussion_r122`,
+                  },
+                  {
+                    id: "reply",
+                    author: detail.author,
+                    body: "Linked reply",
+                    createdAt: "2026-10-01T00:01:00Z",
+                    url,
+                  },
+                ],
+              },
+            ],
+    };
+    const settled = vi.fn();
+    await using screen = await renderUi(
+      <div style={{ height: 600 }}>
+        <PullRequestSummaryTab
+          scrollerRef={() => {}}
+          detail={linkedDetail}
+          environmentId={EnvironmentId.make("environment")}
+          reference={detail}
+          threadRef={null}
+          activityPending={false}
+          activityError={null}
+          onRefresh={() => {}}
+          revealUrl={url}
+          onRevealSettled={settled}
+        />
+      </div>,
+    );
+    await expect.element(screen.getByText("Linked reply", { exact: true })).toBeVisible();
+    await vi.waitFor(() => expect(settled).toHaveBeenCalledWith(url));
+    await screen.rerender(
+      <div style={{ height: 600 }}>
+        <PullRequestSummaryTab
+          scrollerRef={() => {}}
+          detail={linkedDetail}
+          environmentId={EnvironmentId.make("environment")}
+          reference={detail}
+          threadRef={null}
+          activityPending={false}
+          activityError={null}
+          onRefresh={() => {}}
+          onRevealSettled={settled}
+        />
+      </div>,
+    );
+    await expect.element(screen.getByText("Linked reply", { exact: true })).toBeVisible();
+  },
+);
 
-it("pages promoted open threads together with the remaining conversations", async () => {
+it("adds promoted review conversations to chat without requiring review permissions", async () => {
+  setup();
   localStorage.removeItem("t3code:pull-request-comment-filter:v1");
-  await using screen = await render({
-    ...detail,
-    reviewThreads: Array.from({ length: 12 }, (_, index) => openThread(`thread-${index}`)),
-    comments: [
-      {
-        ...openThread("loose").comments[0]!,
-        kind: "issue-comment",
-        path: null,
-        reviewState: null,
-        body: "Loose conversation",
-      },
-    ],
-  });
-  await expect.element(screen.getByText("Finding thread-9", { exact: true })).toBeVisible();
-  await expect
-    .element(screen.getByText("Finding thread-10", { exact: true }))
-    .not.toBeInTheDocument();
-  await expect.element(screen.getByText("Loose conversation")).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: /Show 3 .*conversation/ }));
-  await expect.element(screen.getByText("Finding thread-11", { exact: true })).toBeVisible();
-  await expect.element(screen.getByText("Loose conversation")).toBeVisible();
-  await userEvent.click(screen.getByRole("button", { name: "Show only 10 recent conversations" }));
-  await expect
-    .element(screen.getByText("Finding thread-10", { exact: true }))
-    .not.toBeInTheDocument();
+  const thread = openThread("finding");
+  const onAddToChat = vi.fn();
+  const value = { ...detail, reviewThreads: [thread] };
+  await using screen = await renderUi(
+    <PullRequestSummaryTab
+      scrollerRef={() => {}}
+      environmentId={EnvironmentId.make("environment")}
+      threadRef={null}
+      reference={value}
+      detail={value}
+      activityPending={false}
+      activityError={null}
+      onRefresh={() => {}}
+      onAddToChat={onAddToChat}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Add to chat", exact: true }));
+  expect(onAddToChat).toHaveBeenCalledWith({ kind: "thread", thread });
 });

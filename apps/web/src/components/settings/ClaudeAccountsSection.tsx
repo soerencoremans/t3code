@@ -3,6 +3,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import { T, useGT, Var } from "gt-react";
 import { useRef, useState, type ReactNode } from "react";
 
 import { ensureLocalApi } from "../../localApi";
@@ -27,6 +28,8 @@ import {
   useClaudeSetupAccounts,
 } from "./useClaudeAccounts";
 
+type Gt = ReturnType<typeof useGT>;
+
 interface ClaudeAccountsSectionProps {
   readonly environmentId: EnvironmentId;
   readonly instanceId: ProviderInstanceId;
@@ -39,56 +42,67 @@ export function ClaudeAccountsSection(props: ClaudeAccountsSectionProps) {
 }
 
 function Email(props: { readonly value: string; readonly className?: string }) {
+  const gt = useGT();
   return (
     <RedactedSensitiveText
       value={props.value}
-      ariaLabel="Toggle account email visibility"
-      revealTooltip="Click to reveal email"
-      hideTooltip="Click to hide email"
+      ariaLabel={gt("Toggle account email visibility")}
+      revealTooltip={gt("Click to reveal email")}
+      hideTooltip={gt("Click to hide email")}
       {...(props.className ? { className: props.className } : {})}
     />
   );
 }
 
 function accountDescription(
+  gt: Gt,
   view: ClaudeSetupAccountView | null,
   pendingTarget: string | null,
   listFailed: boolean,
 ): ReactNode {
-  if (pendingTarget !== null) return `Switching to ${pendingTarget}…`;
-  if (view === null) return listFailed ? undefined : "Loading accounts…";
+  if (pendingTarget !== null) return gt("Switching to {target}…", { target: pendingTarget });
+  if (view === null) return listFailed ? undefined : gt("Loading accounts…");
   switch (view.kind) {
     case "remembered":
       return (
-        <>
-          Logged in as {view.name} (<Email value={view.email} />
+        <T>
+          Logged in as <Var>{view.name}</Var> (<Email value={view.email} />
           ). Used by all chats on this setup.
-        </>
+        </T>
       );
     case "notRemembered":
       return (
-        <>
+        <T>
           Logged in as <Email value={view.email} />. Remember it to switch back to it later.
-        </>
+        </T>
       );
     case "loggedOut":
-      return "No Claude account is logged in on this setup. Log in to Claude on the machine T3 runs on, then reopen this page. Remembered accounts can be switched to once a login exists.";
+      return gt(
+        "No Claude account is logged in on this setup. Log in to Claude on the machine T3 runs on, then reopen this page. Remembered accounts can be switched to once a login exists.",
+      );
   }
 }
 
-function forgetConfirmText(account: ClaudeAccountRow): string {
+function forgetConfirmText(gt: Gt, account: ClaudeAccountRow): string {
   return account.active
-    ? `Forget "${account.name}"? T3 deletes its saved login. This setup stays logged in as ${account.email}, but you can't switch back to it after switching away, unless you add it again.`
-    : `Forget "${account.name}"? T3 deletes its saved login. You can't switch to it again unless you add it again.`;
+    ? gt(
+        'Forget "{name}"? T3 deletes its saved login. This setup stays logged in as {email}, but you can\'t switch back to it after switching away, unless you add it again.',
+        { name: account.name, email: account.email },
+      )
+    : gt(
+        'Forget "{name}"? T3 deletes its saved login. You can\'t switch to it again unless you add it again.',
+        { name: account.name },
+      );
 }
 
-function switchBlockedReason(view: ClaudeSetupAccountView): string | null {
-  if (view.kind === "notRemembered") return "Remember the current account first.";
-  if (view.kind === "loggedOut") return "Log in to Claude on this setup first.";
+function switchBlockedReason(gt: Gt, view: ClaudeSetupAccountView): string | null {
+  if (view.kind === "notRemembered") return gt("Remember the current account first.");
+  if (view.kind === "loggedOut") return gt("Log in to Claude on this setup first.");
   return null;
 }
 
 function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSectionProps) {
+  const gt = useGT();
   const { view, error: listError, refresh } = useClaudeSetupAccounts(environmentId, instanceId);
   const {
     pendingTarget,
@@ -109,7 +123,7 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
     if (forgetRef.current) return;
     forgetRef.current = true;
     const confirmed = await ensureLocalApi()
-      .dialogs.confirm(forgetConfirmText(account), { variant: "destructive" })
+      .dialogs.confirm(forgetConfirmText(gt, account), { variant: "destructive" })
       .catch(() => false);
     if (confirmed) {
       setActionError(null);
@@ -123,10 +137,10 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
   };
 
   return (
-    <section aria-label="Claude accounts" className="divide-y divide-border/50">
+    <section aria-label={gt("Claude accounts")} className="divide-y divide-border/50">
       <SettingsRow
-        title="Claude account"
-        description={accountDescription(view, pendingTarget, listError !== null)}
+        title={gt("Claude account")}
+        description={accountDescription(gt, view, pendingTarget, listError !== null)}
         control={
           view?.kind === "notRemembered" && pendingTarget === null ? (
             <Button
@@ -137,23 +151,25 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
                 setRememberOpen(true);
               }}
             >
-              Remember…
+              <T>Remember…</T>
             </Button>
           ) : undefined
         }
       />
       {view !== null ? (
         <SettingsRow
-          title="Remembered accounts"
-          description="Saved logins you can switch to without logging in again."
+          title={gt("Remembered accounts")}
+          description={gt("Saved logins you can switch to without logging in again.")}
           control={
             <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
-              Add account…
+              <T>Add account…</T>
             </Button>
           }
         >
           {view.accounts.length === 0 ? (
-            <p className="text-meta text-muted-foreground">No remembered accounts yet.</p>
+            <p className="text-meta text-muted-foreground">
+              <T>No remembered accounts yet.</T>
+            </p>
           ) : (
             <ul className="flex flex-col gap-1.5">
               {view.accounts.map((account) => (
@@ -163,12 +179,16 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
                 >
                   <span>{account.name}</span>
                   <Email value={account.email} className="text-muted-foreground" />
-                  {account.active ? <Badge variant="success">Active</Badge> : null}
+                  {account.active ? (
+                    <Badge variant="success">
+                      <T>Active</T>
+                    </Badge>
+                  ) : null}
                   <div className="ml-auto flex items-center gap-1">
                     {account.active ? null : (
                       <SwitchButton
                         name={account.name}
-                        blockedReason={switchBlockedReason(view)}
+                        blockedReason={switchBlockedReason(gt, view)}
                         busy={pendingTarget !== null}
                         onSwitch={() => void switchTo(account.name)}
                       />
@@ -176,11 +196,11 @@ function ClaudeAccountsCard({ environmentId, instanceId }: ClaudeAccountsSection
                     <Button
                       variant="ghost"
                       size="sm"
-                      aria-label={`Forget ${account.name}`}
+                      aria-label={gt("Forget {name}", { name: account.name })}
                       disabled={pendingTarget !== null}
                       onClick={() => void forgetAccount(account)}
                     >
-                      Forget
+                      <T>Forget</T>
                     </Button>
                   </div>
                 </li>
@@ -225,15 +245,16 @@ function SwitchButton(props: {
   readonly busy: boolean;
   readonly onSwitch: () => void;
 }) {
+  const gt = useGT();
   const button = (
     <Button
       variant="ghost"
       size="sm"
-      aria-label={`Switch to ${props.name}`}
+      aria-label={gt("Switch to {name}", { name: props.name })}
       disabled={props.busy || props.blockedReason !== null}
       onClick={props.onSwitch}
     >
-      Switch
+      <T>Switch</T>
     </Button>
   );
   if (props.blockedReason === null) return button;

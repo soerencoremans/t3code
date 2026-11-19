@@ -1,5 +1,7 @@
 import { ProviderInstanceId, type EnvironmentId } from "@t3tools/contracts";
 
+import { T, useGT, Var } from "gt-react";
+
 import { cn } from "../../lib/utils";
 import { Checkbox } from "../ui/checkbox";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -18,6 +20,7 @@ export function ClaudeShareConfigOption({
   readonly value: ProviderInstanceId | null;
   readonly onChange: (value: ProviderInstanceId | null) => void;
 }) {
+  const gt = useGT();
   const setups = useClaudeShareConfigSetups(environmentId);
   // A pending or failed list hides the option; the settings card reports list failures.
   if (setups === null) return null;
@@ -41,11 +44,13 @@ export function ClaudeShareConfigOption({
           />
           <span className="grid gap-0.5">
             <span className="text-label text-strong-foreground">
-              Share config with my existing Claude setup
+              <T>Share config with my existing Claude setup</T>
             </span>
             <span className="text-meta text-muted-foreground">
-              Adds another account to “{label}” instead of a new provider. Chats and settings stay
-              shared; you switch accounts in the model picker.
+              <T>
+                Adds another account to “<Var>{label}</Var>” instead of a new provider. Chats and
+                settings stay shared; you switch accounts in the model picker.
+              </T>
             </span>
           </span>
         </label>
@@ -53,8 +58,12 @@ export function ClaudeShareConfigOption({
       {value !== null && setups.length > 1 ? (
         <SettingsGroup variant="plain">
           <SettingsRow
-            title={<label htmlFor="add-provider-claude-setup">Setup</label>}
-            description="The Claude setup that gets the new account."
+            title={
+              <label htmlFor="add-provider-claude-setup">
+                <T>Setup</T>
+              </label>
+            }
+            description={gt("The Claude setup that gets the new account.")}
             control={
               <Select
                 value={value}
@@ -65,7 +74,7 @@ export function ClaudeShareConfigOption({
                 <SelectTrigger
                   id="add-provider-claude-setup"
                   size="sm"
-                  aria-label="Setup"
+                  aria-label={gt("Setup")}
                   className="w-full @min-[32rem]/settings-row:w-56"
                 >
                   <SelectValue>{label}</SelectValue>
@@ -84,8 +93,10 @@ export function ClaudeShareConfigOption({
       ) : null}
       {value !== null ? (
         <p className="text-meta text-muted-foreground">
-          No new provider is added. Next, you name the account and log in with it; the setup stays
-          logged in as it is.
+          <T>
+            No new provider is added. Next, you name the account and log in with it; the setup stays
+            logged in as it is.
+          </T>
         </p>
       ) : null}
     </div>

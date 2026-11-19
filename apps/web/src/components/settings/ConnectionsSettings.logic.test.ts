@@ -2,6 +2,8 @@ import { type DesktopWslState, EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   applyWslEnableSelection,
+  isServerNetworkAccessible,
+  parseManualDesktopSshTarget,
   resolveAccessEnvironmentId,
   resolveCurrentOriginPairingUrl,
   resolveTailscaleServeBaseUrl,
@@ -44,12 +46,23 @@ describe("togglePairingScopeSelection", () => {
   });
 });
 
+describe("parseManualDesktopSshTarget", () => {
+  it.each(["22.5", "1e3", "2222garbage"])("rejects explicit port %j", (port) => {
+    expect(() => parseManualDesktopSshTarget({ host: "devbox", username: "", port })).toThrow(
+      "SSH port must be between 1 and 65535.",
+    );
+  });
+});
+
 describe("resolveCurrentOriginPairingUrl", () => {
   it.each([
-    ["https://t3.example.com/settings", "https://t3.example.com/pair#token=CODE"],
-    ["t3code://app/settings", null],
-  ] as const)("shares %s as %s", (href, expected) => {
-    expect(resolveCurrentOriginPairingUrl("CODE", href)).toBe(expected);
+    ["t3code://app/settings/connections", null],
+    ["http://127.0.0.1:3774/settings", null],
+    ["http://localhost:5173/", null],
+    ["https://host.example.ts.net/settings", "https://host.example.ts.net/pair#token=abc"],
+    ["http://192.168.1.20:3773/", "http://192.168.1.20:3773/pair#token=abc"],
+  ])("from %s", (href, expected) => {
+    expect(resolveCurrentOriginPairingUrl("abc", href)).toBe(expected);
   });
 });
 
@@ -209,5 +222,18 @@ describe("resolveAccessEnvironmentId", () => {
     expect(resolveAccessEnvironmentId({ primaryEnvironmentId, environments, selected })).toBe(
       expected,
     );
+  });
+});
+
+describe("isServerNetworkAccessible", () => {
+  const served = [{ kind: "tailnet", httpBaseUrl: "https://host.example.ts.net:8443/" }] as const;
+  it.each([
+    { authPolicy: "remote-reachable", directEndpoints: undefined, expected: true },
+    { authPolicy: "loopback-browser", directEndpoints: undefined, expected: false },
+    { authPolicy: "loopback-browser", directEndpoints: [], expected: false },
+    { authPolicy: "loopback-browser", directEndpoints: served, expected: true },
+    { authPolicy: null, directEndpoints: served, expected: false },
+  ] as const)("$authPolicy with $directEndpoints.length endpoints", (row) => {
+    expect(isServerNetworkAccessible(row)).toBe(row.expected);
   });
 });

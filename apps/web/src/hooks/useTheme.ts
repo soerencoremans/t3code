@@ -2,6 +2,7 @@ import { pipe } from "effect/Function";
 import type { DesktopBridge } from "@t3tools/contracts";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
 import { useSyncExternalStore } from "react";
 import {
   applyThemePalette,
@@ -22,6 +23,7 @@ import {
   THEME_BLACK_CHROME_STORAGE_KEY,
   THEME_FOLLOW_SYSTEM_STORAGE_KEY,
   THEME_HALVES_STORAGE_KEY,
+  themeVariantHalves,
   ThemePreference,
   type ThemeAppearance,
   type ThemeHalves,
@@ -49,10 +51,10 @@ type DesktopThemeBridge = Pick<DesktopBridge, "setTheme">;
 export type AppearanceChoice = ThemePreferenceMode | "black-chrome";
 
 export const APPEARANCE_CHOICES: ReadonlyArray<{ choice: AppearanceChoice; label: string }> = [
-  { choice: "system", label: "System" },
-  { choice: "light", label: "Light" },
-  { choice: "black-chrome", label: "Black chrome" },
-  { choice: "dark", label: "Dark" },
+  { choice: "system", label: msg("System") },
+  { choice: "light", label: msg("Light") },
+  { choice: "black-chrome", label: msg("Black chrome") },
+  { choice: "dark", label: msg("Dark") },
 ];
 
 const STORAGE_KEY = "t3code:theme";
@@ -573,19 +575,31 @@ export function useRenderedAppearance() {
 }
 
 export function setTheme(next: Theme): boolean {
+  return setThemeSelection(next);
+}
+
+function setThemeSelection(next: Theme, halves?: ThemeHalves): boolean {
   if (typeof window === "undefined") return false;
   try {
     // Save the current mode first; inferring it from the new theme can switch dark to light.
     pipe(getStored(), readAppearanceModePreference, writeAppearanceModePreference);
-    // A whole theme replaces the mix; retain it to restore on a failed preference write.
+    // Retain the mix to restore it on a failed preference write.
     const previousHalvesRaw = window.localStorage.getItem(THEME_HALVES_STORAGE_KEY);
-    window.localStorage.removeItem(THEME_HALVES_STORAGE_KEY);
+    if (halves && (halves.light !== undefined || halves.dark !== undefined)) {
+      window.localStorage.setItem(THEME_HALVES_STORAGE_KEY, JSON.stringify(halves));
+    } else {
+      window.localStorage.removeItem(THEME_HALVES_STORAGE_KEY);
+    }
     try {
       writeThemePreference(next);
     } catch (cause) {
       if (previousHalvesRaw !== null) {
         try {
           window.localStorage.setItem(THEME_HALVES_STORAGE_KEY, previousHalvesRaw);
+        } catch {}
+      } else {
+        try {
+          window.localStorage.removeItem(THEME_HALVES_STORAGE_KEY);
         } catch {}
       }
       throw cause;
@@ -610,6 +624,16 @@ export function setTheme(next: Theme): boolean {
   applyTheme(next, { suppressTransitions: true });
   emitChange();
   return true;
+}
+
+export function setThemeVariant(
+  variantIds: ReadonlyArray<string | null>,
+  nextVariantId: string | null,
+): boolean {
+  if (typeof window === "undefined") return false;
+  const theme = getStored();
+  const halves = themeVariantHalves(theme, readStoredThemeHalvesRaw(), variantIds, nextVariantId);
+  return halves === null || setThemeSelection(readAppearanceModePreference(theme), halves);
 }
 
 export function setAppearanceMode(nextAppearanceMode: ThemePreferenceMode): boolean {

@@ -110,7 +110,8 @@ function AutocompletePopup({
           )}
         >
           <AutocompletePrimitive.Popup
-            className="flex max-h-[min(var(--available-height),23rem)] flex-1 flex-col text-foreground"
+            // Electron drag hit-testing ignores z-index; items over a drag region would swallow clicks.
+            className="flex max-h-[min(var(--available-height),23rem)] flex-1 flex-col text-foreground [-webkit-app-region:no-drag]"
             data-slot="autocomplete-popup"
             {...props}
           >
@@ -154,7 +155,7 @@ function AutocompleteGroup({ className, ...props }: AutocompletePrimitive.Group.
   );
 }
 
-const GROUP_LABEL_CLASS_NAME = "px-2 py-1.5 text-meta text-dim-foreground";
+const GROUP_LABEL_CLASS_NAME = "px-2 py-1.5 text-meta text-muted-foreground";
 
 function AutocompleteGroupLabel({ className, ...props }: AutocompletePrimitive.GroupLabel.Props) {
   return (
@@ -199,7 +200,8 @@ function AutocompleteEmpty({ className, ...props }: AutocompletePrimitive.Empty.
 
 function AutocompleteList({ className, ...props }: AutocompletePrimitive.List.Props) {
   return (
-    <ScrollArea scrollbarGutter scrollFade>
+    // A flex column lets the viewport shrink with a height-capped parent instead of overflowing it.
+    <ScrollArea className="flex flex-col" scrollbarGutter scrollFade>
       <AutocompletePrimitive.List
         className={cn("not-empty:scroll-py-1 not-empty:p-1", className)}
         data-slot="autocomplete-list"

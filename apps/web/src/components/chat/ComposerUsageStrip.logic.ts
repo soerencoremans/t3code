@@ -36,8 +36,11 @@ export function statuslinePace(
   return { tone: "ok", glyph: "▼", projectedPercent };
 }
 
+// The labels match server-authored window labels, so they are identifiers, not UI copy.
 const STRIP_KINDS = [
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- matches the server's window label
   { kind: "session", label: "Session" },
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- matches the server's window label
   { kind: "weekly", label: "Weekly" },
 ] as const;
 
