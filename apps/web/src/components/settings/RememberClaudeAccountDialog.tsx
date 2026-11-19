@@ -7,6 +7,7 @@ import type {
   ProviderInstanceId,
   RememberedClaudeAccount,
 } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import { useRef, useState } from "react";
 
 import { serverEnvironment } from "../../state/server";
@@ -26,6 +27,7 @@ export function RememberClaudeAccountDialog(props: {
   readonly onClose: () => void;
   readonly onRemembered: (account: RememberedClaudeAccount) => void;
 }) {
+  const gt = useGT();
   const remember = useAtomCommand(
     serverEnvironment.rememberClaudeAccount,
     CLAUDE_ACCOUNT_COMMAND_OPTIONS,
@@ -64,8 +66,10 @@ export function RememberClaudeAccountDialog(props: {
     >
       <WizardPopup>
         <WizardHeader
-          title="Remember this Claude account"
-          description={`Logged in as ${props.email}. Give it a name to switch back to it later.`}
+          title={gt("Remember this Claude account")}
+          description={gt("Logged in as {email}. Give it a name to switch back to it later.", {
+            email: props.email,
+          })}
         />
         <WizardPanel>
           <form
@@ -76,14 +80,14 @@ export function RememberClaudeAccountDialog(props: {
             }}
           >
             <SettingsRow
-              title="Account name"
+              title={gt("Account name")}
               control={
                 <Input
-                  aria-label="Account name"
+                  aria-label={gt("Account name")}
                   value={name}
                   disabled={pending}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="e.g. Work or Private"
+                  placeholder={gt("e.g. Work or Private")}
                 />
               }
             />
@@ -96,7 +100,7 @@ export function RememberClaudeAccountDialog(props: {
         </WizardPanel>
         <WizardFooter>
           <Button variant="secondary" disabled={pending} onClick={props.onClose}>
-            Cancel
+            <T>Cancel</T>
           </Button>
           <Button
             type="submit"
@@ -104,7 +108,7 @@ export function RememberClaudeAccountDialog(props: {
             form="remember-claude-account"
             disabled={pending || !name.trim()}
           >
-            Remember
+            <T>Remember</T>
           </Button>
         </WizardFooter>
       </WizardPopup>

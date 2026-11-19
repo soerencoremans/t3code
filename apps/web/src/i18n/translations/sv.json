@@ -3561,6 +3561,33 @@
   "14452f45d1aa1631": "{title} behöver godkännande",
   "8d9617edf6eee5b9": "Det gick inte att skicka godkännandebeslutet.",
   "1b1131295f62c44c": "Leverantörsprocessen finns inte längre. Avbryt eller starta om undertråden för att svara.",
+  "0d5e53523b4a8599": "Claude account switched to {name}.",
+  "5abbf77a2399eb5c": "Claude account switched to {name}",
+  "c6b8601784542462": "Claude account not switched",
+  "8fa27c5ee8e84a37": "Claude account for all Claude chats: switching to {pending}",
+  "e0ccfc4029bb6e80": "Claude account for all Claude chats: {activeName}",
+  "cd67d110c09bfdf4": "Växla synlighet för kontots e-postadress",
+  "6b2ce50ea6a13f57": "Klicka för att visa e-postadressen",
+  "34ce8910007bfaf1": "Klicka för att dölja e-postadressen",
+  "38e935078fab7313": "Remember the Claude account for all Claude chats",
+  "252ef3fcaf62f90d": "No Claude account is logged in on this setup.",
+  "56c5054585ebd382": "Switching Claude account to {pending}…",
+  "cad6bdfa85fa1bc3": "Claude account",
+  "b55acab7db7929e6": [
+    "Switching to ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "…"
+  ],
+  "f2f23e07cf6ed0fc": "Switch account",
+  "8ede006460530c84": "Add account…",
+  "644edc77b09ac50d": "Manage accounts",
+  "e03179e3aeb9e0c3": "Remember…",
+  "961708e4d2dc347f": "Loading account…",
+  "9bbecec926c3b695": "Försök igen",
   "da66023072c473d1": [
     "Kunde inte läsa in utdata: ",
     {
@@ -3776,6 +3803,31 @@
   "6df4c22a9ae17336": "Hantera användning",
   "3b83ac2c1d6ca9ae": "Användningsgränser",
   "5f87afbca5e19868": "Användningsgränser är inte tillgängliga",
+  "50e2d362562e8058": "{label} limit {percent}% used",
+  "230bca6e44dd3490": "Context window {used} of {max} tokens",
+  "077a695ec9c7cf94": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " limit: ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    "% used"
+  ],
+  "5dbbc9749a6eee46": [
+    "On pace for ~",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "% at reset"
+  ],
   "6496f57baeded3fa": "Användning av kontextfönstret",
   "0469747f4bb9caac": "{additions} tillägg, {deletions} borttagningar",
   "876e7a8c229f3d07": "Lossa",
@@ -3962,10 +4014,10 @@
       "v": "v"
     }
   ],
-  "9bbecec926c3b695": "Försök igen",
   "4fd8927b7afc2a92": "Kopiera meddelande",
   "6f8651e48261911a": "Tanke",
   "ac511f991a3c1fab": "Webbsökning",
+  "8d4dde74928e30ef": "Artifact: {title}",
   "07e65dba2b16d3f7": "{count, plural, one {{path} +{count} till} other {{path} +{count} till}}",
   "6ab96e26bda35288": "Tänker",
   "4d4981a1c5bd9728": "Kör kommando",
@@ -4630,6 +4682,7 @@
   "918cd5477d0c0e9b": "Visa hela meddelandet",
   "513b0929ca7dde1b": "Verktygsindata\n{input}",
   "c6e000ea79ae6a2b": "{status, select, inProgress {Läser tråden ”{title}”} completed {Läste tråden ”{title}”} failed {Kunde inte läsa tråden ”{title}”} declined {Avböjde att läsa tråden ”{title}”} stopped {Slutade läsa tråden ”{title}”} other {Läser tråden ”{title}”}}",
+  "a07ea4539adc016c": "Open artifact {title}",
   "93435595c79fd659": "Användningsgränsen har nåtts. Försök igen efter {resetTime}.",
   "5a2d803b3ea43f18": "Användningsgränsen har nåtts.",
   "3920accacc91683e": "{additions, plural, one {{additions} tillägg} other {{additions} tillägg}}, {deletions, plural, one {{deletions} borttagning} other {{deletions} borttagningar}}",
@@ -4723,6 +4776,7 @@
       "c": "”"
     }
   ],
+  "1abdb63867acd126": "Open artifact",
   "a2aaca7ff8310186": "Öppna chatt",
   "a3048aaa541b7744": "Aktivitet",
   "4a3cbccb2beedeb0": "bild",
@@ -7860,12 +7914,28 @@
   "357990deea2bcf58": "Agentleverantörer",
   "615119bd425385a3": "Konfigurera routning som inte är hemlig. Headers är endast för skrivning.",
   "ab5a2a5731282a75": "Inaktivera",
+  "010c1e8578cac845": "Add account “{name}”",
+  "fdc8472b8e357bcf": "Log in with the Claude account you want to add.",
+  "6046ad33958ccc6a": "Add Claude account",
+  "62d3a5f9fe74b591": "Log in with another Claude account and give it a name. This setup stays logged in as it is.",
+  "0d1ce708baadceec": "Kontonamn",
+  "74cc0ec5219c5677": "How this account appears in the model picker.",
+  "70f38a0ccba87147": "e.g. Work or Private",
+  "51a12230120eac10": [
+    "Added “",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "”. This setup stays logged in as before; switch to the new account from the model picker or the account list."
+  ],
+  "81e5622a990f3c3b": "Log in…",
   "17c50db750d640db": "Personligt",
   "22e8bf3295350a28": "Lägg till ChatGPT-konto",
   "e5369507fca05c04": "Varje konto har sin egen Codex-instans och inloggning. Välj det andra kontot på inloggningssidan.",
   "0f7d3cfdb1636c13": "Codex-körmiljö",
   "a1eae0e686175a3b": "Förbereder hanterad konfiguration.",
-  "0d1ce708baadceec": "Kontonamn",
   "011728dda320f504": "Visas i leverantörslistan och modellväljaren.",
   "2758b668abf05728": "t.ex. Personligt eller Jobb",
   "d5cd2aab468d355d": "Lägger till konto…",
@@ -8355,6 +8425,65 @@
       "v": "v"
     }
   ],
+  "5871f5d7d8602176": "The account may have been added. Check the remembered accounts.",
+  "2819192d44473f3a": "This login was stopped. Start again.",
+  "570b92f20c8df71f": "The login terminal is no longer available. Start again.",
+  "cf15c18ea4e5ec86": "Loading login terminal…",
+  "e37596e1e3f41fd0": "Open the link in a browser and log in with the account you want to add. If the browser is on another device, log in there and paste the code it shows into the terminal.",
+  "a5106869b852c3f4": "Waiting for login… “Done” turns on once the login lands.",
+  "2bb10c3ac5d34ccd": "Forget \"{name}\"? T3 deletes its saved login. This setup stays logged in as {email}, but you can't switch back to it after switching away, unless you add it again.",
+  "b5e3458dac86a553": "Forget \"{name}\"? T3 deletes its saved login. You can't switch to it again unless you add it again.",
+  "54c65e3ba2aab76d": "Claude accounts",
+  "5d9cea48ac841200": "Claude account",
+  "24618caf191d1521": "Switching to {target}…",
+  "863acbed5db4c0f1": "Loading accounts…",
+  "d667c987bf9e5ca6": "No Claude account is logged in on this setup. Log in to Claude on the machine T3 runs on, then reopen this page. Remembered accounts can be switched to once a login exists.",
+  "ac5a706b8be6cebd": "Remembered accounts",
+  "e98471fefb122058": "Saved logins you can switch to without logging in again.",
+  "2b632bd71062cef6": "Remember the current account first.",
+  "e9082c3a8bab6bdc": "Log in to Claude on this setup first.",
+  "acae74b37388b9ba": "Glöm {name}",
+  "7f598566d781f81f": "Switch to {name}",
+  "ac11fb90207906fb": [
+    "Logged in as ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " (",
+    {
+      "t": "Email",
+      "i": 2
+    },
+    "). Used by all chats on this setup."
+  ],
+  "07423ae4370197be": [
+    "Logged in as ",
+    {
+      "t": "Email",
+      "i": 1
+    },
+    ". Remember it to switch back to it later."
+  ],
+  "93e095d2ceba4fc9": "No remembered accounts yet.",
+  "2543655df54b5176": "Active",
+  "813b80a5f5f5b855": "Forget",
+  "4941e2f0833d151b": "Switch",
+  "1f0565b4cc2ad205": "The Claude setup that gets the new account.",
+  "cf69675106e4bf46": "Konfiguration",
+  "fddb8d7b6db286d9": "Share config with my existing Claude setup",
+  "9ee4b054a07c1a94": [
+    "Adds another account to “",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "” instead of a new provider. Chats and settings stay shared; you switch accounts in the model picker."
+  ],
+  "143cde2e0b8d2e7c": "Setup",
+  "0b32568c7701717d": "No new provider is added. Next, you name the account and log in with it; the setup stays logged in as it is.",
   "d0e747ae0c4f68a5": "Kunde inte installera t3",
   "ba3ac338f36cba74": "Kunde inte ta bort t3",
   "9c942b53b58119b8": "Kunde inte lägga till t3 i PATH",
@@ -8446,9 +8575,6 @@
       "v": "v"
     }
   ],
-  "cd67d110c09bfdf4": "Växla synlighet för kontots e-postadress",
-  "6b2ce50ea6a13f57": "Klicka för att visa e-postadressen",
-  "34ce8910007bfaf1": "Klicka för att dölja e-postadressen",
   "d67300de0b013fc3": "Ansluten med ditt Codex CLI.",
   "0c1a7c10f8a72545": "Kontrollerar ditt Codex CLI...",
   "c90a45a10db86af5": "Koda med ditt ChatGPT-abonnemang.",
@@ -9417,7 +9543,6 @@
   "9fe08946d6dbd618": "Sparad mikrofon",
   "8101bb8e3c7427bf": "Flytta upp {name}",
   "bdedd5c7764a77a0": "Flytta ned {name}",
-  "acae74b37388b9ba": "Glöm {name}",
   "e78e2b3c49707388": "Inte ansluten",
   "5d06c2a13becb19a": "Mikrofontest är inte tillgängligt i den här webbläsaren. Använd HTTPS eller skrivbordsappen.",
   "9b581819633e98f1": "Inget ljud spelades in. Försök igen.",
@@ -9736,7 +9861,6 @@
   "eee76b40711fd902": "Drivrutin",
   "f31ce60f3f118c0d": "Visningsnamn",
   "c45028de5c2f6cbb": "Instansetikett",
-  "cf69675106e4bf46": "Konfiguration",
   "22078dd501ba3102": "Körmiljö",
   "68a76cecbc1e0b6d": "Lägg till variabel",
   "e141c49816ed7a1f": "Åsidosatt för det här projektet",
@@ -9952,6 +10076,9 @@
   "5c0c973276a61fdb": "Kunde inte spara behörigheten för routning av pull requests",
   "1bfcffe8411e2439": "Routning av pull requests för {environment}",
   "ae4761ddc038b102": "Datorer du litar på här kan läsa PR-data via varandras åtkomst till versionshantering. Aktivera på båda datorerna. Läs och agera kan använda bredare behörigheter än den dator som äger dem. Gäller bara den här enheten.",
+  "9997de6bc1342090": "Remember this Claude account",
+  "3c172bd9da0fd35f": "Logged in as {email}. Give it a name to switch back to it later.",
+  "d32afc5aa06ee030": "Remember",
   "02bca2d9c90e5f1e": "{value} s",
   "af22f973466903c3": "{value} min",
   "401ba3f2391d8742": "{value} h",
@@ -11978,6 +12105,7 @@
   "10e3b1efa85ed4b3": "Grenar",
   "eb61b42f989896b8": "{domains} och {last}",
   "fa338b04cd05c0cf": "{count, plural, one {{domains} och {count} till} other {{domains} och {count} till}}",
+  "cb68e5e7beea29f9": "T3 could not reach the Claude accounts. Try again.",
   "f37c0766ca212865": "Låg",
   "8325afbd4dc12589": "Medel",
   "19b549c500989ada": "Hög",
@@ -12308,6 +12436,7 @@
   "645434b1c788cf95": "Ingen dator kan byta till {label} nu.",
   "aae7db6120929d16": "Alla anslutna datorer har redan {label}. Detta sparar bara spåret.",
   "49ab4bbf2971d31b": "Ingen dator kan byta till {label} nu. Detta sparar bara spåret.",
+  "89bce28f7a36e01e": "Switch this Claude setup to \"{name}\"? Switching stops running Claude turns on this setup, in every chat that uses it. Queued messages wait and send on the new account. Send \"continue\" to pick a stopped turn up.",
   "b3659c3917b3c6b0": "Den här anslutningen kan inte testa enhetsvärdar.",
   "89ef4eae0e856d40": "Kunde inte spara projektåtgärder",
   "0e4cd25642a2df00": "Ingen tillgänglig dator, eller en annan åtgärdsändring håller på att sparas.",

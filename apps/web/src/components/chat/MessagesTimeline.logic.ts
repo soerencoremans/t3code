@@ -165,7 +165,7 @@ export function workEntryDisplayLabel(
   const toolPresentation = resolveWorkEntryToolPresentation(entry, undefined, resolve);
   if (toolPresentation) return toolPresentation.displayName;
   const artifact = workEntryClaudeArtifact(entry);
-  if (artifact) return `Artifact: ${artifact.title}`;
+  if (artifact) return resolve(msg("Artifact: {title}", { title: artifact.title }));
   if (entry.command?.trim()) return commandDisplayText(entry.command);
   const action = toolGroupAction(entry);
   if (action === "code-search" || action === "search") {

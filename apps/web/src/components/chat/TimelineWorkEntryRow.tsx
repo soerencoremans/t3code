@@ -188,17 +188,18 @@ export function ThreadReadLabel({
 const stopRowToggle = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
 function OpenArtifactButton({ artifact }: { artifact: ClaudeArtifactReference }) {
+  const gt = useGT();
   const openLink = useOpenLink(use(TimelineRowCtx).threadRef);
   return (
     <InlineButton
-      aria-label={`Open artifact ${artifact.title}`}
+      aria-label={gt("Open artifact {title}", { title: artifact.title })}
       onClick={(event) => {
         event.stopPropagation();
         void openLink(artifact.url, { event }).catch(() => undefined);
       }}
       onKeyDown={stopRowToggle}
     >
-      Open artifact
+      <T>Open artifact</T>
     </InlineButton>
   );
 }

@@ -301,7 +301,7 @@ export function workEntryRowLabel(
   const presentation = resolveWorkEntryToolPresentation(entry, undefined, resolve);
   if (presentation) return presentation.displayName;
   const artifact = workEntryClaudeArtifact(entry);
-  if (artifact) return `Artifact: ${artifact.title}`;
+  if (artifact) return resolve(msg("Artifact: {title}", { title: artifact.title }));
   if (entry.command?.trim()) return compactWorkEntryText(commandDisplayText(entry.command));
   const action = toolGroupAction(entry);
   const isToolRead = action === "read" && entry.itemType === "dynamic_tool";

@@ -6,8 +6,10 @@ import type {
   ProviderAuthResponse,
   RememberedClaudeAccount,
 } from "@t3tools/contracts";
+import { msg, T } from "gt-react";
 import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { m } from "../../i18n/messages";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -62,14 +64,14 @@ export function ClaudeAccountAddLogin({
         data.account === null
           ? {
               kind: "failed",
-              message: "The account may have been added. Check the remembered accounts.",
+              message: m(msg("The account may have been added. Check the remembered accounts.")),
             }
           : { kind: "succeeded", account: data.account },
       );
     } else if (data?.phase === "failed") {
       end({ kind: "failed", message: claudeAccountErrorMessage(data.error) });
     } else if (data?.phase === "cancelled") {
-      end({ kind: "failed", message: "This login was stopped. Start again." });
+      end({ kind: "failed", message: m(msg("This login was stopped. Start again.")) });
     } else if (failure !== null) {
       end({ kind: "failed", message: claudeAccountErrorMessage(failure) });
     }
@@ -97,7 +99,7 @@ export function ClaudeAccountAddLogin({
       if (result._tag !== "Success") {
         queue.current = [];
         if (!isAtomCommandInterrupted(result)) {
-          setAlert("The login terminal is no longer available. Start again.");
+          setAlert(m(msg("The login terminal is no longer available. Start again.")));
         }
         return;
       }
@@ -118,7 +120,7 @@ export function ClaudeAccountAddLogin({
     void sendQueued()
       .catch(() => {
         queue.current = [];
-        setAlert("The login terminal is no longer available. Start again.");
+        setAlert(m(msg("The login terminal is no longer available. Start again.")));
       })
       .finally(() => {
         sending.current = false;
@@ -129,7 +131,11 @@ export function ClaudeAccountAddLogin({
     <div className="flex flex-col gap-2">
       <div className="py-2">
         <Suspense
-          fallback={<p className="text-meta text-muted-foreground">Loading login terminal…</p>}
+          fallback={
+            <p className="text-meta text-muted-foreground">
+              <T>Loading login terminal…</T>
+            </p>
+          }
         >
           <ProviderAuthTerminal
             output={data?.output ?? ""}
@@ -139,12 +145,14 @@ export function ClaudeAccountAddLogin({
         </Suspense>
       </div>
       <p className="text-meta text-muted-foreground">
-        Open the link in a browser and log in with the account you want to add. If the browser is on
-        another device, log in there and paste the code it shows into the terminal.
+        <T>
+          Open the link in a browser and log in with the account you want to add. If the browser is
+          on another device, log in there and paste the code it shows into the terminal.
+        </T>
       </p>
       {data === null || data.phase === "running" ? (
         <p role="status" className="text-meta text-muted-foreground">
-          Waiting for login… “Done” turns on once the login lands.
+          <T>Waiting for login… “Done” turns on once the login lands.</T>
         </p>
       ) : null}
       {alert !== null ? (

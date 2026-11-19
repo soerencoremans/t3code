@@ -845,7 +845,7 @@ export function AddProviderInstanceDialog({
                   disabled={!canManageProviders}
                   onClick={() => setAddingClaudeAccountFor(shareClaudeSetup)}
                 >
-                  Add account…
+                  <T>Add account…</T>
                 </Button>
               ) : wizardStep < (isAcpRegistry ? 1 : 2) ? (
                 <Button

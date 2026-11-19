@@ -8,6 +8,7 @@ import type {
   ProviderInstanceId,
   RememberedClaudeAccount,
 } from "@t3tools/contracts";
+import { T, useGT, Var } from "gt-react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { serverEnvironment } from "../../state/server";
@@ -34,6 +35,7 @@ export function AddClaudeAccountDialog({
   readonly onAdded: (account: RememberedClaudeAccount) => void;
   readonly finalFocus?: RefObject<HTMLElement | null>;
 }) {
+  const gt = useGT();
   const start = useAtomCommand(
     serverEnvironment.startClaudeAccountAdd,
     CLAUDE_ACCOUNT_COMMAND_OPTIONS,
@@ -86,7 +88,7 @@ export function AddClaudeAccountDialog({
     }
   };
 
-  const loginTitle = `Add account “${name.trim()}”`;
+  const loginTitle = gt("Add account “{name}”", { name: name.trim() });
 
   return (
     <Dialog
@@ -102,17 +104,19 @@ export function AddClaudeAccountDialog({
           <>
             <WizardHeader
               title={loginTitle}
-              description="Log in with the Claude account you want to add."
+              description={gt("Log in with the Claude account you want to add.")}
             />
             <WizardPanel>
               <p className="text-body">
-                Added “{added.name}”. This setup stays logged in as before; switch to the new
-                account from the model picker or the account list.
+                <T>
+                  Added “<Var>{added.name}</Var>”. This setup stays logged in as before; switch to
+                  the new account from the model picker or the account list.
+                </T>
               </p>
             </WizardPanel>
             <WizardFooter>
               <Button variant="default" onClick={onClose}>
-                Done
+                <T>Done</T>
               </Button>
             </WizardFooter>
           </>
@@ -120,7 +124,7 @@ export function AddClaudeAccountDialog({
           <>
             <WizardHeader
               title={loginTitle}
-              description="Log in with the Claude account you want to add."
+              description={gt("Log in with the Claude account you want to add.")}
             />
             <WizardPanel>
               <ClaudeAccountAddLogin
@@ -132,18 +136,20 @@ export function AddClaudeAccountDialog({
             </WizardPanel>
             <WizardFooter>
               <Button variant="secondary" onClick={onClose}>
-                Cancel
+                <T>Cancel</T>
               </Button>
               <Button variant="default" disabled>
-                Done
+                <T>Done</T>
               </Button>
             </WizardFooter>
           </>
         ) : (
           <>
             <WizardHeader
-              title="Add Claude account"
-              description="Log in with another Claude account and give it a name. This setup stays logged in as it is."
+              title={gt("Add Claude account")}
+              description={gt(
+                "Log in with another Claude account and give it a name. This setup stays logged in as it is.",
+              )}
             />
             <WizardPanel>
               <form
@@ -154,12 +160,12 @@ export function AddClaudeAccountDialog({
                 }}
               >
                 <SettingsRow
-                  title="Account name"
-                  description="How this account appears in the model picker."
+                  title={gt("Account name")}
+                  description={gt("How this account appears in the model picker.")}
                   control={
                     <Input
-                      aria-label="Account name"
-                      placeholder="e.g. Work or Private"
+                      aria-label={gt("Account name")}
+                      placeholder={gt("e.g. Work or Private")}
                       value={name}
                       disabled={starting}
                       onChange={(event) => setName(event.target.value)}
@@ -175,7 +181,7 @@ export function AddClaudeAccountDialog({
             </WizardPanel>
             <WizardFooter>
               <Button variant="secondary" onClick={onClose}>
-                Cancel
+                <T>Cancel</T>
               </Button>
               <Button
                 type="submit"
@@ -183,7 +189,7 @@ export function AddClaudeAccountDialog({
                 variant="default"
                 disabled={starting || name.trim() === ""}
               >
-                Log in…
+                <T>Log in…</T>
               </Button>
             </WizardFooter>
           </>

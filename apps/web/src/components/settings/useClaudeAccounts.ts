@@ -10,8 +10,10 @@ import type {
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
+import { msg, useMessages } from "gt-react";
 import { useRef, useState } from "react";
 
+import { m } from "../../i18n/messages";
 import { ensureLocalApi } from "../../localApi";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -47,6 +49,7 @@ export function useClaudeSetupAccounts(
   readonly error: string | null;
   readonly refresh: () => void;
 } {
+  const resolve = useMessages();
   const query = useEnvironmentQuery(
     serverEnvironment.claudeAccountList({ environmentId, input: {} }),
   );
@@ -56,7 +59,7 @@ export function useClaudeSetupAccounts(
     error:
       query.failure === null && query.error === null
         ? null
-        : claudeAccountErrorMessage(query.failure),
+        : claudeAccountErrorMessage(query.failure, resolve),
     refresh: query.refresh,
   };
 }
@@ -87,7 +90,12 @@ export type ClaudeAccountSwitchOutcome =
   | { readonly kind: "failed"; readonly message: string };
 
 function switchConfirmText(name: string): string {
-  return `Switch this Claude setup to "${name}"? Switching stops running Claude turns on this setup, in every chat that uses it. Queued messages wait and send on the new account. Send "continue" to pick a stopped turn up.`;
+  return m(
+    msg(
+      'Switch this Claude setup to "{name}"? Switching stops running Claude turns on this setup, in every chat that uses it. Queued messages wait and send on the new account. Send "continue" to pick a stopped turn up.',
+      { name },
+    ),
+  );
 }
 
 export function useClaudeAccountSwitch(

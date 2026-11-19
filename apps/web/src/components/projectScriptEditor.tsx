@@ -644,13 +644,6 @@ function ProjectScriptEditorForm({
                 />
                 <T>Stop this action when the thread settles</T>
               </label>
-              <label className="flex items-center gap-2.5 text-body text-foreground">
-                <Checkbox
-                  checked={stopOnSettle}
-                  onCheckedChange={(checked) => setStopOnSettle(Boolean(checked))}
-                />
-                Stop this action when the thread settles
-              </label>
             </div>
             {validationError && <p className="text-body text-destructive">{validationError}</p>}
           </fieldset>
